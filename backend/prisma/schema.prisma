@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  OLD
+}
+
+enum RecordingStatus {
+  ANYONE
+  STUDENTS_ONLY
+  PAID_ONLY
+  PRIVATE
+  INACTIVE
+}
+
+enum MonthStatus {
+  ANYONE
+  STUDENTS_ONLY
+  PAID_ONLY
+  PRIVATE
+  INACTIVE
+}
+
+enum ClassStatus {
+  ANYONE
+  STUDENTS_ONLY
+  PAID_ONLY
+  PRIVATE
+  INACTIVE
+}
+
+enum PaymentType {
+  MONTHLY
+  ADMISSION
+  OTHER
+}
+
+enum PaymentSlipStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  COMPLETED
+  INCOMPLETE
+  MANUAL
+}
+
+enum WatchSessionStatus {
+  WATCHING
+  PAUSED
+  ENDED
+}
+
+// ─── Auth / User ─────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile       Profile?
+  enrollments   Enrollment[]
+  payments      PaymentSlip[]
+  attendances   Attendance[]
+  watchSessions WatchSession[]
+  refreshTokens RefreshToken[]
+}
+
+// ─── Refresh Token ───────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ─── Student Profile ─────────────────────────────────────
+
+model Profile {
+  id            String        @id @default(uuid())
+  userId        String        @unique
+  instituteId   String        @unique  // e.g. TD-2026-0001
+  fullName      String
+  address       String?
+  phone         String?
+  whatsappPhone String?
+  school        String?
+  dateOfBirth   DateTime?
+  guardianName  String?
+  guardianPhone String?
+  relationship  String?
+  occupation    String?
+  status        StudentStatus @default(PENDING)
+  enrolledDate  DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Class / Month / Recording Hierarchy ─────────────────
+
+model Class {
+  id             String      @id @default(uuid())
+  name           String
+  subject        String?
+  description    String?     @db.Text
+  monthlyFee     Float?
+  thumbnail      String?     // URL to thumbnail image
+  vision         String?     @db.Text
+  mission        String?     @db.Text
+  introVideoUrl  String?     // Intro/promo video URL
+  status         ClassStatus @default(ANYONE)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  months      Month[]
+  enrollments Enrollment[]
+}
+
+model Month {
+  id        String      @id @default(uuid())
+  classId   String
+  name      String      // e.g. "January 2026"
+  year      Int
+  month     Int         // 1-12
+  status    MonthStatus @default(ANYONE)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  recordings Recording[]
+  payments   PaymentSlip[]
+
+  @@unique([classId, year, month])
+}
+
+model Recording {
+  id          String           @id @default(uuid())
+  monthId     String
+  title       String
+  description String?          @db.Text
+  videoUrl    String           // Signed URL or external link
+  thumbnail   String?          // URL to thumbnail image
+  duration    Int?             // Duration in seconds
+  topic       String?
+  icon        String?          // Icon name or URL
+  materials   String?          @db.Text // JSON array of material links/names
+  status      RecordingStatus  @default(PAID_ONLY)
+  order       Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  month         Month          @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  attendances   Attendance[]
+  watchSessions WatchSession[]
+}
+
+// ─── Enrollment (Student <-> Class) ──────────────────────
+
+model Enrollment {
+  id        String   @id @default(uuid())
+  userId    String
+  classId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId])
+}
+
+// ─── Payment Slip ────────────────────────────────────────
+
+model PaymentSlip {
+  id        String            @id @default(uuid())
+  userId    String
+  monthId   String
+  type      PaymentType
+  reason    String?           // Required if type = OTHER
+  slipUrl   String            // URL from S3/GCS/Drive signed upload
+  status    PaymentSlipStatus @default(PENDING)
+  adminNote String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)
+}
+
+// ─── Attendance / Watch Tracking ─────────────────────────
+
+model Attendance {
+  id          String           @id @default(uuid())
+  userId      String
+  recordingId String?          // null for manual non-recording attendance
+  eventName   String?          // For manual attendance
+  status      AttendanceStatus
+  watchedSec  Int?             // Seconds watched before push
+  createdAt   DateTime         @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recording Recording? @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+
+  @@index([userId, recordingId])
+}
+
+// ─── Watch Session Tracking ──────────────────────────────
+
+model WatchSession {
+  id              String             @id @default(uuid())
+  userId          String
+  recordingId     String
+  startedAt       DateTime           @default(now())
+  endedAt         DateTime?
+  videoStartPos   Float              @default(0)   // seconds into video when session started
+  videoEndPos     Float              @default(0)   // last known video position
+  totalWatchedSec Int                @default(0)   // actual seconds watched in this session
+  status          WatchSessionStatus @default(WATCHING)
+  events          Json?                             // JSON array of {type, videoTime, wallTime} events
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordingId])
+  @@index([userId, startedAt])
+}
