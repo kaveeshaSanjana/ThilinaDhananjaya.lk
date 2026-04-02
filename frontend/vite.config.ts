@@ -12,7 +12,12 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': {
+        target: 'https://thilinasir-lms-backend-git-911914734849.europe-west1.run.app',
+        changeOrigin: true,
+        secure: true,
+        cookieDomainRewrite: 'localhost',
+      },
     },
   },
 })
