@@ -202,74 +202,94 @@ function LiveLectureCard({ rec, onJoin, onWatch }: { rec: any; onJoin: (rec: any
   );
 }
 
-/** Regular recording card — richer than before with description */
+/** Regular recording card — vertical card with blue border */
 function RecordingCard({ rec, idx, onClick }: { rec: any; idx: number; onClick: () => void }) {
   const vt = VIDEO_TYPE_CFG[rec.videoType] || VIDEO_TYPE_CFG.OTHER;
 
   return (
-    <div onClick={onClick}
-      className="flex gap-3 p-3 sm:p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
+    <div
+      className="bg-white rounded-2xl border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100/60 transition-all cursor-pointer group flex flex-col overflow-hidden"
+      onClick={onClick}
     >
-      {/* Order */}
-      <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center shrink-0 transition self-center">
-        <span className="text-xs font-bold text-slate-500 group-hover:text-blue-600 transition">{idx + 1}</span>
-      </div>
-
-      {/* Thumbnail */}
-      <div className="relative w-24 h-16 sm:w-28 sm:h-18 rounded-xl overflow-hidden shrink-0 bg-slate-200 self-center">
+      {/* Thumbnail area */}
+      <div className="relative w-full aspect-video bg-slate-100 overflow-hidden">
         {rec.thumbnail ? (
-          <img src={rec.thumbnail} alt={rec.title} className="w-full h-full object-cover" />
+          <img src={rec.thumbnail} alt={rec.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300">
-            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+            <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </div>
         )}
-        {/* Duration badge on thumbnail */}
+
+        {/* Play overlay on hover */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/25">
+          <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+            <svg className="w-5 h-5 text-blue-600 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+        </div>
+
+        {/* Duration badge */}
         {rec.duration && (
-          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/70 text-white">
+          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">
             {typeof rec.duration === 'number' ? fmtDuration(rec.duration) : rec.duration}
           </span>
         )}
-        {/* Hover play */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/20">
-          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        </div>
+
+        {/* Status / type badge top-right */}
+        <span className={`absolute top-2 right-2 inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold border ${vt.color}`}>
+          {vt.label}
+        </span>
+
+        {/* Order number top-left */}
+        <span className="absolute top-2 left-2 w-6 h-6 rounded-lg bg-black/50 text-white text-[10px] font-bold flex items-center justify-center">
+          {idx + 1}
+        </span>
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0 py-0.5">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border ${vt.color}`}>
-            {vt.icon} {vt.label}
-          </span>
-        </div>
-        <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition truncate">{rec.title}</p>
-        {rec.topic && <p className="text-xs text-blue-500 font-medium mt-0.5 truncate">{rec.topic}</p>}
-        {rec.description && (
-          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{rec.description}</p>
+      {/* Card body */}
+      <div className="flex flex-col flex-1 p-3.5">
+        <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition leading-snug line-clamp-2">
+          {rec.title}
+        </p>
+        {rec.topic && (
+          <p className="text-xs text-blue-500 font-medium mt-1 truncate">{rec.topic}</p>
         )}
 
-        {/* Meta row */}
-        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
-          {rec.createdAt && <span>{fmtDateShort(rec.createdAt)}</span>}
-          {rec.materials && (
+        {/* Date row */}
+        <div className="flex items-center gap-1.5 mt-2 text-[11px] text-slate-400">
+          {rec.createdAt && (
             <>
-              <span>•</span>
-              <span className="flex items-center gap-0.5 text-blue-500">
-                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" /></svg>
-                Materials
-              </span>
+              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <span>{new Date(rec.createdAt).toLocaleDateString('en-GB', { year: 'numeric', month: 'long' })} · {fmtDateShort(rec.createdAt)}</span>
             </>
           )}
         </div>
-      </div>
 
-      {/* Arrow */}
-      <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition shrink-0 self-center" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-      </svg>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+          <button
+            onClick={e => { e.stopPropagation(); onClick(); }}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            Watch
+          </button>
+          {rec.materials && (
+            <a
+              href={rec.materials}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" /></svg>
+              Files
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -493,18 +513,20 @@ export default function ClassDetailPage() {
                             </div>
                           )}
 
-                          {/* Regular recordings */}
+                          {/* Regular recordings — grid of cards */}
                           {regularRecs.length > 0 && (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {liveRecs.length > 0 && (
                                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mt-2">
                                   <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" /></svg>
                                   Recordings
                                 </p>
                               )}
-                              {regularRecs.map((rec: any, idx: number) => (
-                                <RecordingCard key={rec.id} rec={rec} idx={idx} onClick={() => navigate(`/recording/${rec.id}`)} />
-                              ))}
+                              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                {regularRecs.map((rec: any, idx: number) => (
+                                  <RecordingCard key={rec.id} rec={rec} idx={idx} onClick={() => navigate(`/recording/${rec.id}`)} />
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
