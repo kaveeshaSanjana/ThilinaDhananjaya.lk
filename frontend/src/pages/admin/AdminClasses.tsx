@@ -239,18 +239,21 @@ export default function AdminClasses() {
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
               <div>
                 <h2 className="text-lg font-bold text-slate-800">{editingClass ? 'Edit Class' : 'New Class'}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{editingClass ? 'Update class details' : 'Create a new class'}</p>
+                <p className="text-sm text-slate-400 mt-0.5">{editingClass ? 'Update class details' : 'Create a new class'}</p>
               </div>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+              <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="overflow-y-auto max-h-[80vh]">
+            <div className="p-6 space-y-5">
               {error && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Basic Info</p>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Class Name</label>
                 <input type="text" value={form.name} onChange={e => update('name', e.target.value)} placeholder="e.g. Physics Grade 12" required
@@ -261,7 +264,7 @@ export default function AdminClasses() {
                 <input type="text" value={form.subject} onChange={e => update('subject', e.target.value)} placeholder="e.g. Physics"
                   className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-600 mb-1.5">Monthly Fee (Rs.)</label>
                   <input type="number" value={form.monthlyFee} onChange={e => update('monthlyFee', e.target.value)} placeholder="e.g. 2500"
@@ -275,6 +278,9 @@ export default function AdminClasses() {
                   </select>
                 </div>
               </div>
+              </div>
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Media</p>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Thumbnail URL</label>
                 <div className="space-y-2">
@@ -300,28 +306,33 @@ export default function AdminClasses() {
                 <input type="text" value={form.introVideoUrl} onChange={e => update('introVideoUrl', e.target.value)} placeholder="https://..."
                   className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
               </div>
+              </div>
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Details</p>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Description</label>
-                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Brief class description..." rows={2}
+                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Brief class description..." rows={3}
                   className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Vision</label>
-                <textarea value={form.vision} onChange={e => update('vision', e.target.value)} placeholder="Class vision..." rows={2}
+                <textarea value={form.vision} onChange={e => update('vision', e.target.value)} placeholder="Class vision..." rows={3}
                   className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Mission</label>
-                <textarea value={form.mission} onChange={e => update('mission', e.target.value)} placeholder="Class mission..." rows={2}
+                <textarea value={form.mission} onChange={e => update('mission', e.target.value)} placeholder="Class mission..." rows={3}
                   className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
-              <div className="flex gap-3 pt-2">
+              </div>
+              <div className="flex gap-3 pt-2 pb-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
                 <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingClass ? 'Save Changes' : 'Create Class'}
                 </button>
               </div>
+            </div>
             </form>
           </div>
           </div>
