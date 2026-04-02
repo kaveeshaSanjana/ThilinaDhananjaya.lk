@@ -75,6 +75,26 @@ export class UsersController {
     return this.usersService.updateProfile(id, body);
   }
 
+  /** Admin: update student phone number */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch('students/:id/phone')
+  updatePhone(
+    @Param('id') id: string,
+    @Body() body: { phone: string; whatsappPhone?: string },
+  ) {
+    return this.usersService.updatePhone(id, body.phone, body.whatsappPhone);
+  }
+
+  /** Admin: get student avatar URL */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('students/:id/avatar')
+  async getAvatar(@Param('id') id: string) {
+    const user = await this.usersService.findById(id);
+    return { avatarUrl: user?.profile?.avatarUrl ?? null };
+  }
+
   /**
    * POST /users/students/:id/avatar
    * Upload a profile avatar for a student to S3 and update the profile.

@@ -97,13 +97,13 @@ export default function ClassesPage() {
           {search && <p className="text-[hsl(var(--muted-foreground)/0.6)] text-xs mt-1">Try a different search term</p>}
         </div>
       ) : (
-        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(280px,320px))] justify-center sm:justify-start gap-4">
+        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(310px,370px))] justify-center sm:justify-start gap-5">
           {filtered.map((cls: any, idx: number) => {
             const grad = gradients[idx % gradients.length];
             const badge = statusConfig[cls.status];
             return (
-              <div key={cls.id} className="relative w-full max-w-[320px] flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg">
-                <div className={`relative mx-3 mt-3 h-24 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${grad}`}>
+              <div key={cls.id} className="relative w-full max-w-[370px] flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg">
+                <div className={`relative mx-3 mt-3 h-36 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${grad}`}>
                   {cls.thumbnail ? (
                     <img src={cls.thumbnail} alt={cls.name} className="w-full h-full object-cover" />
                   ) : (

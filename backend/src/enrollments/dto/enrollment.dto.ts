@@ -9,3 +9,13 @@ export class EnrollDto {
   @IsNotEmpty()
   classId: string;
 }
+
+export class EnrollByPhoneDto {
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+}

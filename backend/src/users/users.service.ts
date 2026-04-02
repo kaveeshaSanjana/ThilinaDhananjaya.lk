@@ -120,6 +120,16 @@ export class UsersService {
     });
   }
 
+  async updatePhone(userId: string, phone: string, whatsappPhone?: string) {
+    return this.prisma.profile.update({
+      where: { userId },
+      data: {
+        phone,
+        ...(whatsappPhone !== undefined && { whatsappPhone }),
+      },
+    });
+  }
+
   async delete(userId: string) {
     await this.prisma.profile.deleteMany({ where: { userId } });
     await this.prisma.refreshToken.deleteMany({ where: { userId } });

@@ -59,6 +59,13 @@ export default function AdminClassDetail() {
   const [allStudents, setAllStudents] = useState<any[]>([]);
   const [enrollId, setEnrollId] = useState('');
   const [enrolling, setEnrolling] = useState(false);
+  const [enrollMode, setEnrollMode] = useState<'userId' | 'phone'>('userId');
+  const [enrollPhone, setEnrollPhone] = useState('');
+  const [enrollError, setEnrollError] = useState('');
+  const [enrollSuccess, setEnrollSuccess] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
 
   // Watch Sessions
   const [watchSessions, setWatchSessions] = useState<any[]>([]);
@@ -134,9 +141,26 @@ export default function AdminClassDetail() {
 
   // ─── Enrollment handlers ────────────────
   const handleEnroll = async () => {
-    if (!enrollId) return; setEnrolling(true);
-    try { await api.post('/enrollments', { userId: enrollId, classId: id }); setEnrollId(''); loadEnrollments(); }
-    catch {} finally { setEnrolling(false); }
+    setEnrollError(''); setEnrollSuccess('');
+    if (enrollMode === 'userId') {
+      if (!enrollId) return; setEnrolling(true);
+      try {
+        await api.post('/enrollments', { userId: enrollId, classId: id });
+        setEnrollId(''); setSelectedStudent(null); setStudentSearch('');
+        setEnrollSuccess('Student enrolled successfully.');
+        loadEnrollments();
+      } catch (err: any) { setEnrollError(err.response?.data?.message || 'Failed to enroll student.'); }
+      finally { setEnrolling(false); }
+    } else {
+      if (!enrollPhone.trim()) return; setEnrolling(true);
+      try {
+        await api.post('/enrollments/by-phone', { phone: enrollPhone.trim(), classId: id });
+        setEnrollPhone('');
+        setEnrollSuccess('Student enrolled successfully.');
+        loadEnrollments();
+      } catch (err: any) { setEnrollError(err.response?.data?.message || 'Failed to enroll student.'); }
+      finally { setEnrolling(false); }
+    }
   };
   const handleUnenroll = async (userId: string) => {
     if (!confirm('Unenroll this student?')) return;
@@ -529,17 +553,113 @@ export default function AdminClassDetail() {
               <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
               Enroll a Student
             </h3>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select value={enrollId} onChange={e => setEnrollId(e.target.value)} className={inp + " flex-1"}>
-                <option value="">Select a student to enroll...</option>
-                {availableStudents.map((s: any) => <option key={s.id} value={s.id}>{s.profile?.fullName || s.email} ({s.email})</option>)}
-              </select>
-              <button onClick={handleEnroll} disabled={!enrollId || enrolling}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex-shrink-0 flex items-center gap-2">
-                {enrolling && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                {enrolling ? 'Enrolling...' : 'Enroll Student'}
+
+            {/* Mode toggle */}
+            <div className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-4 w-fit">
+              <button onClick={() => { setEnrollMode('userId'); setEnrollError(''); setEnrollSuccess(''); }}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${enrollMode === 'userId' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                By Student
+              </button>
+              <button onClick={() => { setEnrollMode('phone'); setEnrollError(''); setEnrollSuccess(''); }}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${enrollMode === 'phone' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                By Phone Number
               </button>
             </div>
+
+            {enrollMode === 'userId' ? (
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Searchable dropdown */}
+                <div className="relative flex-1">
+                  <div
+                    className={`${inp} flex items-center justify-between cursor-pointer`}
+                    onClick={() => setDropdownOpen(o => !o)}
+                  >
+                    <span className={selectedStudent ? 'text-slate-800' : 'text-slate-400'}>
+                      {selectedStudent ? `${selectedStudent.profile?.fullName || selectedStudent.email} (${selectedStudent.email})` : 'Select a student to enroll...'}
+                    </span>
+                    <svg className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </div>
+                  {dropdownOpen && (
+                    <div className="absolute z-20 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-slate-100">
+                        <div className="relative">
+                          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                          <input
+                            autoFocus
+                            value={studentSearch}
+                            onChange={e => setStudentSearch(e.target.value)}
+                            placeholder="Search by name or email..."
+                            className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+                      <ul className="max-h-52 overflow-y-auto py-1">
+                        {availableStudents
+                          .filter((s: any) => {
+                            const q = studentSearch.toLowerCase();
+                            return !q || (s.profile?.fullName || '').toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+                          })
+                          .map((s: any) => (
+                            <li
+                              key={s.id}
+                              className="flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 cursor-pointer transition"
+                              onClick={() => { setSelectedStudent(s); setEnrollId(s.id); setDropdownOpen(false); setStudentSearch(''); }}
+                            >
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                                {(s.profile?.fullName || s.email)[0].toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 truncate">{s.profile?.fullName || s.email}</p>
+                                <p className="text-[10px] text-slate-400 truncate">{s.email}</p>
+                              </div>
+                            </li>
+                          ))}
+                        {availableStudents.filter((s: any) => {
+                          const q = studentSearch.toLowerCase();
+                          return !q || (s.profile?.fullName || '').toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+                        }).length === 0 && (
+                          <li className="px-3 py-3 text-xs text-slate-400 text-center">No students found</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <button onClick={handleEnroll} disabled={!enrollId || enrolling}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex-shrink-0 flex items-center gap-2">
+                  {enrolling && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                  {enrolling ? 'Enrolling...' : 'Enroll Student'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="tel"
+                  value={enrollPhone}
+                  onChange={e => setEnrollPhone(e.target.value)}
+                  placeholder="e.g. 0771234567"
+                  className={inp + " flex-1"}
+                />
+                <button onClick={handleEnroll} disabled={!enrollPhone.trim() || enrolling}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex-shrink-0 flex items-center gap-2">
+                  {enrolling && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                  {enrolling ? 'Enrolling...' : 'Enroll by Phone'}
+                </button>
+              </div>
+            )}
+
+            {enrollError && (
+              <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-xs text-red-600">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {enrollError}
+              </div>
+            )}
+            {enrollSuccess && (
+              <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-100 text-xs text-green-700">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {enrollSuccess}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

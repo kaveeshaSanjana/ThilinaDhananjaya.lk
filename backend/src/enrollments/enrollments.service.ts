@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -33,6 +33,16 @@ export class EnrollmentsService {
         },
       },
     });
+  }
+
+  async enrollByPhone(phone: string, classId: string) {
+    const profile = await this.prisma.profile.findFirst({
+      where: { phone },
+    });
+    if (!profile) {
+      throw new NotFoundException(`Student with phone number "${phone}" not found`);
+    }
+    return this.enroll(profile.userId, classId);
   }
 
   async unenroll(userId: string, classId: string) {

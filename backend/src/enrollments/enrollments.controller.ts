@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
-import { EnrollDto } from './dto/enrollment.dto';
+import { EnrollDto, EnrollByPhoneDto } from './dto/enrollment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -9,12 +9,20 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class EnrollmentsController {
   constructor(private enrollmentsService: EnrollmentsService) {}
 
-  /** Admin: enroll a student in a class */
+  /** Admin: enroll a student in a class by userId */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   enroll(@Body() body: EnrollDto) {
     return this.enrollmentsService.enroll(body.userId, body.classId);
+  }
+
+  /** Admin: enroll a student by phone number */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('by-phone')
+  enrollByPhone(@Body() body: EnrollByPhoneDto) {
+    return this.enrollmentsService.enrollByPhone(body.phone, body.classId);
   }
 
   /** Student: see my enrollments */

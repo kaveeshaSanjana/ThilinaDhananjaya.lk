@@ -27,6 +27,7 @@ export default function AdminStudents() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [viewStudent, setViewStudent] = useState<any>(null);
 
   const load = () => { setLoading(true); api.get('/users/students').then(r => setStudents(r.data || [])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
@@ -124,7 +125,14 @@ export default function AdminStudents() {
     },
     { id: 'email', label: 'Email', minWidth: 220, render: (s) => <span className="text-slate-500 text-sm">{s.email}</span> },
     { id: 'phone', label: 'Phone', minWidth: 140, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.phone || '-'}</span> },
-    { id: 'school', label: 'School', minWidth: 160, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.school || '-'}</span> },
+    { id: 'whatsappPhone', label: 'WhatsApp', minWidth: 140, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.whatsappPhone || '-'}</span> },
+    { id: 'school', label: 'School', minWidth: 160, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.school || '-'}</span> },
+    { id: 'address', label: 'Address', minWidth: 180, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.address || '-'}</span> },
+    { id: 'occupation', label: 'Occupation', minWidth: 140, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.occupation || '-'}</span> },
+    { id: 'dateOfBirth', label: 'Date of Birth', minWidth: 130, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.dateOfBirth ? new Date(s.profile.dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span> },
+    { id: 'guardianName', label: 'Guardian', minWidth: 150, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.guardianName || '-'}</span> },
+    { id: 'guardianPhone', label: 'Guardian Phone', minWidth: 140, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.guardianPhone || '-'}</span> },
+    { id: 'relationship', label: 'Relationship', minWidth: 130, defaultVisible: false, render: (s) => <span className="text-slate-500 text-sm">{s.profile?.relationship || '-'}</span> },
     {
       id: 'status',
       label: 'Status',
@@ -144,6 +152,10 @@ export default function AdminStudents() {
       align: 'right',
       render: (s) => (
         <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => setViewStudent(s)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-50 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            View
+          </button>
           <button onClick={() => openEdit(s)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
             Edit
@@ -177,6 +189,71 @@ export default function AdminStudents() {
           </button>
         </div>
       </div>
+
+      {/* View Detail Modal */}
+      {viewStudent && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setViewStudent(null)}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <h2 className="font-bold text-slate-800">Student Details</h2>
+                <button onClick={() => setViewStudent(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Avatar + name */}
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 overflow-hidden">
+                    {viewStudent.profile?.avatarUrl ? (
+                      <img src={viewStudent.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      (viewStudent.profile?.fullName || viewStudent.email || '?')[0].toUpperCase()
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">{viewStudent.profile?.fullName || '-'}</h3>
+                    <p className="text-sm text-slate-500">{viewStudent.email}</p>
+                    {viewStudent.profile?.instituteId && <p className="text-xs font-mono text-blue-600 font-bold mt-0.5">{viewStudent.profile.instituteId}</p>}
+                  </div>
+                  <span className={`ml-auto inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${studentStatusBadge(viewStudent.profile?.status || 'PENDING')}`}>
+                    {viewStudent.profile?.status || 'PENDING'}
+                  </span>
+                </div>
+                {/* Details grid */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  {[
+                    { label: 'Phone', value: viewStudent.profile?.phone },
+                    { label: 'WhatsApp', value: viewStudent.profile?.whatsappPhone },
+                    { label: 'School', value: viewStudent.profile?.school },
+                    { label: 'Occupation', value: viewStudent.profile?.occupation },
+                    { label: 'Date of Birth', value: viewStudent.profile?.dateOfBirth ? new Date(viewStudent.profile.dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null },
+                    { label: 'Joined', value: viewStudent.createdAt ? new Date(viewStudent.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null },
+                    { label: 'Guardian', value: viewStudent.profile?.guardianName },
+                    { label: 'Guardian Phone', value: viewStudent.profile?.guardianPhone },
+                    { label: 'Relationship', value: viewStudent.profile?.relationship },
+                  ].map(({ label, value }) => value ? (
+                    <div key={label}>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
+                      <p className="text-slate-700 font-medium mt-0.5">{value}</p>
+                    </div>
+                  ) : null)}
+                </div>
+                {viewStudent.profile?.address && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p>
+                    <p className="text-sm text-slate-700">{viewStudent.profile.address}</p>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => { setViewStudent(null); openEdit(viewStudent); }} className="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-semibold hover:bg-blue-100 transition">Edit</button>
+                  <button onClick={() => setViewStudent(null)} className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200 transition">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
 
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
@@ -306,6 +383,7 @@ export default function AdminStudents() {
             rows={filtered}
             getRowId={(row) => row.id}
             tableHeight="calc(100vh - 320px)"
+            storageKey="admin-students-columns"
           />
         )}
       </div>
