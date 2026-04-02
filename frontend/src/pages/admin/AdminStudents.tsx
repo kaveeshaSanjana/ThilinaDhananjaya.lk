@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
+import { uploadImage, uploadStudentAvatar } from '../../lib/imageUpload';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'PENDING', 'OLD'];
@@ -14,7 +15,7 @@ const studentStatusBadge = (s: string) => {
   return map[s] || map.ACTIVE;
 };
 
-const emptyForm = { fullName: '', email: '', password: '', phone: '', whatsappPhone: '', address: '', school: '', occupation: '', dateOfBirth: '', guardianName: '', guardianPhone: '', relationship: '' };
+const emptyForm = { fullName: '', email: '', password: '', phone: '', whatsappPhone: '', address: '', school: '', occupation: '', dateOfBirth: '', guardianName: '', guardianPhone: '', relationship: '', avatarUrl: '' };
 
 export default function AdminStudents() {
   const [students, setStudents] = useState<any[]>([]);
@@ -25,6 +26,7 @@ export default function AdminStudents() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const load = () => { setLoading(true); api.get('/users/students').then(r => setStudents(r.data || [])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
@@ -44,7 +46,7 @@ export default function AdminStudents() {
       occupation: s.profile?.occupation || '',
       dateOfBirth: s.profile?.dateOfBirth ? new Date(s.profile.dateOfBirth).toISOString().split('T')[0] : '',
       guardianName: s.profile?.guardianName || '', guardianPhone: s.profile?.guardianPhone || '',
-      relationship: s.profile?.relationship || '',
+      relationship: s.profile?.relationship || '', avatarUrl: s.profile?.avatarUrl || '',
     });
     setEditingStudent(s); setShowForm(true); setError('');
   };
@@ -58,6 +60,7 @@ export default function AdminStudents() {
           address: form.address || undefined, school: form.school || undefined, occupation: form.occupation || undefined,
           dateOfBirth: form.dateOfBirth || undefined, guardianName: form.guardianName || undefined,
           guardianPhone: form.guardianPhone || undefined, relationship: form.relationship || undefined,
+          avatarUrl: form.avatarUrl || undefined,
         };
         await api.patch(`/users/students/${editingStudent.id}/profile`, payload);
       } else {
@@ -67,7 +70,7 @@ export default function AdminStudents() {
           address: form.address || undefined, school: form.school || undefined,
           occupation: form.occupation || undefined, dateOfBirth: form.dateOfBirth || undefined,
           guardianName: form.guardianName || undefined, guardianPhone: form.guardianPhone || undefined,
-          relationship: form.relationship || undefined,
+          relationship: form.relationship || undefined, avatarUrl: form.avatarUrl || undefined,
         });
       }
       setShowForm(false); setForm({ ...emptyForm }); load();
@@ -84,6 +87,22 @@ export default function AdminStudents() {
     await api.delete(`/users/students/${id}`).catch(() => {}); load();
   };
 
+  const handleAvatarFileChange = async (file?: File) => {
+    if (!file) return;
+    setError('');
+    setUploadingAvatar(true);
+    try {
+      const url = editingStudent
+        ? await uploadStudentAvatar(editingStudent.id, file)
+        : await uploadImage(file, 'avatars');
+      setForm(p => ({ ...p, avatarUrl: url }));
+    } catch (err: any) {
+      setError(err.message || 'Avatar upload failed');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const studentColumns: readonly StickyColumn<any>[] = [
     { id: 'instituteId', label: 'Student ID', minWidth: 130, render: (s) => <span className="font-mono text-xs text-blue-600 font-bold">{s.profile?.instituteId || '-'}</span> },
     {
@@ -93,7 +112,11 @@ export default function AdminStudents() {
       render: (s) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {(s.profile?.fullName || s.email || '?')[0].toUpperCase()}
+            {s.profile?.avatarUrl ? (
+              <img src={s.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+            ) : (
+              (s.profile?.fullName || s.email || '?')[0].toUpperCase()
+            )}
           </div>
           <span className="font-semibold text-slate-800 text-sm">{s.profile?.fullName || '-'}</span>
         </div>
@@ -176,6 +199,24 @@ export default function AdminStudents() {
                   <input type="text" value={form.fullName} onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))} placeholder="John Doe" required
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                 </div>
+                <div className="col-span-1 sm:col-span-2 space-y-2">
+                  <label className="block text-xs font-medium text-slate-600">Avatar</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="hidden"
+                        onChange={e => handleAvatarFileChange(e.target.files?.[0])}
+                      />
+                      {uploadingAvatar ? 'Uploading...' : 'Upload Avatar'}
+                    </label>
+                    <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                  </div>
+                  {form.avatarUrl && (
+                    <img src={form.avatarUrl} alt="Avatar preview" className="w-16 h-16 rounded-full object-cover border border-slate-200" />
+                  )}
+                </div>
                 {!editingStudent && (
                   <>
                     <div>
@@ -238,7 +279,7 @@ export default function AdminStudents() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="submit" disabled={saving || uploadingAvatar} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingStudent ? 'Save Changes' : 'Create Student'}
                 </button>

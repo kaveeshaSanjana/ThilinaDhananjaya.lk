@@ -15,6 +15,7 @@ interface CreateUserData {
   guardianPhone?: string;
   relationship?: string;
   occupation?: string;
+  avatarUrl?: string;
 }
 
 @Injectable()
@@ -43,6 +44,7 @@ export class UsersService {
           create: {
             instituteId,
             fullName: data.fullName,
+            avatarUrl: data.avatarUrl,
             phone: data.phone,
             whatsappPhone: data.whatsappPhone,
             address: data.address,
@@ -96,6 +98,7 @@ export class UsersService {
 
   async updateProfile(userId: string, data: Partial<{
     fullName: string;
+    avatarUrl: string;
     phone: string;
     whatsappPhone: string;
     address: string;

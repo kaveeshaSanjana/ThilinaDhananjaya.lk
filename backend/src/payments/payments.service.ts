@@ -102,4 +102,157 @@ export class PaymentsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /**
+   * Admin: Get all enrolled students for a class+month with their payment status.
+   * Returns one row per student showing: PAID | LATE | PENDING | UNPAID
+   */
+  async getClassMonthPaymentStatus(classId: string, monthId: string) {
+    // Verify the month belongs to the class
+    const month = await this.prisma.month.findFirst({
+      where: { id: monthId, classId },
+      include: { class: { select: { id: true, name: true, subject: true } } },
+    });
+    if (!month) throw new NotFoundException('Month not found for this class');
+
+    // All students enrolled in this class
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { classId },
+      include: {
+        user: {
+          include: {
+            profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true } },
+          },
+        },
+      },
+    });
+
+    // All payment slips for this month
+    const slips = await this.prisma.paymentSlip.findMany({
+      where: { monthId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Map slips by userId — keep the most recent one per student
+    const slipMap = new Map<string, typeof slips[0]>();
+    for (const slip of slips) {
+      if (!slipMap.has(slip.userId)) {
+        slipMap.set(slip.userId, slip);
+      }
+    }
+
+    const students = enrollments.map((e) => {
+      const slip = slipMap.get(e.userId) ?? null;
+      let paymentStatus: 'PAID' | 'LATE' | 'PENDING' | 'UNPAID';
+
+      if (!slip) {
+        paymentStatus = 'UNPAID';
+      } else if (slip.status === 'VERIFIED') {
+        paymentStatus = 'PAID';
+      } else if (slip.status === 'LATE') {
+        paymentStatus = 'LATE';
+      } else if (slip.status === 'PENDING') {
+        paymentStatus = 'PENDING';
+      } else {
+        // REJECTED — treat as unpaid
+        paymentStatus = 'UNPAID';
+      }
+
+      return {
+        userId: e.userId,
+        profile: e.user.profile,
+        email: e.user.email,
+        paymentStatus,
+        slip: slip
+          ? {
+              id: slip.id,
+              status: slip.status,
+              type: slip.type,
+              slipUrl: slip.slipUrl,
+              adminNote: slip.adminNote,
+              createdAt: slip.createdAt,
+            }
+          : null,
+      };
+    });
+
+    return {
+      class: month.class,
+      month: { id: month.id, name: month.name, year: month.year, month: month.month },
+      students,
+      summary: {
+        total: students.length,
+        paid: students.filter((s) => s.paymentStatus === 'PAID').length,
+        late: students.filter((s) => s.paymentStatus === 'LATE').length,
+        pending: students.filter((s) => s.paymentStatus === 'PENDING').length,
+        unpaid: students.filter((s) => s.paymentStatus === 'UNPAID').length,
+      },
+    };
+  }
+
+  /**
+   * Admin: Manually set a student's payment status for a month.
+   * PAID   → marks/creates slip as VERIFIED
+   * LATE   → marks/creates slip as LATE
+   * UNPAID → rejects all existing slips for this student+month
+   */
+  async setStudentPaymentStatus(
+    userId: string,
+    monthId: string,
+    status: 'PAID' | 'LATE' | 'UNPAID',
+    adminNote?: string,
+  ) {
+    // Verify user and month exist
+    const [user, month] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } }),
+      this.prisma.month.findUnique({ where: { id: monthId }, include: { class: true } }),
+    ]);
+    if (!user) throw new NotFoundException('User not found');
+    if (!month) throw new NotFoundException('Month not found');
+
+    if (status === 'UNPAID') {
+      // Reject all existing slips for this student+month
+      await this.prisma.paymentSlip.updateMany({
+        where: { userId, monthId },
+        data: { status: 'REJECTED', adminNote: adminNote ?? 'Marked unpaid by admin' },
+      });
+      return {
+        userId,
+        monthId,
+        paymentStatus: 'UNPAID',
+        message: 'Student marked as unpaid. All existing slips rejected.',
+      };
+    }
+
+    const slipStatus = status === 'PAID' ? 'VERIFIED' : 'LATE';
+
+    // Find the most recent slip for this student+month
+    const existingSlip = await this.prisma.paymentSlip.findFirst({
+      where: { userId, monthId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingSlip) {
+      const updated = await this.prisma.paymentSlip.update({
+        where: { id: existingSlip.id },
+        data: { status: slipStatus, adminNote },
+        include: { month: { include: { class: true } } },
+      });
+      return { paymentStatus: status, slip: updated };
+    }
+
+    // No existing slip — create a manual record
+    const created = await this.prisma.paymentSlip.create({
+      data: {
+        userId,
+        monthId,
+        type: 'MONTHLY',
+        slipUrl: 'MANUAL_ENTRY',
+        status: slipStatus,
+        adminNote: adminNote ?? `Manually marked as ${status} by admin`,
+      },
+      include: { month: { include: { class: true } } },
+    });
+    return { paymentStatus: status, slip: created };
+  }
 }

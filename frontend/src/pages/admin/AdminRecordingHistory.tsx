@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
+import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 import WelcomeMessageEditor from '../../components/WelcomeMessageEditor';
 
@@ -35,6 +36,7 @@ export default function AdminRecordingHistory() {
   const [liveAttendance, setLiveAttendance] = useState<any[]>([]);
   const [showLiveAttendance, setShowLiveAttendance] = useState<any>(null);
   const [copied, setCopied] = useState('');
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   const load = () => { setLoading(true); Promise.all([
     api.get('/recordings').then(r => setRecordings(r.data)).catch(() => {}),
@@ -43,6 +45,22 @@ export default function AdminRecordingHistory() {
   useEffect(() => { load(); }, []);
 
   const update = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleThumbnailFileChange = async (file?: File) => {
+    if (!file) return;
+    setError('');
+    setUploadingThumbnail(true);
+    try {
+      const url = editingRec
+        ? await uploadRecordingThumbnail(editingRec.id, file)
+        : await uploadImage(file, 'recordings');
+      setForm(p => ({ ...p, thumbnail: url }));
+    } catch (err: any) {
+      setError(err.message || 'Thumbnail upload failed');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
 
   useEffect(() => {
     if (form.classId) {
@@ -335,8 +353,25 @@ export default function AdminRecordingHistory() {
               )}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Thumbnail URL</label>
-                <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                <div className="space-y-2">
+                  <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="hidden"
+                        onChange={e => handleThumbnailFileChange(e.target.files?.[0])}
+                      />
+                      {uploadingThumbnail ? 'Uploading...' : 'Upload Thumbnail'}
+                    </label>
+                    <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                  </div>
+                  {form.thumbnail && (
+                    <img src={form.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-slate-200" />
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -363,7 +398,7 @@ export default function AdminRecordingHistory() {
               <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => update('welcomeMessage', v)} />
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingRec ? 'Save' : 'Add'}
                 </button>

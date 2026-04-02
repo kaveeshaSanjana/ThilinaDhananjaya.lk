@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { uploadImage } from '../lib/imageUpload';
 
 const steps = ['Account', 'Profile', 'Confirm'];
 
@@ -12,6 +13,9 @@ export default function RegisterPage() {
   const [step, setStep] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarName, setAvatarName] = useState('');
   const [form, setForm] = useState({ email: '', password: '', confirm: '', fullName: '', phone: '', school: '' });
 
   const update = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
@@ -34,10 +38,26 @@ export default function RegisterPage() {
         fullName: form.fullName,
         phone: form.phone.trim(),
         school: form.school.trim(),
+        avatarUrl: avatarUrl || undefined,
       });
       navigate('/dashboard');
     } catch (err: any) { setError(err.response?.data?.message || 'Registration failed.'); setStep(0); }
     finally { setLoading(false); }
+  };
+
+  const handleAvatarUpload = async (file?: File) => {
+    if (!file) return;
+    setError('');
+    setUploadingAvatar(true);
+    try {
+      const url = await uploadImage(file, 'avatars');
+      setAvatarUrl(url);
+      setAvatarName(file.name);
+    } catch (err: any) {
+      setError(err.message || 'Avatar upload failed');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const inputCls = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition-all text-sm shadow-sm";
@@ -116,6 +136,23 @@ export default function RegisterPage() {
               <Field label="Full name" value={form.fullName} onChange={(v: string) => update('fullName', v)} placeholder="Your full name" required />
               <Field label="Phone number" type="tel" value={form.phone} onChange={(v: string) => update('phone', v)} placeholder="07X XXX XXXX" />
               <Field label="School / Institute" value={form.school} onChange={(v: string) => update('school', v)} placeholder="Your school name" />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Profile photo <span className="text-slate-400 ml-1 text-xs font-normal">(optional)</span></label>
+                <div className="flex items-center flex-wrap gap-2">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={e => handleAvatarUpload(e.target.files?.[0])}
+                    />
+                    {uploadingAvatar ? 'Uploading...' : 'Upload Avatar'}
+                  </label>
+                  <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                </div>
+                {avatarName && <p className="text-xs text-slate-500 mt-1.5">Selected: {avatarName}</p>}
+                {avatarUrl && <img src={avatarUrl} alt="Avatar preview" className="mt-2 w-16 h-16 rounded-full object-cover border border-slate-200" />}
+              </div>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setStep(0)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Back</button>
                 <button type="submit" className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25">Continue</button>
@@ -135,7 +172,7 @@ export default function RegisterPage() {
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Back</button>
-                <button type="submit" disabled={loading}
+                <button type="submit" disabled={loading || uploadingAvatar}
                   className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 flex items-center justify-center gap-2">
                   {loading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {loading ? 'Creating...' : 'Create account'}

@@ -1,9 +1,13 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, UseGuards, Request, ForbiddenException,
+  UploadedFile, UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { RecordingsService } from './recordings.service';
 import { AccessResolverService } from './access-resolver.service';
+import { UploadService } from '../upload/upload.service';
 import { CreateRecordingDto, UpdateRecordingDto } from './dto/recording.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,6 +19,7 @@ export class RecordingsController {
   constructor(
     private recordingsService: RecordingsService,
     private accessResolver: AccessResolverService,
+    private uploadService: UploadService,
   ) {}
 
   // ─── Admin CRUD ────────────────────────────────────────
@@ -46,6 +51,29 @@ export class RecordingsController {
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.recordingsService.delete(id);
+  }
+
+  /**
+   * POST /recordings/:id/thumbnail
+   * Upload a thumbnail image for a recording to S3 and update the record.
+   * Form field name: "file"
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/thumbnail')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadThumbnail(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const url = await this.uploadService.uploadImage(file, 'recordings');
+    await this.recordingsService.update(id, { thumbnail: url });
+    return { thumbnail: url };
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

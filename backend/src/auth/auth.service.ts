@@ -31,6 +31,7 @@ export class AuthService {
       guardianName: dto.guardianName,
       guardianPhone: dto.guardianPhone,
       relationship: dto.relationship,
+      avatarUrl: dto.avatarUrl,
     });
 
     const accessToken = this.generateAccessToken(user.id, user.role);

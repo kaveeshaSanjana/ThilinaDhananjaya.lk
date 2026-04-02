@@ -102,57 +102,52 @@ export default function ClassesPage() {
             const grad = gradients[idx % gradients.length];
             const badge = statusConfig[cls.status];
             return (
-              <Link key={cls.id} to={`/classes/${cls.id}`}
-                className="group bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] overflow-hidden shadow-sm card-hover transition-colors duration-300">
-                {/* Top visual */}
-                <div className={`relative h-36 bg-gradient-to-br ${grad} overflow-hidden`}>
+              <div key={cls.id} className="relative flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-3 hover:shadow-xl">
+                <div className={`relative mx-3 -mt-1 h-12 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${grad}`}>
                   {cls.thumbnail ? (
-                    <img src={cls.thumbnail} alt={cls.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img src={cls.thumbnail} alt={cls.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <span className="text-white/30 text-7xl font-black">{cls.name?.[0]?.toUpperCase() || 'C'}</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                   {badge && (
-                    <span className={`absolute top-3 right-3 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${badge.class}`}>
+                    <span className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${badge.class}`}>
                       {badge.label}
                     </span>
                   )}
-                  {/* Play icon on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-xl scale-75 group-hover:scale-100 transition-transform duration-300">
-                      <svg className="w-5 h-5 text-[hsl(var(--primary))] ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
+                </div>
+
+                <div className="p-2.5">
+                  <h5 className="mb-1 block text-base font-semibold leading-snug tracking-normal text-slate-900 truncate">
+                    {cls.name}
+                  </h5>
+                  <p className="block text-[11px] font-light leading-relaxed text-slate-600 line-clamp-1 min-h-[18px]">
+                    {cls.description || 'No description available for this class yet.'}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between text-[10px]">
+                    {cls.subject ? (
+                      <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold uppercase tracking-wide">
+                        {cls.subject}
+                      </span>
+                    ) : <span className="text-slate-400">No subject</span>}
+                    {cls.monthlyFee != null ? (
+                      <span className="font-bold text-emerald-600">Rs. {Number(cls.monthlyFee).toLocaleString()} / mo</span>
+                    ) : (
+                      <span className="font-bold text-emerald-600">Free</span>
+                    )}
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="p-5">
-                  <h3 className="text-base font-bold text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))] transition truncate">
-                    {cls.name}
-                  </h3>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1.5 line-clamp-2 leading-relaxed">
-                    {cls.description || 'No description available'}
-                  </p>
-                  {cls.subject && (
-                    <span className="inline-block mt-2 px-2.5 py-1 rounded-lg bg-[hsl(var(--primary)/0.08)] text-[10px] font-bold text-[hsl(var(--primary))] uppercase tracking-wider">
-                      {cls.subject}
-                    </span>
-                  )}
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-[hsl(var(--border))]">
-                    {cls.monthlyFee != null ? (
-                      <span className="text-sm font-bold text-[hsl(var(--accent))]">Rs. {Number(cls.monthlyFee).toLocaleString()}<span className="text-[10px] text-[hsl(var(--muted-foreground))] font-normal">/mo</span></span>
-                    ) : (
-                      <span className="text-xs font-semibold text-[hsl(var(--success))]">Free</span>
-                    )}
-                    <span className="text-xs font-semibold text-[hsl(var(--primary))] group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                      View
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                    </span>
-                  </div>
+                <div className="p-2 pt-0">
+                  <Link
+                    to={`/classes/${cls.id}`}
+                    className="block w-full select-none rounded-lg bg-blue-500 py-1 px-3 text-center align-middle text-[9px] font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/40 focus:opacity-[0.85] focus:shadow-none active:opacity-[0.85] active:shadow-none"
+                  >
+                    Select Class
+                  </Link>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

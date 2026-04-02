@@ -1,7 +1,11 @@
 import {
   Controller, Get, Post, Patch, Delete, Param, Body, UseGuards,
+  UploadedFile, UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ClassesService } from './classes.service';
+import { UploadService } from '../upload/upload.service';
 import { CreateClassDto, UpdateClassDto } from './dto/class.dto';
 import { CreateMonthDto, UpdateMonthDto } from './dto/month.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -10,7 +14,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('classes')
 export class ClassesController {
-  constructor(private classesService: ClassesService) {}
+  constructor(
+    private classesService: ClassesService,
+    private uploadService: UploadService,
+  ) {}
 
   // ─── Classes CRUD (Admin) ─────────────────────────────
 
@@ -43,6 +50,31 @@ export class ClassesController {
   @Delete(':id')
   deleteClass(@Param('id') id: string) {
     return this.classesService.deleteClass(id);
+  }
+
+  // ─── Class Thumbnail Upload ────────────────────────────
+
+  /**
+   * POST /classes/:id/thumbnail
+   * Upload a thumbnail image for a class to S3 and update the class record.
+   * Form field name: "file"
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/thumbnail')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadThumbnail(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const url = await this.uploadService.uploadImage(file, 'classes');
+    await this.classesService.updateClass(id, { thumbnail: url });
+    return { thumbnail: url };
   }
 
   // ─── Class Recordings (aggregated from all months) ────

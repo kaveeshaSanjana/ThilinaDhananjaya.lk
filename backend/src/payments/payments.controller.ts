@@ -3,7 +3,7 @@ import {
   UseGuards, Request,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { SubmitSlipDto, AdminNoteDto } from './dto/payment.dto';
+import { SubmitSlipDto, AdminNoteDto, SetPaymentStatusDto } from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -70,5 +70,42 @@ export class PaymentsController {
   @Get('student/:userId')
   getStudentPayments(@Param('userId') userId: string) {
     return this.paymentsService.getStudentPayments(userId);
+  }
+
+  /**
+   * Admin: Get all enrolled students for a class+month with payment status.
+   * Each student shows: PAID | LATE | PENDING | UNPAID
+   * Also includes a summary count.
+   * GET /api/payments/class/:classId/month/:monthId
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class/:classId/month/:monthId')
+  getClassMonthPaymentStatus(
+    @Param('classId') classId: string,
+    @Param('monthId') monthId: string,
+  ) {
+    return this.paymentsService.getClassMonthPaymentStatus(classId, monthId);
+  }
+
+  /**
+   * Admin: Manually set a student's payment status for a month.
+   * PATCH /api/payments/student/:userId/month/:monthId/status
+   * Body: { status: 'PAID' | 'LATE' | 'UNPAID', adminNote?: string }
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch('student/:userId/month/:monthId/status')
+  setStudentPaymentStatus(
+    @Param('userId') userId: string,
+    @Param('monthId') monthId: string,
+    @Body() body: SetPaymentStatusDto,
+  ) {
+    return this.paymentsService.setStudentPaymentStatus(
+      userId,
+      monthId,
+      body.status,
+      body.adminNote,
+    );
   }
 }

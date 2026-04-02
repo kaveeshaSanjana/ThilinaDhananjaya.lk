@@ -11,6 +11,7 @@ interface User {
     phone?: string;
     whatsappPhone?: string;
     school?: string;
+    avatarUrl?: string;
   };
 }
 
@@ -18,7 +19,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<User>;
-  register: (data: Record<string, string>) => Promise<User>;
+  register: (data: Record<string, string | undefined>) => Promise<User>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res.data.user;
   };
 
-  const register = async (data: Record<string, string>) => {
+  const register = async (data: Record<string, string | undefined>) => {
     const res = await api.post('/auth/register', data);
     sessionStorage.setItem('accessToken', res.data.accessToken);
     setToken(res.data.accessToken);

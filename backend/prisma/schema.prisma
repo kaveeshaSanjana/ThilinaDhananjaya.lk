@@ -55,6 +55,7 @@ enum PaymentSlipStatus {
   PENDING
   VERIFIED
   REJECTED
+  LATE
 }
 
 enum AttendanceStatus {
@@ -118,6 +119,7 @@ model Profile {
   instituteId   String        @unique  // e.g. TD-2026-0001
   barcodeId     String?       @unique  // Physical barcode on student ID card
   fullName      String
+  avatarUrl     String?       // Profile picture URL (S3)
   address       String?
   phone         String?
   whatsappPhone String?
