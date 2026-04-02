@@ -6,7 +6,7 @@ import StickyDataTable, { type StickyColumn } from '../../components/StickyDataT
 /* ─── Formatters ──────────────────────────────────────── */
 
 function fmtTime(sec: number): string {
-  if (!sec || sec <= 0) return '-';
+  if (sec == null || sec < 0) return '-';
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = Math.floor(sec % 60);

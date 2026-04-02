@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto } from './dto/attendance.dto';
+import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -166,5 +166,104 @@ export class AttendanceController {
   @Get('watch-sessions/class/:classId')
   getClassWatchSessions(@Param('classId') classId: string) {
     return this.attendanceService.getWatchSessionsByClass(classId);
+  }
+
+  // ─── Class Attendance (Physical / Date-based) Endpoints ───
+
+  /** Admin: mark single student class attendance (supports instituteId/barcode lookup) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/mark')
+  markClassAttendance(
+    @Request() req: any,
+    @Body() body: MarkClassAttendanceDto,
+  ) {
+    return this.attendanceService.markClassAttendance({
+      ...body,
+      markedBy: req.user.sub,
+    });
+  }
+
+  /** Admin: bulk mark attendance for a class on a date */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/bulk')
+  bulkMarkClassAttendance(
+    @Request() req: any,
+    @Body() body: BulkClassAttendanceDto,
+  ) {
+    return this.attendanceService.bulkMarkClassAttendance({
+      ...body,
+      markedBy: req.user.sub,
+    });
+  }
+
+  /** Admin: get class attendance for a specific date */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/date/:date')
+  getClassAttendanceByDate(
+    @Param('classId') classId: string,
+    @Param('date') date: string,
+  ) {
+    return this.attendanceService.getClassAttendanceByDate(classId, date);
+  }
+
+  /** Admin: get class attendance for a month */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/month/:year/:month')
+  getClassAttendanceByMonth(
+    @Param('classId') classId: string,
+    @Param('year') year: string,
+    @Param('month') month: string,
+  ) {
+    return this.attendanceService.getClassAttendanceByMonth(classId, parseInt(year), parseInt(month));
+  }
+
+  /** Admin: get class attendance for an entire year */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/year/:year')
+  getClassAttendanceByYear(
+    @Param('classId') classId: string,
+    @Param('year') year: string,
+  ) {
+    return this.attendanceService.getClassAttendanceByYear(classId, parseInt(year));
+  }
+
+  /** Admin: get enrolled students for a class (for attendance form) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/students')
+  getEnrolledStudents(@Param('classId') classId: string) {
+    return this.attendanceService.getEnrolledStudentsForClass(classId);
+  }
+
+  /** Admin: get a student's class attendance history */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/student/:userId')
+  getStudentClassAttendance(
+    @Param('userId') userId: string,
+    @Query('classId') classId?: string,
+  ) {
+    return this.attendanceService.getStudentClassAttendance(userId, classId);
+  }
+
+  /** Admin: delete a class attendance record */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Delete('class-attendance/:id')
+  deleteClassAttendance(@Param('id') id: string) {
+    return this.attendanceService.deleteClassAttendance(id);
+  }
+
+  /** Admin: get class-wise student payment statuses */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/payments')
+  getClassStudentPayments(@Param('classId') classId: string) {
+    return this.attendanceService.getClassStudentPayments(classId);
   }
 }

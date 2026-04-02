@@ -86,12 +86,13 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile       Profile?
-  enrollments   Enrollment[]
-  payments      PaymentSlip[]
-  attendances   Attendance[]
-  watchSessions WatchSession[]
-  refreshTokens RefreshToken[]
+  profile          Profile?
+  enrollments      Enrollment[]
+  payments         PaymentSlip[]
+  attendances      Attendance[]
+  watchSessions    WatchSession[]
+  refreshTokens    RefreshToken[]
+  classAttendances ClassAttendance[]
 }
 
 // ─── Refresh Token ───────────────────────────────────────
@@ -115,6 +116,7 @@ model Profile {
   id            String        @id @default(uuid())
   userId        String        @unique
   instituteId   String        @unique  // e.g. TD-2026-0001
+  barcodeId     String?       @unique  // Physical barcode on student ID card
   fullName      String
   address       String?
   phone         String?
@@ -151,6 +153,7 @@ model Class {
 
   months      Month[]
   enrollments Enrollment[]
+  classAttendances ClassAttendance[]
 }
 
 model Month {
@@ -270,4 +273,33 @@ model WatchSession {
 
   @@index([userId, recordingId])
   @@index([userId, startedAt])
+}
+
+// ─── Class Attendance (Physical / Date-based) ────────────
+
+model ClassAttendance {
+  id        String              @id @default(uuid())
+  userId    String
+  classId   String
+  date      DateTime            @db.Date    // The date of the class
+  status    ClassAttendanceStatus @default(PRESENT)
+  method    String?             // e.g. "barcode", "manual", "institute_id"
+  note      String?
+  markedBy  String?             // Admin user ID who marked
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId, date])
+  @@index([classId, date])
+  @@index([userId, classId])
+}
+
+enum ClassAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
 }

@@ -22,6 +22,7 @@ import AdminClassDetail from './pages/admin/AdminClassDetail';
 import AdminSlips from './pages/admin/AdminSlips';
 import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
+import AdminClassAttendance from './pages/admin/AdminClassAttendance';
 
 import Layout from './components/Layout';
 
@@ -75,6 +76,7 @@ function AppRoutes() {
         <Route path="admin/classes/:id" element={<ProtectedRoute role="ADMIN"><AdminClassDetail /></ProtectedRoute>} />
         <Route path="admin/slips" element={<ProtectedRoute role="ADMIN"><AdminSlips /></ProtectedRoute>} />
         <Route path="admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
+        <Route path="admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminClassAttendance /></ProtectedRoute>} />
         <Route path="admin/recordings" element={<ProtectedRoute role="ADMIN"><AdminRecordingHistory /></ProtectedRoute>} />
       </Route>
     </Routes>

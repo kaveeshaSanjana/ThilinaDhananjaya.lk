@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceStatus, ClassAttendanceStatus } from '@prisma/client';
 
 @Injectable()
 export class AttendanceService {
@@ -403,5 +403,288 @@ export class AttendanceService {
       orderBy: { startedAt: 'desc' },
       take: 500,
     });
+  }
+
+  // ─── Class Attendance (Physical / Date-based) ──────────
+
+  /**
+   * Resolve a student identifier (userId, instituteId, or barcode) to a userId.
+   */
+  async resolveStudentId(identifier: string): Promise<string> {
+    // Try direct userId
+    const byId = await this.prisma.user.findUnique({ where: { id: identifier } });
+    if (byId) return byId.id;
+
+    // Try instituteId
+    const byInstituteId = await this.prisma.profile.findUnique({
+      where: { instituteId: identifier },
+      select: { userId: true },
+    });
+    if (byInstituteId) return byInstituteId.userId;
+
+    // Try barcodeId
+    const byBarcode = await this.prisma.profile.findUnique({
+      where: { barcodeId: identifier },
+      select: { userId: true },
+    });
+    if (byBarcode) return byBarcode.userId;
+
+    // Try email
+    const byEmail = await this.prisma.user.findUnique({ where: { email: identifier } });
+    if (byEmail) return byEmail.id;
+
+    throw new NotFoundException(`Student not found for identifier: ${identifier}`);
+  }
+
+  /**
+   * Mark class attendance for a single student (by identifier).
+   */
+  async markClassAttendance(data: {
+    classId: string;
+    identifier: string;
+    date: string;
+    status: string;
+    method?: string;
+    note?: string;
+    markedBy?: string;
+  }) {
+    const userId = await this.resolveStudentId(data.identifier);
+
+    return this.prisma.classAttendance.upsert({
+      where: {
+        userId_classId_date: {
+          userId,
+          classId: data.classId,
+          date: new Date(data.date),
+        },
+      },
+      update: {
+        status: data.status as ClassAttendanceStatus,
+        method: data.method || undefined,
+        note: data.note || undefined,
+        markedBy: data.markedBy || undefined,
+      },
+      create: {
+        userId,
+        classId: data.classId,
+        date: new Date(data.date),
+        status: data.status as ClassAttendanceStatus,
+        method: data.method || null,
+        note: data.note || null,
+        markedBy: data.markedBy || null,
+      },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+      },
+    });
+  }
+
+  /**
+   * Bulk mark class attendance for a date.
+   */
+  async bulkMarkClassAttendance(data: {
+    classId: string;
+    date: string;
+    records: Array<{ userId: string; status: string; note?: string }>;
+    method?: string;
+    markedBy?: string;
+  }) {
+    const dateObj = new Date(data.date);
+    const results = [];
+
+    for (const rec of data.records) {
+      const result = await this.prisma.classAttendance.upsert({
+        where: {
+          userId_classId_date: {
+            userId: rec.userId,
+            classId: data.classId,
+            date: dateObj,
+          },
+        },
+        update: {
+          status: rec.status as ClassAttendanceStatus,
+          method: data.method || undefined,
+          note: rec.note || undefined,
+          markedBy: data.markedBy || undefined,
+        },
+        create: {
+          userId: rec.userId,
+          classId: data.classId,
+          date: dateObj,
+          status: rec.status as ClassAttendanceStatus,
+          method: data.method || 'bulk',
+          note: rec.note || null,
+          markedBy: data.markedBy || null,
+        },
+      });
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  /**
+   * Get class attendance for a specific date.
+   */
+  async getClassAttendanceByDate(classId: string, date: string) {
+    return this.prisma.classAttendance.findMany({
+      where: {
+        classId,
+        date: new Date(date),
+      },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true } } } },
+      },
+      orderBy: { user: { profile: { fullName: 'asc' } } },
+    });
+  }
+
+  /**
+   * Get class attendance for a month (all dates in month).
+   */
+  async getClassAttendanceByMonth(classId: string, year: number, month: number) {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0); // last day of month
+
+    return this.prisma.classAttendance.findMany({
+      where: {
+        classId,
+        date: { gte: startDate, lte: endDate },
+      },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true } } } },
+      },
+      orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
+    });
+  }
+
+  /**
+   * Get class attendance for a full year.
+   */
+  async getClassAttendanceByYear(classId: string, year: number) {
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31);
+
+    return this.prisma.classAttendance.findMany({
+      where: {
+        classId,
+        date: { gte: startDate, lte: endDate },
+      },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true } } } },
+      },
+      orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
+    });
+  }
+
+  /**
+   * Get a specific student's class attendance history.
+   */
+  async getStudentClassAttendance(userId: string, classId?: string) {
+    const where: any = { userId };
+    if (classId) where.classId = classId;
+
+    return this.prisma.classAttendance.findMany({
+      where,
+      include: {
+        class: { select: { id: true, name: true } },
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  /**
+   * Delete a class attendance record.
+   */
+  async deleteClassAttendance(id: string) {
+    return this.prisma.classAttendance.delete({ where: { id } });
+  }
+
+  /**
+   * Get enrolled students for a class (for bulk attendance marking).
+   */
+  async getEnrolledStudentsForClass(classId: string) {
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { classId },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true, status: true } } } },
+      },
+      orderBy: { user: { profile: { fullName: 'asc' } } },
+    });
+
+    return enrollments.map(e => ({
+      userId: e.userId,
+      fullName: e.user.profile?.fullName || e.user.email,
+      instituteId: e.user.profile?.instituteId || '-',
+      barcodeId: e.user.profile?.barcodeId || null,
+      phone: e.user.profile?.phone || null,
+      status: e.user.profile?.status || null,
+    }));
+  }
+
+  /**
+   * Get class-wise student payment status with submissions.
+   */
+  async getClassStudentPayments(classId: string) {
+    // Get all months for this class
+    const months = await this.prisma.month.findMany({
+      where: { classId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+
+    // Get enrolled students
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { classId },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true, status: true } } } },
+      },
+      orderBy: { user: { profile: { fullName: 'asc' } } },
+    });
+
+    // Get all payments for these months
+    const monthIds = months.map(m => m.id);
+    const payments = await this.prisma.paymentSlip.findMany({
+      where: { monthId: { in: monthIds } },
+      include: { month: { select: { id: true, name: true, year: true, month: true } } },
+    });
+
+    // Build student payment map
+    const studentPayments = enrollments.map(e => {
+      const studentPaymentsByMonth = months.map(m => {
+        const slips = payments.filter(p => p.userId === e.userId && p.monthId === m.id);
+        const verified = slips.find(s => s.status === 'VERIFIED');
+        const pending = slips.find(s => s.status === 'PENDING');
+        const latest = slips[0];
+        return {
+          monthId: m.id,
+          monthName: m.name,
+          year: m.year,
+          month: m.month,
+          status: verified ? 'PAID' : pending ? 'PENDING' : 'UNPAID',
+          slipCount: slips.length,
+          latestSlipId: latest?.id || null,
+          latestSlipStatus: latest?.status || null,
+        };
+      });
+
+      const paidCount = studentPaymentsByMonth.filter(p => p.status === 'PAID').length;
+      const pendingCount = studentPaymentsByMonth.filter(p => p.status === 'PENDING').length;
+      const unpaidCount = studentPaymentsByMonth.filter(p => p.status === 'UNPAID').length;
+
+      return {
+        userId: e.userId,
+        fullName: e.user.profile?.fullName || e.user.email,
+        instituteId: e.user.profile?.instituteId || '-',
+        barcodeId: e.user.profile?.barcodeId || null,
+        phone: e.user.profile?.phone || null,
+        studentStatus: e.user.profile?.status || null,
+        months: studentPaymentsByMonth,
+        paidCount,
+        pendingCount,
+        unpaidCount,
+      };
+    });
+
+    return { months, students: studentPayments };
   }
 }
