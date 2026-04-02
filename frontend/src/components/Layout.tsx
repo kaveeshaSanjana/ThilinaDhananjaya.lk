@@ -1,31 +1,39 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import api from '../lib/api';
 
 /* -------- Sidebar Nav Item -------- */
-function NavItem({ to, icon, label, badge, onClick }: { to: string; icon: React.ReactNode; label: string; badge?: number; onClick?: () => void }) {
+function NavItem({ to, icon, label, badge, onClick, exact }: { to: string; icon: React.ReactNode; label: string; badge?: number; onClick?: () => void; exact?: boolean }) {
   const { pathname } = useLocation();
-  const active = pathname === to || (to !== '/' && to !== '/admin' && pathname.startsWith(to)) || (to === '/admin' && pathname === '/admin');
+  const active = exact
+    ? pathname === to
+    : pathname === to || (to !== '/' && to !== '/admin' && pathname.startsWith(to)) || (to === '/admin' && pathname === '/admin');
   return (
     <Link to={to} onClick={onClick}
-      className={`group flex items-center gap-3 px-4 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+      className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
         active
-          ? 'bg-blue-50 dark:bg-white/15 text-blue-700 dark:text-white shadow-sm dark:shadow-lg dark:shadow-black/10 border border-blue-100 dark:border-transparent'
-          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/8 hover:text-slate-900 dark:hover:text-white border border-transparent'
+          ? 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]'
+          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'
       }`}>
-      <span className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 group-hover:scale-105'}`}>{icon}</span>
+      <span className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${active ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground)/0.6)] group-hover:text-[hsl(var(--foreground))]'}`}>{icon}</span>
       <span className="flex-1">{label}</span>
       {badge != null && badge > 0 && (
-        <span className="px-1.5 py-0.5 rounded-md bg-red-500 text-[10px] font-bold text-white min-w-[18px] text-center">{badge}</span>
+        <span className="px-1.5 py-0.5 rounded-md bg-[hsl(var(--danger))] text-[10px] font-bold text-white min-w-[18px] text-center">{badge}</span>
       )}
     </Link>
   );
 }
 
 /* -------- Section Label -------- */
-function SectionLabel({ label }: { label: string }) {
-  return <p className="px-4 pt-5 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">{label}</p>;
+function SideSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-1">
+      <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-[hsl(var(--muted-foreground)/0.5)] uppercase tracking-[0.15em]">{label}</p>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
 }
 
 /* -------- Icons -------- */
@@ -54,6 +62,7 @@ export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [time, setTime] = useState(new Date());
+  const [selectedClassName, setSelectedClassName] = useState('');
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 60000);
@@ -71,95 +80,161 @@ export default function Layout() {
   const hour = time.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  /* -------- Sidebar Content -------- */
+  const isClassDetail = /^\/classes\/[^/]+(\/class-recordings)?$/.test(location.pathname) && location.pathname.startsWith('/classes/');
+  const classId = isClassDetail ? location.pathname.split('/')[2] : null;
+
+  useEffect(() => {
+    if (!classId) { setSelectedClassName(''); return; }
+    api.get(`/classes/${classId}`)
+      .then((res) => setSelectedClassName(res.data?.name || 'Selected Class'))
+      .catch(() => setSelectedClassName('Selected Class'));
+  }, [classId]);
+
+  // ---------- PUBLIC LAYOUT (no sidebar) ----------
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--background))] transition-colors duration-300">
+        {/* Top navbar for public */}
+        <header className="sticky top-0 z-30 bg-[hsl(var(--card)/0.85)] backdrop-blur-xl border-b border-[hsl(var(--border))] transition-colors duration-300">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+            {/* Brand */}
+            <Link to="/" className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-md shadow-[hsl(var(--primary)/0.2)]">
+                <svg className="w-4.5 h-4.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
+                </svg>
+              </div>
+              <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
+            </Link>
+
+            {/* Right actions */}
+            <div className="flex items-center gap-2">
+              <button onClick={toggleTheme}
+                className="p-2 rounded-xl text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-all duration-200">
+                <span className="w-5 h-5 block">{theme === 'light' ? icons.moon : icons.sun}</span>
+              </button>
+              <Link to="/login" className="px-4 py-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] rounded-xl hover:bg-[hsl(var(--muted))] transition">
+                Login
+              </Link>
+              <Link to="/register" className="px-4 py-2 text-sm font-bold text-white bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--primary-glow))] rounded-xl hover:shadow-lg hover:shadow-[hsl(var(--primary)/0.25)] transition-all duration-300">
+                Register
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
+
+  // ---------- AUTHENTICATED LAYOUT (with sidebar) ----------
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-5 pt-6 pb-4">
-        <Link to="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-shadow">
-            <span className="text-white text-sm font-black tracking-tight">TD</span>
+      {/* Sidebar Header */}
+      <div className="flex items-center justify-between px-4 py-4 border-b border-[hsl(var(--border))]">
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-md shadow-[hsl(var(--primary)/0.2)]">
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
+            </svg>
           </div>
-          <div>
-            <p className="text-[13px] font-bold text-slate-800 dark:text-white leading-tight tracking-tight">ThilinaDhananjaya</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Learning Management</p>
-          </div>
+          <span className="text-[13px] font-bold text-[hsl(var(--foreground))] leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
         </Link>
+        <div className="flex items-center gap-0.5">
+          <button onClick={toggleTheme} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition" title="Toggle theme">
+            <span className="w-4 h-4 block">{theme === 'light' ? icons.moon : icons.sun}</span>
+          </button>
+        </div>
       </div>
 
-      {/* User card */}
-      {user && (
-        <div className="mx-3 mb-2 p-3.5 rounded-xl bg-slate-50 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center ring-2 ring-white/20">
-              <span className="text-white text-xs font-bold">{initials}</span>
+      {/* Nav */}
+      <nav className="flex-1 px-3 pb-3 overflow-y-auto sidebar-scroll">
+        {isClassDetail && (
+          <div className="mt-3 rounded-xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.05)] overflow-hidden">
+            <div className="px-3 py-2 border-b border-[hsl(var(--primary)/0.1)]">
+              <p className="text-[10px] font-bold text-[hsl(var(--primary))] uppercase tracking-[0.14em]">Current Selection</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">{user.profile?.fullName || user.email}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{user.role === 'ADMIN' ? 'Administrator' : 'Student'}</p>
+            <div className="px-3 py-2.5 flex items-center gap-2">
+              <span className="w-[16px] h-[16px] text-[hsl(var(--primary))] flex-shrink-0">{icons.classes}</span>
+              <p className="text-[13px] font-semibold text-[hsl(var(--foreground))] truncate flex-1">{selectedClassName || 'Loading...'}</p>
+              <Link to="/classes" className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+              </Link>
             </div>
           </div>
-          {user.profile?.instituteId && (
-            <div className="mt-2 px-2 py-1 rounded-md bg-slate-100 dark:bg-white/8 text-center">
-              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-mono">{user.profile.instituteId}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto sidebar-scroll">
-        {user && <NavItem to="/dashboard" icon={icons.home} label="Dashboard" />}
-
-        <SectionLabel label="Classes" />
-        <NavItem to="/classes" icon={icons.classes} label="All Classes" />
-
-        {user?.role === 'STUDENT' && (
-          <>
-            <SectionLabel label="Payments" />
-            <NavItem to="/payments/submit" icon={icons.upload} label="Upload Slip" />
-            <NavItem to="/payments/my" icon={icons.pay} label="My Payments" />
-
-            <SectionLabel label="Activity" />
-            <NavItem to="/watch-history" icon={icons.recordings} label="Watch History" />
-          </>
         )}
 
-        {user?.role === 'ADMIN' && (
+        {isClassDetail ? (
+          <SideSection label="Classes">
+            <NavItem to={`/classes/${classId}/class-recordings`} icon={icons.recordings} label="Class Recording" exact />
+          </SideSection>
+        ) : (
           <>
-            <SectionLabel label="Administration" />
-            <NavItem to="/admin" icon={icons.admin} label="Overview" />
-            <NavItem to="/admin/students" icon={icons.students} label="Students" />
-            <NavItem to="/admin/classes" icon={icons.classes} label="Manage Classes" />
-            <NavItem to="/admin/slips" icon={icons.slips} label="Payment Slips" />
-          </>
-        )}
+            <SideSection label="Main">
+              <NavItem to={user.role === 'ADMIN' ? '/admin' : '/dashboard'} icon={icons.home} label="Dashboard" />
+            </SideSection>
 
-        {!user && (
-          <>
-            <SectionLabel label="Account" />
-            <NavItem to="/login" icon={icons.login} label="Sign In" />
+            <SideSection label="Classes">
+              <NavItem to="/classes" icon={icons.classes} label="All Classes" />
+            </SideSection>
+
+            {user.role === 'STUDENT' && (
+              <>
+                <SideSection label="Payments">
+                  <NavItem to="/payments/submit" icon={icons.upload} label="Upload Slip" />
+                  <NavItem to="/payments/my" icon={icons.pay} label="My Payments" />
+                </SideSection>
+                <SideSection label="Activity">
+                  <NavItem to="/watch-history" icon={icons.recordings} label="Watch History" />
+                </SideSection>
+              </>
+            )}
+
+            {user.role === 'ADMIN' && (
+              <SideSection label="Administration">
+                <NavItem to="/admin/students" icon={icons.students} label="Students" />
+                <NavItem to="/admin/classes" icon={icons.classes} label="Manage Classes" />
+                <NavItem to="/admin/slips" icon={icons.slips} label="Payment Slips" />
+                <NavItem to="/admin/attendance" icon={icons.attend} label="Attendance" />
+                <NavItem to="/admin/recordings" icon={icons.recordings} label="Recordings" />
+              </SideSection>
+            )}
           </>
         )}
       </nav>
 
-      {/* Bottom */}
-      {user && (
-        <div className="px-3 py-4 border-t border-slate-200 dark:border-white/10">
-          <button onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-[13px] font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 transition-all duration-200">
-            <span className="w-5 h-5">{icons.logout}</span>
-            Sign Out
-          </button>
+      {/* Bottom: User profile + Logout */}
+      <div className="px-4 py-4 border-t border-[hsl(var(--border))]">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0 ring-2 ring-[hsl(var(--card))] shadow-md">
+            <span className="text-white text-xs font-bold">{initials}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate uppercase tracking-wide leading-tight">
+              {user.profile?.fullName || user.email}
+            </p>
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))] truncate mt-0.5">
+              {user.role === 'ADMIN' ? 'Administrator' : 'Student'}
+            </p>
+          </div>
         </div>
-      )}
+        <button onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[hsl(var(--border))] text-[13px] font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--danger)/0.08)] hover:text-[hsl(var(--danger))] hover:border-[hsl(var(--danger)/0.2)] transition-all duration-200 bg-[hsl(var(--card))]">
+          <span className="w-4 h-4 flex-shrink-0">{icons.logout}</span>
+          Logout
+        </button>
+      </div>
     </div>
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f1f5f9] dark:bg-[#0b1120] transition-colors duration-300">
+    <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))] transition-colors duration-300">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-[260px] bg-white dark:bg-gradient-to-b dark:from-[#0f172a] dark:to-[#1e293b] flex-shrink-0 shadow-xl dark:shadow-2xl border-r border-slate-200 dark:border-transparent">
+      <aside className="hidden lg:flex flex-col w-[255px] xl:w-[270px] bg-[hsl(var(--card))] flex-shrink-0 shadow-lg border-r border-[hsl(var(--border))]">
         <SidebarContent />
       </aside>
 
@@ -167,60 +242,39 @@ export default function Layout() {
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative w-[280px] bg-white dark:bg-gradient-to-b dark:from-[#0f172a] dark:to-[#1e293b] flex flex-col shadow-2xl animate-slide-in">
+          <aside className="relative w-[85vw] max-w-[300px] bg-[hsl(var(--card))] flex flex-col shadow-2xl animate-slide-in">
             <SidebarContent />
           </aside>
         </div>
       )}
 
       {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="bg-white dark:bg-[#0f172a] h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 shadow-sm dark:shadow-black/20 z-10 border-b border-transparent dark:border-slate-800 transition-colors duration-300">
-          {/* Left */}
-          <div className="flex items-center gap-4">
+        <header className="bg-[hsl(var(--card)/0.85)] backdrop-blur-xl min-h-14 flex items-center justify-between px-3 sm:px-6 py-2 flex-shrink-0 shadow-sm z-10 border-b border-[hsl(var(--border))] transition-colors duration-300">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">
+              className="lg:hidden p-2 -ml-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition">
               <span className="w-5 h-5 block">{icons.menu}</span>
             </button>
-            {user && (
-              <div className="hidden sm:block">
-                <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100">{greeting}, {user.profile?.fullName?.split(' ')[0] || 'User'}!</p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">{time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
-              </div>
-            )}
+            <button onClick={() => navigate(-1)}
+              className="p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition"
+              aria-label="Go back" title="Go back">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div className="hidden sm:block min-w-0">
+              <p className="text-[13px] font-semibold text-[hsl(var(--foreground))]">{greeting}, {user.profile?.fullName?.split(' ')[0] || 'User'}!</p>
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">{time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+            </div>
           </div>
 
-          {/* Right */}
-          <div className="flex items-center gap-2">
-            {/* Theme toggle */}
-            <button onClick={toggleTheme}
-              className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200"
-              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
-              <span className="w-5 h-5 block">{theme === 'light' ? icons.moon : icons.sun}</span>
+          <div className="flex items-center gap-2.5">
+            <button className="relative p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition lg:hidden">
+              <span className="w-5 h-5 block">{icons.bell}</span>
             </button>
-
-            {!user ? (
-              <div className="flex gap-2">
-                <Link to="/login" className="px-5 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">Login</Link>
-                <Link to="/register" className="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300">Register</Link>
-              </div>
-            ) : (
-              <>
-                <button className="relative p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">
-                  <span className="w-5 h-5 block">{icons.bell}</span>
-                </button>
-                <div className="hidden sm:flex items-center gap-2.5 pl-3 border-l border-slate-200 dark:border-slate-700">
-                  <div className="text-right">
-                    <p className="text-[13px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">{user.profile?.fullName || user.email}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{user.role === 'ADMIN' ? 'Administrator' : 'Student'}</p>
-                  </div>
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center ring-2 ring-white dark:ring-slate-800 shadow-lg">
-                    <span className="text-white text-xs font-bold">{initials}</span>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow">
+              <span className="text-white text-xs font-bold">{initials}</span>
+            </div>
           </div>
         </header>
 

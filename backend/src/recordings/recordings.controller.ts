@@ -55,6 +55,71 @@ export class RecordingsController {
     return this.recordingsService.getWatchHistory(id);
   }
 
+  // ─── Live Lecture Endpoints ────────────────────────────
+
+  /** Admin: start a live session */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/go-live')
+  goLive(@Param('id') id: string) {
+    return this.recordingsService.goLive(id);
+  }
+
+  /** Admin: end a live session */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/end-live')
+  endLive(@Param('id') id: string) {
+    return this.recordingsService.endLive(id);
+  }
+
+  /** Admin: get live attendance for a recording */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get(':id/live-attendance')
+  getLiveAttendance(@Param('id') id: string) {
+    return this.recordingsService.getLiveAttendance(id);
+  }
+
+  /** Student: join a live lecture via shareable token (marks attendance + returns live URL) */
+  @UseGuards(JwtAuthGuard)
+  @Post('live/:token/join')
+  async joinLive(@Param('token') token: string, @Request() req: any) {
+    const recording = await this.recordingsService.findByLiveToken(token);
+    // Mark live attendance
+    await this.recordingsService.markLiveAttendance(req.user.sub, recording.id);
+    return {
+      recording: {
+        id: recording.id,
+        title: recording.title,
+        liveUrl: recording.liveUrl,
+        isLive: recording.isLive,
+        liveEndedAt: recording.liveEndedAt,
+        videoUrl: recording.videoUrl,
+        videoType: recording.videoType,
+        month: recording.month,
+      },
+    };
+  }
+
+  /** Resolve a live token (public info — used before auth to know what the lecture is) */
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('live/:token')
+  async resolveLiveToken(@Param('token') token: string, @Request() req: any) {
+    const recording = await this.recordingsService.findByLiveToken(token);
+    return {
+      id: recording.id,
+      title: recording.title,
+      isLive: recording.isLive,
+      liveEndedAt: recording.liveEndedAt,
+      videoUrl: recording.videoUrl,
+      videoType: recording.videoType,
+      className: recording.month?.class?.name,
+      monthName: recording.month?.name,
+      isAuthenticated: !!req.user,
+    };
+  }
+
   // ─── Access-controlled endpoints ───────────────────────
 
   /** Get recordings for a month (visibility-filtered) */

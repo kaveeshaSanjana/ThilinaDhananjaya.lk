@@ -81,7 +81,7 @@ async function main() {
       title: 'Introduction to Limits',
       description: 'First lesson on limits and continuity',
       videoUrl: 'https://example.com/sample-video.mp4',
-      visibility: 'ANYONE',
+      status: 'ANYONE',
       order: 1,
     },
   });

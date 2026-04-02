@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../lib/api';
+import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
 
@@ -15,11 +17,11 @@ function fmtTime(sec: number): string {
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const statusBadge = (s: string) => {
   const map: Record<string, string> = {
-    ANYONE: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    STUDENTS_ONLY: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    PAID_ONLY: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    PRIVATE: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    INACTIVE: 'bg-slate-100 text-slate-500 dark:bg-slate-700/30 dark:text-slate-400',
+    ANYONE: 'bg-green-100 text-green-700',
+    STUDENTS_ONLY: 'bg-blue-100 text-blue-700',
+    PAID_ONLY: 'bg-amber-100 text-amber-700',
+    PRIVATE: 'bg-purple-100 text-purple-700',
+    INACTIVE: 'bg-slate-100 text-slate-500',
   };
   return map[s] || map.ANYONE;
 };
@@ -145,6 +147,105 @@ export default function AdminClassDetail() {
   const availableStudents = allStudents.filter((s: any) => !enrolledIds.has(s.id));
   const filteredRecs = filterMonth ? recordings.filter((r: any) => r.monthId === filterMonth) : recordings;
 
+  const monthColumns: readonly StickyColumn<any>[] = [
+    { id: 'name', label: 'Name', minWidth: 180, render: (m) => <span className="font-medium text-slate-800">{m.name}</span> },
+    { id: 'period', label: 'Period', minWidth: 140, render: (m) => <span className="text-slate-500">{MONTH_NAMES[(m.month || 1) - 1]} {m.year}</span> },
+    { id: 'recordings', label: 'Recordings', minWidth: 120, render: (m) => { const recCount = recordings.filter((r: any) => r.monthId === m.id).length; return <span className="text-slate-500">{recCount} recording{recCount !== 1 ? 's' : ''}</span>; } },
+    { id: 'visibility', label: 'Visibility', minWidth: 120, render: (m) => <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${statusBadge(m.status || 'ANYONE')}`}>{(m.status || 'ANYONE').replace(/_/g, ' ')}</span> },
+    {
+      id: 'actions',
+      label: 'Actions',
+      minWidth: 170,
+      align: 'right',
+      render: (m) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => openEditMonth(m)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            Edit
+          </button>
+          <button onClick={() => deleteMonth(m.id)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            Delete
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const enrollmentColumns: readonly StickyColumn<any>[] = [
+    {
+      id: 'student', label: 'Student', minWidth: 220,
+      render: (enr) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            {(enr.user?.profile?.fullName || enr.user?.email || '?')[0].toUpperCase()}
+          </div>
+          <span className="font-semibold text-slate-800">{enr.user?.profile?.fullName || '-'}</span>
+        </div>
+      ),
+    },
+    { id: 'email', label: 'Email', minWidth: 170, render: (enr) => <span className="text-slate-500">{enr.user?.email}</span> },
+    { id: 'institute', label: 'ID', minWidth: 90, render: (enr) => <span className="text-slate-400 text-xs font-mono">{enr.user?.profile?.instituteId || '-'}</span> },
+    { id: 'enrolled', label: 'Enrolled', minWidth: 90, render: (enr) => <span className="text-slate-400 text-xs">{enr.createdAt ? new Date(enr.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span> },
+    {
+      id: 'actions', label: 'Actions', minWidth: 120, align: 'right',
+      render: (enr) => (
+        <button onClick={() => handleUnenroll(enr.userId)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" /></svg>
+          Unenroll
+        </button>
+      ),
+    },
+  ];
+
+  const watchColumns: readonly StickyColumn<any>[] = [
+    {
+      id: 'student', label: 'Student', minWidth: 220,
+      render: (s) => (
+        <>
+          <p className="font-medium text-slate-800">{s.user?.profile?.fullName || '-'}</p>
+          <p className="text-xs text-slate-400">{s.user?.email}</p>
+        </>
+      ),
+    },
+    {
+      id: 'recording', label: 'Recording', minWidth: 240,
+      render: (s) => (
+        <>
+          <p className="text-slate-600">{s.recording?.title || '-'}</p>
+          <p className="text-xs text-slate-400">{s.recording?.month?.name || '-'}</p>
+        </>
+      ),
+    },
+    {
+      id: 'date', label: 'Date', minWidth: 170,
+      render: (s) => (
+        <span className="text-slate-400 text-xs">
+          {s.startedAt ? new Date(s.startedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+          <br />
+          <span className="text-slate-300">
+            {s.startedAt ? new Date(s.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
+            {s.endedAt ? ` - ${new Date(s.endedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </span>
+        </span>
+      ),
+    },
+    { id: 'watched', label: 'Watched', minWidth: 90, render: (s) => <span className="font-medium text-slate-700">{fmtTime(s.totalWatchedSec)}</span> },
+    {
+      id: 'status', label: 'Status', minWidth: 120,
+      render: (s) => (
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+          s.status === 'ENDED' ? 'bg-green-100 text-green-700' :
+          s.status === 'WATCHING' ? 'bg-blue-100 text-blue-700' :
+          'bg-yellow-100 text-yellow-700'
+        }`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+          {s.status}
+        </span>
+      ),
+    },
+  ];
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 rounded-full border-3 border-blue-600 border-t-transparent animate-spin" />
@@ -157,51 +258,52 @@ export default function AdminClassDetail() {
     </div>
   );
 
-  const inp = "w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
-  const label = "block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1";
+  const inp = "w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+  const label = "block text-xs font-medium text-slate-600 mb-1";
 
   return (
     <div className="space-y-5">
       {/* Breadcrumb */}
-      <Link to="/admin/classes" className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition font-medium">
+      <Link to="/admin/classes" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Back to Classes
       </Link>
 
       {/* Class Header */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="flex flex-col sm:flex-row">
           {cls.thumbnail && (
-            <div className="sm:w-48 h-32 sm:h-auto flex-shrink-0">
+            <div className="sm:w-48 h-36 sm:h-auto flex-shrink-0">
               <img src={cls.thumbnail} alt={cls.name} className="w-full h-full object-cover" />
             </div>
           )}
-          <div className="p-5 flex-1">
+          <div className="p-6 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">{cls.name}</h1>
-                {cls.subject && <p className="text-sm text-slate-500 dark:text-slate-400">{cls.subject}</p>}
-                {cls.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{cls.description}</p>}
+                <h1 className="text-xl font-bold text-slate-800">{cls.name}</h1>
+                {cls.subject && <p className="text-sm text-slate-500 mt-0.5">{cls.subject}</p>}
+                {cls.description && <p className="text-xs text-slate-400 mt-1.5 line-clamp-2">{cls.description}</p>}
               </div>
-              <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${statusBadge(cls.status || 'ANYONE')}`}>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold flex-shrink-0 ${statusBadge(cls.status || 'ANYONE')}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
                 {(cls.status || 'ANYONE').replace(/_/g, ' ')}
               </span>
             </div>
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
-              {cls.monthlyFee != null && <span className="font-semibold text-blue-600 dark:text-blue-400">Rs. {Number(cls.monthlyFee).toLocaleString()} / month</span>}
-              <span>{months.length} month{months.length !== 1 ? 's' : ''}</span>
-              <span>{recordings.length} recording{recordings.length !== 1 ? 's' : ''}</span>
-              <span>{enrollments.length} student{enrollments.length !== 1 ? 's' : ''}</span>
+            <div className="flex flex-wrap gap-5 mt-4 text-xs text-slate-500">
+              {cls.monthlyFee != null && <span className="font-bold text-blue-600 text-sm">Rs. {Number(cls.monthlyFee).toLocaleString()} / month</span>}
+              <span className="flex items-center gap-1"><span className="font-semibold text-slate-700">{months.length}</span> month{months.length !== 1 ? 's' : ''}</span>
+              <span className="flex items-center gap-1"><span className="font-semibold text-slate-700">{recordings.length}</span> recording{recordings.length !== 1 ? 's' : ''}</span>
+              <span className="flex items-center gap-1"><span className="font-semibold text-slate-700">{enrollments.length}</span> student{enrollments.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 overflow-x-auto">
         {([['months', 'Months'], ['recordings', 'Recordings'], ['students', 'Students'], ['attendance', 'Attendance']] as [Tab, string][]).map(([key, lbl]) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 px-4 py-2 rounded-md text-xs font-semibold transition ${tab === key ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+            className={`flex-1 min-w-[4.5rem] px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${tab === key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {lbl}
             {key === 'months' && <span className="ml-1.5 text-slate-400">({months.length})</span>}
             {key === 'recordings' && <span className="ml-1.5 text-slate-400">({recordings.length})</span>}
@@ -216,23 +318,29 @@ export default function AdminClassDetail() {
         <div className="space-y-3">
           <div className="flex justify-end">
             <button onClick={openNewMonth}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1.5">
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 flex items-center gap-1.5">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               Add Month
             </button>
           </div>
 
-          {showMonthForm && (
-            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowMonthForm(false)}>
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
-                  <h2 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{editingMonth ? 'Edit Month' : 'New Month'}</h2>
-                  <button onClick={() => setShowMonthForm(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">✕</button>
+          {showMonthForm && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowMonthForm(false)}>
+              <div className="min-h-full flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+                  <div>
+                    <h2 className="font-bold text-slate-800">{editingMonth ? 'Edit Month' : 'New Month'}</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">{editingMonth ? 'Update month details' : 'Add a new month to organize recordings'}</p>
+                  </div>
+                  <button onClick={() => setShowMonthForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
                 </div>
                 <form onSubmit={saveMonth} className="p-5 space-y-3">
-                  {monthError && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">{monthError}</p>}
+                  {monthError && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{monthError}</div>}
                   <div><label className={label}>Month Name</label><input type="text" value={monthForm.name} onChange={e => setMonthForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. January 2025" required className={inp} /></div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><label className={label}>Year</label><input type="number" value={monthForm.year} onChange={e => setMonthForm(p => ({ ...p, year: e.target.value }))} required className={inp} /></div>
                     <div>
                       <label className={label}>Month</label>
@@ -247,51 +355,35 @@ export default function AdminClassDetail() {
                       </select>
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2">
-                    <button type="button" onClick={() => setShowMonthForm(false)} className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
-                    <button type="submit" disabled={monthSaving} className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50">{monthSaving ? 'Saving...' : 'Save'}</button>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowMonthForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                    <button type="submit" disabled={monthSaving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                      {monthSaving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                      {monthSaving ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
                 </form>
               </div>
-            </div>
-          )}
-
-          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-            {months.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No months yet. Add your first month to start organizing recordings.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Name</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Period</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Recordings</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Visibility</th>
-                      <th className="text-right px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {months.map((m: any) => {
-                      const recCount = recordings.filter((r: any) => r.monthId === m.id).length;
-                      return (
-                        <tr key={m.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition">
-                          <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{m.name}</td>
-                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{MONTH_NAMES[(m.month || 1) - 1]} {m.year}</td>
-                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{recCount} recording{recCount !== 1 ? 's' : ''}</td>
-                          <td className="px-4 py-3"><span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${statusBadge(m.status || 'ANYONE')}`}>{(m.status || 'ANYONE').replace(/_/g, ' ')}</span></td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              <button onClick={() => openEditMonth(m)} className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">Edit</button>
-                              <button onClick={() => deleteMonth(m.id)} className="text-red-500 hover:underline text-xs font-medium">Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
+            </div>
+          , document.body)}
+
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            {months.length === 0 ? (
+              <div className="p-10 text-center">
+                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <p className="text-sm font-medium text-slate-500">No months yet</p>
+                <p className="text-xs text-slate-400 mt-1">Add your first month to start organizing recordings</p>
+              </div>
+            ) : (
+              <StickyDataTable
+                columns={monthColumns}
+                rows={months}
+                getRowId={(row) => row.id}
+                tableHeight="calc(100vh - 420px)"
+              />
             )}
           </div>
         </div>
@@ -304,34 +396,40 @@ export default function AdminClassDetail() {
             {/* Month filter pills */}
             <div className="flex gap-1.5 flex-wrap">
               <button onClick={() => setFilterMonth('')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${!filterMonth ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${!filterMonth ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 All Months
               </button>
               {months.map((m: any) => (
                 <button key={m.id} onClick={() => setFilterMonth(m.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${filterMonth === m.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${filterMonth === m.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   {m.name}
                 </button>
               ))}
             </div>
             <button onClick={openNewRec}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1.5 flex-shrink-0">
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 flex items-center gap-1.5 flex-shrink-0">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               Add Recording
             </button>
           </div>
 
           {/* Rec form modal */}
-          {showRecForm && (
-            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowRecForm(false)}>
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10">
-                  <h2 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{editingRec ? 'Edit Recording' : 'Add Recording'}</h2>
-                  <button onClick={() => setShowRecForm(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">✕</button>
+          {showRecForm && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowRecForm(false)}>
+              <div className="min-h-full flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+                  <div>
+                    <h2 className="font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'New Recording'}</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">{editingRec ? 'Update recording details' : 'Add a new recording to this class'}</p>
+                  </div>
+                  <button onClick={() => setShowRecForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
                 </div>
                 <form onSubmit={saveRec} className="p-5 space-y-3">
-                  {recError && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">{recError}</p>}
-                  <div className="grid grid-cols-2 gap-3">
+                  {recError && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{recError}</div>}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={label}>Month</label>
                       <select value={recForm.monthId} onChange={e => setRecForm(p => ({ ...p, monthId: e.target.value }))} required className={inp}>
@@ -349,51 +447,70 @@ export default function AdminClassDetail() {
                   <div><label className={label}>Title</label><input type="text" value={recForm.title} onChange={e => setRecForm(p => ({ ...p, title: e.target.value }))} required className={inp} placeholder="e.g. Lesson 01" /></div>
                   <div><label className={label}>Video URL</label><input type="text" value={recForm.videoUrl} onChange={e => setRecForm(p => ({ ...p, videoUrl: e.target.value }))} required className={inp} placeholder="https://..." /></div>
                   <div><label className={label}>Thumbnail URL</label><input type="text" value={recForm.thumbnail} onChange={e => setRecForm(p => ({ ...p, thumbnail: e.target.value }))} className={inp} placeholder="https://..." /></div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><label className={label}>Topic</label><input type="text" value={recForm.topic} onChange={e => setRecForm(p => ({ ...p, topic: e.target.value }))} className={inp} placeholder="Topic name" /></div>
                     <div><label className={label}>Icon</label><input type="text" value={recForm.icon} onChange={e => setRecForm(p => ({ ...p, icon: e.target.value }))} className={inp} placeholder="Icon name/URL" /></div>
                   </div>
                   <div><label className={label}>Description</label><textarea value={recForm.description} onChange={e => setRecForm(p => ({ ...p, description: e.target.value }))} className={inp + " resize-none"} rows={2} placeholder="Optional notes..." /></div>
                   <div><label className={label}>Materials (JSON or links)</label><textarea value={recForm.materials} onChange={e => setRecForm(p => ({ ...p, materials: e.target.value }))} className={inp + " resize-none"} rows={2} placeholder='e.g. ["https://file1.pdf"]' /></div>
-                  <div className="flex gap-2 pt-2">
-                    <button type="button" onClick={() => setShowRecForm(false)} className="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
-                    <button type="submit" disabled={recSaving} className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50">{recSaving ? 'Saving...' : 'Save'}</button>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowRecForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                    <button type="submit" disabled={recSaving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                      {recSaving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                      {recSaving ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
                 </form>
               </div>
+              </div>
             </div>
-          )}
+          , document.body)}
 
           {/* Recordings grid */}
           {filteredRecs.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-8 text-center text-sm text-slate-400">
-              No recordings {filterMonth ? 'in this month' : 'yet'}. Add your first recording to get started.
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              </div>
+              <p className="text-sm font-medium text-slate-500">No recordings {filterMonth ? 'in this month' : 'yet'}</p>
+              <p className="text-xs text-slate-400 mt-1">Add your first recording to get started</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredRecs.map((rec: any) => (
-                <div key={rec.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden group hover:border-blue-300 dark:hover:border-blue-700 transition">
+                <div key={rec.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden group hover:border-blue-300 hover:shadow-md transition-all">
                   {/* Thumbnail */}
-                  <div className="relative aspect-video bg-slate-100 dark:bg-slate-700">
+                  <div className="relative aspect-video bg-slate-100">
                     {rec.thumbnail ? (
-                      <img src={rec.thumbnail} alt={rec.title} className="w-full h-full object-cover" />
+                      <img src={rec.thumbnail} alt={rec.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <svg className="w-10 h-10 text-slate-300 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+                        <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                       </div>
                     )}
-                    <span className={`absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-medium ${statusBadge(rec.status || 'PAID_ONLY')}`}>
+                    <span className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur-sm ${statusBadge(rec.status || 'PAID_ONLY')}`}>
                       {(rec.status || 'PAID_ONLY').replace(/_/g, ' ')}
                     </span>
                   </div>
-                  <div className="p-3">
-                    <p className="font-medium text-sm text-slate-800 dark:text-slate-100 truncate">{rec.title}</p>
-                    {rec.topic && <p className="text-xs text-slate-400 truncate mt-0.5">{rec.topic}</p>}
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{rec.month?.name || '—'} · {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : ''}</p>
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                      <button onClick={() => openEditRec(rec)} className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">Edit</button>
-                      {rec.videoUrl && <a href={rec.videoUrl} target="_blank" rel="noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline text-xs font-medium">View</a>}
-                      <button onClick={() => deleteRec(rec.id)} className="text-red-500 hover:underline text-xs font-medium ml-auto">Delete</button>
+                  <div className="p-3.5">
+                    <p className="font-semibold text-sm text-slate-800 truncate">{rec.title}</p>
+                    {rec.topic && <p className="text-xs text-blue-500 truncate mt-0.5 font-medium">{rec.topic}</p>}
+                    <p className="text-[10px] text-slate-400 mt-1">{rec.month?.name || '—'} · {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : ''}</p>
+                    <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-100">
+                      <button onClick={() => openEditRec(rec)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        Edit
+                      </button>
+                      {rec.videoUrl && (
+                        <a href={rec.videoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          View
+                        </a>
+                      )}
+                      <button onClick={() => deleteRec(rec.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition ml-auto">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -407,47 +524,40 @@ export default function AdminClassDetail() {
       {tab === 'students' && (
         <div className="space-y-3">
           {/* Enroll form */}
-          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 flex flex-col sm:flex-row gap-3">
-            <select value={enrollId} onChange={e => setEnrollId(e.target.value)} className={inp + " flex-1"}>
-              <option value="">Select a student to enroll...</option>
-              {availableStudents.map((s: any) => <option key={s.id} value={s.id}>{s.profile?.fullName || s.email} ({s.email})</option>)}
-            </select>
-            <button onClick={handleEnroll} disabled={!enrollId || enrolling}
-              className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex-shrink-0">
-              {enrolling ? 'Enrolling...' : 'Enroll'}
-            </button>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+              Enroll a Student
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <select value={enrollId} onChange={e => setEnrollId(e.target.value)} className={inp + " flex-1"}>
+                <option value="">Select a student to enroll...</option>
+                {availableStudents.map((s: any) => <option key={s.id} value={s.id}>{s.profile?.fullName || s.email} ({s.email})</option>)}
+              </select>
+              <button onClick={handleEnroll} disabled={!enrollId || enrolling}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex-shrink-0 flex items-center gap-2">
+                {enrolling && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {enrolling ? 'Enrolling...' : 'Enroll Student'}
+              </button>
+            </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             {enrollments.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No students enrolled. Use the selector above to enroll students.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Student</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Email</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">ID</th>
-                      <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Enrolled</th>
-                      <th className="text-right px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {enrollments.map((enr: any) => (
-                      <tr key={enr.userId} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition">
-                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{enr.user?.profile?.fullName || '—'}</td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{enr.user?.email}</td>
-                        <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs font-mono">{enr.user?.profile?.instituteId || '—'}</td>
-                        <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">{enr.createdAt ? new Date(enr.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleUnenroll(enr.userId)} className="text-red-500 hover:underline text-xs font-medium">Unenroll</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-10 text-center">
+                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </div>
+                <p className="text-sm font-medium text-slate-500">No students enrolled yet</p>
+                <p className="text-xs text-slate-400 mt-1">Use the form above to enroll students</p>
               </div>
+            ) : (
+              <StickyDataTable
+                columns={enrollmentColumns}
+                rows={enrollments}
+                getRowId={(row) => row.userId}
+                tableHeight="calc(100vh - 500px)"
+              />
             )}
           </div>
         </div>
@@ -455,56 +565,27 @@ export default function AdminClassDetail() {
 
       {/* ═══════════════ ATTENDANCE TAB ═══════════════ */}
       {tab === 'attendance' && (
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           {watchSessions.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-400">No watch sessions for this class yet. Sessions are recorded when students watch recordings.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Student</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Recording</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Date</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Watched</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {watchSessions.map((s: any) => (
-                    <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800 dark:text-slate-100">{s.user?.profile?.fullName || '—'}</p>
-                        <p className="text-xs text-slate-400">{s.user?.email}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-slate-600 dark:text-slate-300">{s.recording?.title || '—'}</p>
-                        <p className="text-xs text-slate-400">{s.recording?.month?.name || '—'}</p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">
-                        {s.startedAt ? new Date(s.startedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                        <br />
-                        <span className="text-slate-300 dark:text-slate-600">
-                          {s.startedAt ? new Date(s.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
-                          {s.endedAt ? ` – ${new Date(s.endedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{fmtTime(s.totalWatchedSec)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          s.status === 'ENDED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                          s.status === 'WATCHING' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                          'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        }`}>{s.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="p-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              </div>
+              <p className="text-sm font-medium text-slate-500">No watch sessions yet</p>
+              <p className="text-xs text-slate-400 mt-1">Sessions are recorded when students watch recordings</p>
             </div>
+          ) : (
+            <StickyDataTable
+              columns={watchColumns}
+              rows={watchSessions}
+              getRowId={(row) => row.id}
+              tableHeight="calc(100vh - 380px)"
+            />
           )}
         </div>
       )}
     </div>
   );
 }
+
+

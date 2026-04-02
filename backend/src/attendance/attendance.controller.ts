@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -46,12 +46,16 @@ export class AttendanceController {
     return this.attendanceService.manualMark(body);
   }
 
-  /** Admin: all attendance records */
+  /** Admin: all attendance records — optional filters: classId, recordingId, status */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
-  getAll() {
-    return this.attendanceService.getAll();
+  getAll(
+    @Query('classId') classId?: string,
+    @Query('recordingId') recordingId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.attendanceService.getAll({ classId, recordingId, status });
   }
 
   /** Student: my attendance history */
@@ -75,6 +79,14 @@ export class AttendanceController {
   @Get('recording/:recordingId')
   getRecordingAttendance(@Param('recordingId') recordingId: string) {
     return this.attendanceService.getByRecording(recordingId);
+  }
+
+  /** Admin: attendance for all recordings in a class */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class/:classId')
+  getClassAttendance(@Param('classId') classId: string) {
+    return this.attendanceService.getByClass(classId);
   }
 
   // ─── Watch Session Endpoints ────────────────────────────

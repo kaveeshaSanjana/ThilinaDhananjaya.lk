@@ -44,8 +44,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('all')
-  getAllSlips(@Query('status') status?: any) {
-    return this.paymentsService.getAllSlips(status);
+  getAllSlips(@Query('status') status?: any, @Query('monthId') monthId?: string) {
+    return this.paymentsService.getAllSlips(status, monthId);
   }
 
   /** Admin: verify slip */

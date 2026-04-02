@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import api from '../lib/api';
 
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: (() => void) | undefined;
+  }
+}
+
 export interface SessionEvent {
   type: string;
   videoTime: number;
@@ -267,42 +274,98 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
 
   useEffect(() => {
     if (!youtubeId) return;
-    pushEvent('youtube_session_start', 0);
+    let mounted = true;
+    let ytPlayer: any = null;
+    let playInterval: ReturnType<typeof setInterval> | null = null;
+    let ytIsPlaying = false;
 
-    api.post('/attendance/session/start', { recordingId, videoPosition: 0, events: pendingEventsRef.current })
-      .then(r => { sessionIdRef.current = r.data.id; pendingEventsRef.current = []; setSessionStatus('watching'); })
-      .catch(() => {});
+    const initPlayer = () => {
+      if (!mounted) return;
+      ytPlayer = new window.YT.Player(`yt-player-${recordingId}`, {
+        videoId: youtubeId,
+        width: '100%',
+        height: '100%',
+        playerVars: { autoplay: 0, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: () => {
+            if (!mounted) return;
+            pushEvent('youtube_session_start', 0);
+            api.post('/attendance/session/start', { recordingId, videoPosition: 0, events: pendingEventsRef.current })
+              .then(r => { if (mounted) { sessionIdRef.current = r.data.id; pendingEventsRef.current = []; setSessionStatus('watching'); } })
+              .catch(() => {});
+          },
+          onStateChange: (event: any) => {
+            if (!mounted) return;
+            if (event.data === 1) { // PLAYING
+              ytIsPlaying = true;
+              isPlayingRef.current = true;
+              setSessionStatus('watching');
+              if (!playInterval) {
+                playInterval = setInterval(() => {
+                  if (!ytIsPlaying) return;
+                  totalWatchedRef.current += 1;
+                  watchedSinceLastHbRef.current += 1;
+                  setWatchedDisplay(totalWatchedRef.current);
+                  if (watchedSinceLastHbRef.current >= heartbeatInterval && sessionIdRef.current) {
+                    const pos = ytPlayer?.getCurrentTime?.() || totalWatchedRef.current;
+                    pushEvent('heartbeat', pos);
+                    api.post('/attendance/session/heartbeat', {
+                      sessionId: sessionIdRef.current,
+                      videoPosition: pos,
+                      watchedSec: Math.round(watchedSinceLastHbRef.current),
+                      events: pendingEventsRef.current,
+                    }).then(() => { pendingEventsRef.current = []; watchedSinceLastHbRef.current = 0; }).catch(() => {});
+                  }
+                }, 1000);
+              }
+            } else if (event.data === 2) { // PAUSED
+              ytIsPlaying = false;
+              isPlayingRef.current = false;
+              setSessionStatus('paused');
+            } else if (event.data === 0) { // ENDED
+              ytIsPlaying = false;
+              isPlayingRef.current = false;
+              setSessionStatus('ended');
+              if (playInterval) { clearInterval(playInterval); playInterval = null; }
+            }
+          },
+        },
+      });
+    };
 
-    const interval = setInterval(() => {
-      totalWatchedRef.current += 1;
-      watchedSinceLastHbRef.current += 1;
-      setWatchedDisplay(totalWatchedRef.current);
-      if (watchedSinceLastHbRef.current >= heartbeatInterval && sessionIdRef.current) {
-        pushEvent('heartbeat', totalWatchedRef.current);
-        api.post('/attendance/session/heartbeat', {
-          sessionId: sessionIdRef.current,
-          videoPosition: totalWatchedRef.current,
-          watchedSec: Math.round(watchedSinceLastHbRef.current),
-          events: pendingEventsRef.current,
-        }).then(() => { pendingEventsRef.current = []; }).catch(() => {});
-        watchedSinceLastHbRef.current = 0;
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      const prevReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (prevReady) prevReady();
+        initPlayer();
+      };
+      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(script);
       }
-    }, 1000);
+    }
 
     return () => {
-      clearInterval(interval);
-      if (sessionIdRef.current) {
-        pushEvent('youtube_session_end', totalWatchedRef.current);
+      mounted = false;
+      ytIsPlaying = false;
+      if (playInterval) { clearInterval(playInterval); playInterval = null; }
+      if (ytPlayer && sessionIdRef.current) {
+        const pos = ytPlayer.getCurrentTime?.() || 0;
+        pushEvent('youtube_session_end', pos);
         navigator.sendBeacon(
           '/api/attendance/session/end-beacon',
           new Blob([JSON.stringify({
             sessionId: sessionIdRef.current,
-            videoPosition: 0,
+            videoPosition: pos,
             watchedSec: Math.round(watchedSinceLastHbRef.current),
             events: pendingEventsRef.current,
           })], { type: 'application/json' }),
         );
       }
+      if (ytPlayer?.destroy) { try { ytPlayer.destroy(); } catch { /* ignore */ } }
     };
   }, [youtubeId, recordingId, heartbeatInterval, pushEvent]);
 
@@ -311,17 +374,10 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
       <div className="bg-black flex-1 min-h-0 flex items-center justify-center">
         {youtubeId ? (
           <div className="relative w-full h-full">
-            <iframe
-              className="absolute inset-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${youtubeId}?autoplay=0&rel=0`}
-              title={title}
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <div id={`yt-player-${recordingId}`} className="absolute inset-0 w-full h-full" aria-label={title} />
           </div>
         ) : (
-          <video ref={videoRef} src={videoUrl} controls className="w-full h-full max-h-full" controlsList="nodownload" />
+          <video ref={videoRef} src={videoUrl} title={title} controls className="w-full h-full max-h-full" controlsList="nodownload" />
         )}
       </div>
 

@@ -10,26 +10,45 @@ export class AttendanceService {
     private config: ConfigService,
   ) {}
 
-  /** Get the required push duration from env */
+  // ─── Helpers ───────────────────────────────────────────
+
   getPushDuration(): number {
     return parseInt(this.config.get('ATTENDANCE_PUSH_DURATION_SECONDS', '60'), 10);
   }
 
-  /** Get the heartbeat interval from env (default 120 seconds / 2 minutes) */
   getHeartbeatInterval(): number {
     return parseInt(this.config.get('HEARTBEAT_INTERVAL_SECONDS', '120'), 10);
   }
 
+  /** Append an event entry to the details JSON log */
+  private appendDetail(existing: any[] | null | undefined, entry: Record<string, any>): any[] {
+    const log = Array.isArray(existing) ? existing : [];
+    return [...log, { ...entry, at: new Date().toISOString() }];
+  }
+
+  // ─── Upsert-based Attendance (1 record per user+recording) ──
+
   /**
-   * The "Push" event — called once from frontend when student reaches the threshold.
-   * Records a COMPLETED attendance entry.
+   * "Push" event — student watched enough to mark COMPLETED.
+   * Upserts the single attendance row and appends a PUSH event to details.
    */
   async markCompleted(userId: string, recordingId: string, watchedSec: number) {
-    // Prevent duplicate completions for same recording
-    const existing = await this.prisma.attendance.findFirst({
-      where: { userId, recordingId, status: 'COMPLETED' },
+    const existing = await this.prisma.attendance.findUnique({
+      where: { userId_recordingId: { userId, recordingId } },
     });
-    if (existing) return existing;
+
+    const event = { type: 'PUSH', watchedSec };
+
+    if (existing) {
+      return this.prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
+          status: 'COMPLETED',
+          watchedSec,
+          details: this.appendDetail(existing.details as any, event),
+        },
+      });
+    }
 
     return this.prisma.attendance.create({
       data: {
@@ -37,57 +56,183 @@ export class AttendanceService {
         recordingId,
         status: 'COMPLETED',
         watchedSec,
+        details: this.appendDetail(null, event),
       },
     });
   }
 
   /**
-   * Log an INCOMPLETE attempt (user navigated away before push).
-   * Called from frontend via beacon/unload.
+   * INCOMPLETE attempt — user navigated away before push threshold.
+   * Only creates if no record exists yet; otherwise appends an event.
    */
   async markIncomplete(userId: string, recordingId: string, watchedSec: number) {
+    const existing = await this.prisma.attendance.findUnique({
+      where: { userId_recordingId: { userId, recordingId } },
+    });
+
+    const event = { type: 'INCOMPLETE_EXIT', watchedSec };
+
+    if (existing) {
+      // Don't downgrade COMPLETED → INCOMPLETE. Just log the event.
+      return this.prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
+          watchedSec: Math.max(existing.watchedSec ?? 0, watchedSec),
+          details: this.appendDetail(existing.details as any, event),
+        },
+      });
+    }
+
     return this.prisma.attendance.create({
       data: {
         userId,
         recordingId,
         status: 'INCOMPLETE',
         watchedSec,
+        details: this.appendDetail(null, event),
       },
     });
   }
 
   /**
    * Admin: manually mark attendance for a student.
-   * Can be for a recording or a custom event name.
    */
-  async manualMark(data: {
-    userId: string;
-    recordingId?: string;
-    eventName?: string;
-  }) {
+  async manualMark(data: { userId: string; recordingId?: string; eventName?: string }) {
+    const event = { type: 'MANUAL', eventName: data.eventName || null };
+
+    if (data.recordingId) {
+      const existing = await this.prisma.attendance.findUnique({
+        where: { userId_recordingId: { userId: data.userId, recordingId: data.recordingId } },
+      });
+
+      if (existing) {
+        return this.prisma.attendance.update({
+          where: { id: existing.id },
+          data: {
+            status: 'MANUAL',
+            eventName: data.eventName || existing.eventName,
+            details: this.appendDetail(existing.details as any, event),
+          },
+        });
+      }
+    }
+
     return this.prisma.attendance.create({
       data: {
         userId: data.userId,
         recordingId: data.recordingId || null,
         eventName: data.eventName || null,
         status: 'MANUAL',
+        details: this.appendDetail(null, event),
       },
     });
   }
 
-  /** Admin: get all attendance records */
-  async getAll() {
+  /**
+   * Live join — marks attendance when student joins via live link.
+   * Upserts and appends LIVE_JOIN event with timestamp.
+   */
+  async markLiveJoin(userId: string, recordingId: string) {
+    const existing = await this.prisma.attendance.findUnique({
+      where: { userId_recordingId: { userId, recordingId } },
+    });
+
+    const event = { type: 'LIVE_JOIN' };
+
+    if (existing) {
+      return this.prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
+          status: 'COMPLETED',
+          liveJoinedAt: existing.liveJoinedAt ?? new Date(),
+          eventName: 'LIVE_JOIN',
+          details: this.appendDetail(existing.details as any, event),
+        },
+      });
+    }
+
+    return this.prisma.attendance.create({
+      data: {
+        userId,
+        recordingId,
+        status: 'COMPLETED',
+        eventName: 'LIVE_JOIN',
+        liveJoinedAt: new Date(),
+        details: this.appendDetail(null, event),
+      },
+    });
+  }
+
+  /**
+   * Log a START event (student opened the recording player).
+   * Creates the attendance row if it doesn't exist yet.
+   */
+  async logStart(userId: string, recordingId: string, videoPosition: number) {
+    const existing = await this.prisma.attendance.findUnique({
+      where: { userId_recordingId: { userId, recordingId } },
+    });
+
+    const event = { type: 'START', videoPosition };
+
+    if (existing) {
+      return this.prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
+          details: this.appendDetail(existing.details as any, event),
+        },
+      });
+    }
+
+    return this.prisma.attendance.create({
+      data: {
+        userId,
+        recordingId,
+        status: 'INCOMPLETE',
+        watchedSec: 0,
+        details: this.appendDetail(null, event),
+      },
+    });
+  }
+
+  /**
+   * Log an END event (student closed or left the recording player).
+   */
+  async logEnd(userId: string, recordingId: string, videoPosition: number, watchedSec: number) {
+    const existing = await this.prisma.attendance.findUnique({
+      where: { userId_recordingId: { userId, recordingId } },
+    });
+    if (!existing) return null;
+
+    const event = { type: 'END', videoPosition, watchedSec };
+
+    return this.prisma.attendance.update({
+      where: { id: existing.id },
+      data: {
+        watchedSec: Math.max(existing.watchedSec ?? 0, watchedSec),
+        details: this.appendDetail(existing.details as any, event),
+      },
+    });
+  }
+
+  // ─── Query Methods (unchanged logic) ───────────────────
+
+  async getAll(filters?: { classId?: string; recordingId?: string; status?: string }) {
+    const where: any = {};
+    if (filters?.recordingId) where.recordingId = filters.recordingId;
+    if (filters?.status) where.status = filters.status;
+    if (filters?.classId) where.recording = { month: { classId: filters.classId } };
+
     return this.prisma.attendance.findMany({
+      where,
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
         recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
       },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: 500,
     });
   }
 
-  /** Get attendance records for a specific user */
   async getByUser(userId: string) {
     return this.prisma.attendance.findMany({
       where: { userId },
@@ -98,50 +243,54 @@ export class AttendanceService {
     });
   }
 
-  /** Get attendance records for a specific recording */
-  async getByRecording(recordingId: string) {
+  async getByClass(classId: string) {
     return this.prisma.attendance.findMany({
-      where: { recordingId },
+      where: { recording: { month: { classId } } },
       include: {
-        user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
-        },
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        recording: { select: { title: true, month: { select: { name: true, class: { select: { id: true, name: true } } } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  // ─── Watch Session Methods ──────────────────────────────
+  async getByRecording(recordingId: string) {
+    return this.prisma.attendance.findMany({
+      where: { recordingId },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 
-  /** Start a new watch session */
+  // ─── Watch Session Methods (unchanged) ─────────────────
+
   async startSession(userId: string, recordingId: string, videoPosition: number, events?: any[]) {
-    // End any currently-active sessions for this user+recording
     await this.prisma.watchSession.updateMany({
       where: { userId, recordingId, status: 'WATCHING' },
       data: { status: 'ENDED', endedAt: new Date() },
     });
 
+    // Also log a START in the attendance record
+    await this.logStart(userId, recordingId, videoPosition);
+
     return this.prisma.watchSession.create({
       data: {
-        userId,
-        recordingId,
-        videoStartPos: videoPosition,
-        videoEndPos: videoPosition,
-        totalWatchedSec: 0,
-        status: 'WATCHING',
+        userId, recordingId,
+        videoStartPos: videoPosition, videoEndPos: videoPosition,
+        totalWatchedSec: 0, status: 'WATCHING',
         events: events || [],
       },
     });
   }
 
-  /** Heartbeat: update session with current video position and watched time */
   async heartbeat(userId: string, sessionId: string, videoPosition: number, watchedSec: number, events?: any[]) {
     const session = await this.prisma.watchSession.findFirst({
       where: { id: sessionId, userId, status: 'WATCHING' },
     });
     if (!session) return null;
 
-    // Merge events
     const existingEvents = Array.isArray(session.events) ? session.events as any[] : [];
     const mergedEvents = events ? [...existingEvents, ...events] : existingEvents;
 
@@ -156,7 +305,6 @@ export class AttendanceService {
     });
   }
 
-  /** End a watch session */
   async endSession(userId: string, sessionId: string, videoPosition: number, watchedSec: number, events?: any[]) {
     const session = await this.prisma.watchSession.findFirst({
       where: { id: sessionId, userId },
@@ -166,19 +314,20 @@ export class AttendanceService {
     const existingEvents = Array.isArray(session.events) ? session.events as any[] : [];
     const mergedEvents = events ? [...existingEvents, ...events] : existingEvents;
 
+    // Also log END in attendance record
+    await this.logEnd(userId, session.recordingId, videoPosition, session.totalWatchedSec + watchedSec);
+
     return this.prisma.watchSession.update({
       where: { id: sessionId },
       data: {
         videoEndPos: videoPosition,
         totalWatchedSec: session.totalWatchedSec + watchedSec,
-        endedAt: new Date(),
-        status: 'ENDED',
+        endedAt: new Date(), status: 'ENDED',
         events: mergedEvents,
       },
     });
   }
 
-  /** End a watch session by session ID only (for sendBeacon — no auth available) */
   async endSessionBySessionId(sessionId: string, videoPosition: number, watchedSec: number, events?: any[]) {
     const session = await this.prisma.watchSession.findFirst({
       where: { id: sessionId, status: 'WATCHING' },
@@ -188,30 +337,26 @@ export class AttendanceService {
     const existingEvents = Array.isArray(session.events) ? session.events as any[] : [];
     const mergedEvents = events ? [...existingEvents, ...events] : existingEvents;
 
+    // Also log END in attendance record
+    await this.logEnd(session.userId, session.recordingId, videoPosition, session.totalWatchedSec + watchedSec);
+
     return this.prisma.watchSession.update({
       where: { id: sessionId },
       data: {
         videoEndPos: videoPosition,
         totalWatchedSec: session.totalWatchedSec + watchedSec,
-        endedAt: new Date(),
-        status: 'ENDED',
+        endedAt: new Date(), status: 'ENDED',
         events: mergedEvents,
       },
     });
   }
 
-  /** Get watch history for a user (all sessions across all recordings) */
   async getWatchHistory(userId: string) {
     return this.prisma.watchSession.findMany({
       where: { userId },
       include: {
         recording: {
-          select: {
-            title: true,
-            thumbnail: true,
-            duration: true,
-            month: { select: { name: true, class: { select: { name: true } } } },
-          },
+          select: { title: true, thumbnail: true, duration: true, month: { select: { name: true, class: { select: { name: true } } } } },
         },
       },
       orderBy: { startedAt: 'desc' },
@@ -219,40 +364,28 @@ export class AttendanceService {
     });
   }
 
-  /** Admin: get all watch sessions */
   async getAllWatchSessions() {
     return this.prisma.watchSession.findMany({
       include: {
-        user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
-        },
-        recording: {
-          select: {
-            title: true,
-            month: { select: { name: true, class: { select: { name: true } } } },
-          },
-        },
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 200,
     });
   }
 
-  /** Get watch history for a specific recording (admin) */
   async getRecordingWatchHistory(recordingId: string) {
     return this.prisma.watchSession.findMany({
       where: { recordingId },
       include: {
-        user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
-        },
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 200,
     });
   }
 
-  /** Get watch sessions for a user on a specific recording */
   async getSessionsByRecording(userId: string, recordingId: string) {
     return this.prisma.watchSession.findMany({
       where: { userId, recordingId },
@@ -260,22 +393,12 @@ export class AttendanceService {
     });
   }
 
-  /** Admin: get watch sessions for all recordings in a class */
   async getWatchSessionsByClass(classId: string) {
     return this.prisma.watchSession.findMany({
-      where: {
-        recording: { month: { classId } },
-      },
+      where: { recording: { month: { classId } } },
       include: {
-        user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
-        },
-        recording: {
-          select: {
-            title: true,
-            month: { select: { name: true } },
-          },
-        },
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        recording: { select: { title: true, month: { select: { name: true } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 500,

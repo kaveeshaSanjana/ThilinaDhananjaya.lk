@@ -49,9 +49,11 @@ export class PaymentsService {
     });
   }
 
-  /** Admin: list all slips with optional status filter */
-  async getAllSlips(status?: PaymentSlipStatus) {
-    const where = status ? { status } : {};
+  /** Admin: list all slips with optional status/month filter */
+  async getAllSlips(status?: PaymentSlipStatus, monthId?: string) {
+    const where: any = {};
+    if (status) where.status = status;
+    if (monthId) where.monthId = monthId;
     return this.prisma.paymentSlip.findMany({
       where,
       include: {
