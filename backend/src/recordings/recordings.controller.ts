@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, UseGuards, Request, ForbiddenException,
+  Param, Body, Query, UseGuards, Request, ForbiddenException,
   UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -28,8 +28,8 @@ export class RecordingsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
-  findAll() {
-    return this.recordingsService.findAll();
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.recordingsService.findAll(page ? +page : undefined, limit ? +limit : undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

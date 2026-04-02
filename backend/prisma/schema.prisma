@@ -119,7 +119,7 @@ model Profile {
   instituteId   String        @unique  // e.g. TD-2026-0001
   barcodeId     String?       @unique  // Physical barcode on student ID card
   fullName      String
-  avatarUrl     String?       // Profile picture URL (S3)
+  avatarUrl     String?       @db.Text // Profile picture URL (S3)
   address       String?
   phone         String?
   whatsappPhone String?
@@ -135,6 +135,10 @@ model Profile {
   updatedAt     DateTime      @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone])
+  @@index([status])
+  @@index([fullName])
 }
 
 // ─── Class / Month / Recording Hierarchy ─────────────────
@@ -145,10 +149,10 @@ model Class {
   subject        String?
   description    String?     @db.Text
   monthlyFee     Float?
-  thumbnail      String?     // URL to thumbnail image
+  thumbnail      String?     @db.Text // URL to thumbnail image
   vision         String?     @db.Text
   mission        String?     @db.Text
-  introVideoUrl  String?     // Intro/promo video URL
+  introVideoUrl  String?     @db.Text // Intro/promo video URL
   status         ClassStatus @default(ANYONE)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -173,6 +177,7 @@ model Month {
   payments   PaymentSlip[]
 
   @@unique([classId, year, month])
+  @@index([classId])
 }
 
 model Recording {
@@ -180,16 +185,16 @@ model Recording {
   monthId         String
   title           String
   description     String?          @db.Text
-  videoUrl        String?          // Signed URL or external link (optional for live lectures)
+  videoUrl        String?          @db.Text // Signed URL or external link (optional for live lectures)
   videoType       VideoType?       // DRIVE, YOUTUBE, ZOOM, OTHER
-  thumbnail       String?          // URL to thumbnail image
+  thumbnail       String?          @db.Text // URL to thumbnail image
   duration        Int?             // Duration in seconds
   topic           String?
   icon            String?          // Icon name or URL
   materials       String?          @db.Text // JSON array of material links/names
   welcomeMessage  String?          @db.Text // Rich text HTML with variable placeholders e.g. {{studentName}}
   isLive          Boolean          @default(false)
-  liveUrl         String?          // The actual live meeting URL (Zoom/Meet/etc)
+  liveUrl         String?          @db.Text // The actual live meeting URL (Zoom/Meet/etc)
   liveToken       String?          @unique  // Unique token for shareable link e.g. /live/{token}
   liveStartedAt   DateTime?        // When live session started
   liveEndedAt     DateTime?        // When live session ended
@@ -201,6 +206,11 @@ model Recording {
   month         Month          @relation(fields: [monthId], references: [id], onDelete: Cascade)
   attendances   Attendance[]
   watchSessions WatchSession[]
+
+  @@index([monthId])
+  @@index([monthId, order])
+  @@index([status])
+  @@index([isLive])
 }
 
 // ─── Enrollment (Student <-> Class) ──────────────────────
@@ -215,6 +225,8 @@ model Enrollment {
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@unique([userId, classId])
+  @@index([userId])
+  @@index([classId])
 }
 
 // ─── Payment Slip ────────────────────────────────────────
@@ -225,7 +237,7 @@ model PaymentSlip {
   monthId   String
   type      PaymentType
   reason    String?           // Required if type = OTHER
-  slipUrl   String            // URL from S3/GCS/Drive signed upload
+  slipUrl   String            @db.Text // URL from S3/GCS/Drive signed upload
   amount    Float?            // Amount paid (auto-filled from class.monthlyFee)
   paidDate  DateTime?         // Date the payment was made (set by admin on verify)
   status    PaymentSlipStatus @default(PENDING)
@@ -235,6 +247,12 @@ model PaymentSlip {
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([monthId])
+  @@index([status])
+  @@index([userId, monthId])
+  @@index([createdAt])
 }
 
 // ─── Attendance / Watch Tracking ─────────────────────────
@@ -255,7 +273,9 @@ model Attendance {
   recording Recording? @relation(fields: [recordingId], references: [id], onDelete: SetNull)
 
   @@unique([userId, recordingId])
-  @@index([userId, recordingId])
+  @@index([userId])
+  @@index([recordingId])
+  @@index([createdAt])
 }
 
 // ─── Watch Session Tracking ──────────────────────────────

@@ -19,16 +19,16 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
-  findAll() {
-    return this.usersService.findAllStudents();
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.usersService.findAllStudents(undefined, page ? +page : undefined, limit ? +limit : undefined);
   }
 
   /** Admin: list all students, searchable by instituteId/school/name */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('students')
-  findAllStudents(@Query('search') search?: string) {
-    return this.usersService.findAllStudents(search);
+  findAllStudents(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.usersService.findAllStudents(search, page ? +page : undefined, limit ? +limit : undefined);
   }
 
   /** Admin: create a student */

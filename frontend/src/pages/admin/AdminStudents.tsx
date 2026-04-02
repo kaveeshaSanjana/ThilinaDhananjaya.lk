@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadStudentAvatar } from '../../lib/imageUpload';
@@ -19,6 +19,7 @@ const emptyForm = { fullName: '', email: '', password: '', phone: '', whatsappPh
 
 export default function AdminStudents() {
   const [students, setStudents] = useState<any[]>([]);
+  const [totalStudents, setTotalStudents] = useState(0);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -28,15 +29,29 @@ export default function AdminStudents() {
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [viewStudent, setViewStudent] = useState<any>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = () => { setLoading(true); api.get('/users/students').then(r => setStudents(r.data || [])).catch(() => {}).finally(() => setLoading(false)); };
-  useEffect(() => { load(); }, []);
+  const load = useCallback((searchTerm?: string) => {
+    setLoading(true);
+    const params: any = { limit: 200 };
+    if (searchTerm) params.search = searchTerm;
+    api.get('/users/students', { params })
+      .then(r => {
+        const res = r.data;
+        if (res?.data) { setStudents(res.data); setTotalStudents(res.total); }
+        else { setStudents(Array.isArray(res) ? res : []); setTotalStudents(Array.isArray(res) ? res.length : 0); }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const filtered = students.filter(s =>
-    s.profile?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-    s.email?.toLowerCase().includes(search.toLowerCase()) ||
-    s.profile?.instituteId?.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => { load(); }, [load]);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(value), 300);
+  };
 
   const openNew = () => { setForm({ ...emptyForm }); setEditingStudent(null); setShowForm(true); setError(''); };
   const openEdit = (s: any) => {
@@ -74,18 +89,18 @@ export default function AdminStudents() {
           relationship: form.relationship || undefined, avatarUrl: form.avatarUrl || undefined,
         });
       }
-      setShowForm(false); setForm({ ...emptyForm }); load();
+      setShowForm(false); setForm({ ...emptyForm }); load(search);
     } catch (err: any) { setError(err.response?.data?.message || 'Failed to save student'); }
     finally { setSaving(false); }
   };
 
   const handleStatusChange = async (id: string, status: string) => {
-    await api.patch(`/users/students/${id}/profile`, { status }).catch(() => {}); load();
+    await api.patch(`/users/students/${id}/profile`, { status }).catch(() => {}); load(search);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this student? This will remove all their data.')) return;
-    await api.delete(`/users/students/${id}`).catch(() => {}); load();
+    await api.delete(`/users/students/${id}`).catch(() => {}); load(search);
   };
 
   const handleAvatarFileChange = async (file?: File) => {
@@ -173,13 +188,13 @@ export default function AdminStudents() {
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Students</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{students.length} registered students</p>
+          <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Students</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{totalStudents} registered students</p>
         </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:flex-none">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email, ID..."
+              <input value={search} onChange={e => handleSearch(e.target.value)} placeholder="Search by name, email, ID..."
                 className="pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 shadow-sm transition w-full sm:w-64" />
           </div>
           <button onClick={openNew}
@@ -194,9 +209,9 @@ export default function AdminStudents() {
       {viewStudent && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setViewStudent(null)}>
           <div className="min-h-full flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800">Student Details</h2>
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+                <h2 className="font-bold text-[hsl(var(--foreground))]">Student Details</h2>
                 <button onClick={() => setViewStudent(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -212,7 +227,7 @@ export default function AdminStudents() {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">{viewStudent.profile?.fullName || '-'}</h3>
+                    <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">{viewStudent.profile?.fullName || '-'}</h3>
                     <p className="text-sm text-slate-500">{viewStudent.email}</p>
                     {viewStudent.profile?.instituteId && <p className="text-xs font-mono text-blue-600 font-bold mt-0.5">{viewStudent.profile.instituteId}</p>}
                   </div>
@@ -258,10 +273,10 @@ export default function AdminStudents() {
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] rounded-t-2xl">
               <div>
-                <h2 className="font-bold text-slate-800">{editingStudent ? 'Edit Student' : 'New Student'}</h2>
+                <h2 className="font-bold text-[hsl(var(--foreground))]">{editingStudent ? 'Edit Student' : 'New Student'}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">{editingStudent ? 'Update student information' : 'Add a new student to the system'}</p>
               </div>
               <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
@@ -367,10 +382,10 @@ export default function AdminStudents() {
         </div>
       , document.body)}
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-3">{[1,2,3,4].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />)}</div>
-        ) : filtered.length === 0 ? (
+        ) : students.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
               <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -380,7 +395,7 @@ export default function AdminStudents() {
         ) : (
           <StickyDataTable
             columns={studentColumns}
-            rows={filtered}
+            rows={students}
             getRowId={(row) => row.id}
             tableHeight="calc(100vh - 320px)"
             storageKey="admin-students-columns"

@@ -5,5 +5,5 @@
     "declaration": true,
     "sourceMap": true
   },
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "prisma/seed.ts"]
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "prisma/seed.ts", "scripts"]
 }

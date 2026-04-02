@@ -37,22 +37,10 @@ export class UploadService {
       throw new BadRequestException('No file provided. Send the image as form-data with field name "file".');
     }
 
-    const bucket = this.config.get<string>('AWS_S3_BUCKET') ?? '';
-    const accessKey = this.config.get<string>('AWS_ACCESS_KEY_ID') ?? '';
-    const secretKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY') ?? '';
-
-    if (
-      !bucket || bucket === 'your-s3-bucket-name' ||
-      !accessKey || accessKey === 'your-access-key-id' ||
-      !secretKey || secretKey === 'your-secret-access-key'
-    ) {
+    if (!this.bucket) {
       throw new BadRequestException(
         'AWS S3 is not configured. Update AWS_S3_BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY in the .env file.',
       );
-    }
-
-    if (!this.bucket) {
-      throw new BadRequestException('S3 is not configured. Set AWS_S3_BUCKET in the .env file.');
     }
 
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'];

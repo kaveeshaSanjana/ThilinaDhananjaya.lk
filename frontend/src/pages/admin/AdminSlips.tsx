@@ -92,7 +92,15 @@ export default function AdminSlips() {
   const currentClassId = useRef('');
   const overviewCache = useRef<Record<string, PaymentOverview>>({});
 
-  const load = () => { setLoading(true); api.get('/payments/all').then(r => setPayments(r.data)).catch(() => {}).finally(() => setLoading(false)); };
+  const load = () => {
+    setLoading(true);
+    const params: any = { limit: 200 };
+    if (filter && filter !== 'ALL') params.status = filter;
+    api.get('/payments/all', { params }).then(r => {
+      const res = r.data;
+      setPayments(res?.data ? res.data : Array.isArray(res) ? res : []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  };
   useEffect(() => {
     load();
     api.get('/classes').then(r => setClasses(r.data || [])).catch(() => {});
@@ -363,11 +371,11 @@ export default function AdminSlips() {
   return (
     <div className="space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-xl font-bold text-slate-800">Payment Slips</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Review online payment slips and manage physical class payments</p>
+        <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Payment Slips</h1>
+        <p className="text-[hsl(var(--muted-foreground))] text-sm mt-0.5">Review online payment slips and manage physical class payments</p>
       </div>
 
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
+      <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full">
         {([
           { key: 'online' as const, label: 'Online' },
           { key: 'physical' as const, label: 'Physical' },
@@ -375,7 +383,7 @@ export default function AdminSlips() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${tab === t.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${tab === t.key ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}
           >
             {t.label}
           </button>
@@ -398,10 +406,10 @@ export default function AdminSlips() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
+      <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full">
         {(['PENDING', 'VERIFIED', 'REJECTED', 'ALL'] as const).map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${filter === s ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${filter === s ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}>
             {s}
           </button>
         ))}
@@ -410,11 +418,11 @@ export default function AdminSlips() {
       {/* Slip preview modal */}
       {preview && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
               <div>
-                <p className="font-bold text-slate-800">{preview.user?.profile?.fullName || preview.user?.email}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{preview.month?.class?.name} � {preview.month?.name}</p>
+                <p className="font-bold text-[hsl(var(--foreground))]">{preview.user?.profile?.fullName || preview.user?.email}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{preview.month?.class?.name} — {preview.month?.name}</p>
               </div>
               <button onClick={() => setPreview(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -434,9 +442,9 @@ export default function AdminSlips() {
       , document.body)}
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />)}</div>
+          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-[hsl(var(--muted))] animate-pulse" />)}</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
@@ -457,7 +465,7 @@ export default function AdminSlips() {
         </>
       ) : (
         <>
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-4 space-y-3">
             <div className="flex flex-wrap gap-3 items-center">
               <select
                 value={selectedClassId}
@@ -506,7 +514,7 @@ export default function AdminSlips() {
               </span>
             </div>
 
-            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full overflow-x-auto">
+            <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full overflow-x-auto">
               {([
                 { key: 'all' as const, label: 'All', count: physicalCounts.all },
                 { key: 'PAID' as const, label: 'Paid', count: physicalCounts.PAID },
@@ -518,12 +526,12 @@ export default function AdminSlips() {
                   key={item.key}
                   onClick={() => setPayFilter(item.key)}
                   className={`flex-1 min-w-[96px] px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-                    payFilter === item.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    payFilter === item.key ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
                   }`}
                 >
                   <span>{item.label}</span>
                   <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                    payFilter === item.key ? 'bg-slate-100 text-slate-700' : 'bg-white/70 text-slate-500 border border-slate-200'
+                    payFilter === item.key ? 'bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]' : 'bg-[hsl(var(--card))]/70 text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]'
                   }`}>
                     {item.count}
                   </span>
@@ -543,7 +551,7 @@ export default function AdminSlips() {
           ) : !paymentOverview ? (
             <div className="text-center py-12 text-slate-500"><p className="font-medium">No payment data found</p></div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
               {filteredPhysicalStudents.length === 0 ? (
                 <div className="text-center py-12 text-slate-500"><p className="font-medium">No students found</p></div>
               ) : (
@@ -563,10 +571,10 @@ export default function AdminSlips() {
 
           {physicalVerifyModal && createPortal(
             <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPhysicalVerifyModal(null)}>
-              <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
                   <div>
-                    <p className="font-bold text-slate-800">Update Payment Status</p>
+                    <p className="font-bold text-[hsl(var(--foreground))]">Update Payment Status</p>
                     <p className="text-xs text-slate-400 mt-0.5">{physicalVerifyModal.studentName}</p>
                   </div>
                   <button onClick={() => setPhysicalVerifyModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">

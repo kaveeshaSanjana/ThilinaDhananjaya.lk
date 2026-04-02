@@ -216,21 +216,30 @@ export class AttendanceService {
 
   // ─── Query Methods (unchanged logic) ───────────────────
 
-  async getAll(filters?: { classId?: string; recordingId?: string; status?: string }) {
+  async getAll(filters?: { classId?: string; recordingId?: string; status?: string; page?: number; limit?: number }) {
     const where: any = {};
     if (filters?.recordingId) where.recordingId = filters.recordingId;
     if (filters?.status) where.status = filters.status;
     if (filters?.classId) where.recording = { month: { classId: filters.classId } };
 
-    return this.prisma.attendance.findMany({
-      where,
-      include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
-        recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 500,
-    });
+    const take = filters?.limit && filters.limit > 0 ? Math.min(filters.limit, 200) : 50;
+    const skip = filters?.page && filters.page > 1 ? (filters.page - 1) * take : 0;
+
+    const [data, total] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where,
+        include: {
+          user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+          recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return { data, total, page: filters?.page || 1, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   async getByUser(userId: string) {
@@ -364,15 +373,24 @@ export class AttendanceService {
     });
   }
 
-  async getAllWatchSessions() {
-    return this.prisma.watchSession.findMany({
-      include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
-        recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
-      },
-      orderBy: { startedAt: 'desc' },
-      take: 200,
-    });
+  async getAllWatchSessions(page?: number, limit?: number) {
+    const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
+    const skip = page && page > 1 ? (page - 1) * take : 0;
+
+    const [data, total] = await Promise.all([
+      this.prisma.watchSession.findMany({
+        include: {
+          user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+          recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
+        },
+        orderBy: { startedAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.watchSession.count(),
+    ]);
+
+    return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   async getRecordingWatchHistory(recordingId: string) {
@@ -490,37 +508,35 @@ export class AttendanceService {
     markedBy?: string;
   }) {
     const dateObj = new Date(data.date);
-    const results = [];
 
-    for (const rec of data.records) {
-      const result = await this.prisma.classAttendance.upsert({
-        where: {
-          userId_classId_date: {
+    return this.prisma.$transaction(
+      data.records.map((rec) =>
+        this.prisma.classAttendance.upsert({
+          where: {
+            userId_classId_date: {
+              userId: rec.userId,
+              classId: data.classId,
+              date: dateObj,
+            },
+          },
+          update: {
+            status: rec.status as ClassAttendanceStatus,
+            method: data.method || undefined,
+            note: rec.note || undefined,
+            markedBy: data.markedBy || undefined,
+          },
+          create: {
             userId: rec.userId,
             classId: data.classId,
             date: dateObj,
+            status: rec.status as ClassAttendanceStatus,
+            method: data.method || 'bulk',
+            note: rec.note || null,
+            markedBy: data.markedBy || null,
           },
-        },
-        update: {
-          status: rec.status as ClassAttendanceStatus,
-          method: data.method || undefined,
-          note: rec.note || undefined,
-          markedBy: data.markedBy || undefined,
-        },
-        create: {
-          userId: rec.userId,
-          classId: data.classId,
-          date: dateObj,
-          status: rec.status as ClassAttendanceStatus,
-          method: data.method || 'bulk',
-          note: rec.note || null,
-          markedBy: data.markedBy || null,
-        },
-      });
-      results.push(result);
-    }
-
-    return results;
+        }),
+      ),
+    );
   }
 
   /**

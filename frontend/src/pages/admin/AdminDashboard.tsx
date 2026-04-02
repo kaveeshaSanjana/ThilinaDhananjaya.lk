@@ -24,13 +24,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/users/students').then(r => r.data?.length || 0).catch(() => 0),
+      api.get('/stats/dashboard').then(r => r.data).catch(() => ({ students: 0, classes: 0, pendingPayments: 0, recordings: 0 })),
       api.get('/classes').then(r => r.data || []).catch(() => []),
-      api.get('/payments/pending').then(r => r.data?.length || 0).catch(() => 0),
-      api.get('/recordings').then(r => r.data?.length || 0).catch(() => 0),
-    ]).then(([students, classes, payments, recordings]) => {
+    ]).then(([stats, classes]) => {
       setClassList(classes);
-      setCounts({ students, classes: classes.length, payments, recordings });
+      setCounts({ students: stats.students, classes: stats.classes, payments: stats.pendingPayments, recordings: stats.recordings });
     }).finally(() => setLoading(false));
   }, []);
 
@@ -43,21 +41,21 @@ export default function AdminDashboard() {
         <div className="relative z-10">
           <p className="text-blue-300 text-xs font-semibold uppercase tracking-widest mb-1">Admin Panel</p>
           <h1 className="text-2xl md:text-3xl font-bold text-white">LMS Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1.5 max-w-md">Monitor your platform � students, classes, payments, and recordings at a glance.</p>
+          <p className="text-slate-400 text-sm mt-1.5 max-w-md">Monitor your platform — students, classes, payments, and recordings at a glance.</p>
         </div>
       </div>
 
       {/* Quick Links */}
       <div>
-        <h2 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">Quick Access</h2>
+        <h2 className="text-sm font-bold text-[hsl(var(--foreground))] mb-3 uppercase tracking-wide">Quick Access</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {QUICK_LINKS.map(({ to, label, icon, gradient }) => (
             <Link key={to} to={to}
-              className="bg-white rounded-2xl border border-slate-100 p-4 flex flex-col items-center text-center shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
+              className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 flex flex-col items-center text-center shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
               <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-2.5 shadow-md group-hover:scale-110 transition-transform`}>
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d={icon} /></svg>
               </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-blue-600 transition">{label}</span>
+              <span className="text-xs font-semibold text-[hsl(var(--foreground))] group-hover:text-blue-600 transition">{label}</span>
             </Link>
           ))}
         </div>
@@ -66,7 +64,7 @@ export default function AdminDashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {STAT_CARDS.map(({ key, label, gradient, shadow, icon }) => (
-          <div key={key} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div key={key} className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3 shadow-lg ${shadow}`}>
               <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d={icon} /></svg>
             </div>
@@ -74,7 +72,7 @@ export default function AdminDashboard() {
             {loading ? (
               <div className="h-8 w-16 bg-slate-100 rounded-lg mt-1.5 animate-pulse" />
             ) : (
-              <p className="text-3xl font-bold text-slate-800 mt-1">{counts[key] ?? 0}</p>
+              <p className="text-3xl font-bold text-[hsl(var(--foreground))] mt-1">{counts[key] ?? 0}</p>
             )}
           </div>
         ))}
@@ -83,7 +81,7 @@ export default function AdminDashboard() {
       {/* Available Classes */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Available Classes</h2>
+          <h2 className="text-sm font-bold text-[hsl(var(--foreground))] uppercase tracking-wide">Available Classes</h2>
           <Link to="/admin/classes" className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">View all</Link>
         </div>
         {loading ? (
@@ -91,7 +89,7 @@ export default function AdminDashboard() {
             {[1, 2, 3].map((i) => <div key={i} className="h-24 rounded-2xl bg-slate-100 animate-pulse" />)}
           </div>
         ) : classList.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center">
+          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-8 text-center">
             <p className="text-sm text-slate-500">No classes available yet</p>
           </div>
         ) : (
@@ -100,9 +98,9 @@ export default function AdminDashboard() {
               <Link
                 key={cls.id}
                 to={`/admin/classes/${cls.id}`}
-                className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group"
+                className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group"
               >
-                <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-blue-600 transition">{cls.name}</p>
+                <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate group-hover:text-blue-600 transition">{cls.name}</p>
                 <p className="text-xs text-slate-500 mt-1 truncate">{cls.subject || 'No subject'}</p>
               </Link>
             ))}

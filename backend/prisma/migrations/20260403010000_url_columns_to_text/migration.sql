@@ -1,0 +1,12 @@
+-- AlterTable: change URL columns from VARCHAR(191) to TEXT
+
+ALTER TABLE `Profile` MODIFY COLUMN `avatarUrl` TEXT NULL;
+
+ALTER TABLE `Class` MODIFY COLUMN `thumbnail` TEXT NULL;
+ALTER TABLE `Class` MODIFY COLUMN `introVideoUrl` TEXT NULL;
+
+ALTER TABLE `Recording` MODIFY COLUMN `videoUrl` TEXT NULL;
+ALTER TABLE `Recording` MODIFY COLUMN `thumbnail` TEXT NULL;
+ALTER TABLE `Recording` MODIFY COLUMN `liveUrl` TEXT NULL;
+
+ALTER TABLE `PaymentSlip` MODIFY COLUMN `slipUrl` TEXT NOT NULL;

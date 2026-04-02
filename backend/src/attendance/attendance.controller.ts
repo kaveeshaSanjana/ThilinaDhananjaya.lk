@@ -54,8 +54,14 @@ export class AttendanceController {
     @Query('classId') classId?: string,
     @Query('recordingId') recordingId?: string,
     @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.attendanceService.getAll({ classId, recordingId, status });
+    return this.attendanceService.getAll({
+      classId, recordingId, status,
+      page: page ? +page : undefined,
+      limit: limit ? +limit : undefined,
+    });
   }
 
   /** Student: my attendance history */
@@ -156,8 +162,8 @@ export class AttendanceController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('watch-sessions')
-  getAllWatchSessions() {
-    return this.attendanceService.getAllWatchSessions();
+  getAllWatchSessions(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.attendanceService.getAllWatchSessions(page ? +page : undefined, limit ? +limit : undefined);
   }
 
   /** Admin: watch sessions for a specific class */

@@ -37,11 +37,21 @@ export class RecordingsService {
     });
   }
 
-  async findAll() {
-    return this.prisma.recording.findMany({
-      include: { month: { include: { class: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(page?: number, limit?: number) {
+    const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
+    const skip = page && page > 1 ? (page - 1) * take : 0;
+
+    const [data, total] = await Promise.all([
+      this.prisma.recording.findMany({
+        include: { month: { include: { class: { select: { id: true, name: true, subject: true } } } } },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.recording.count(),
+    ]);
+
+    return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   async findOne(id: string) {

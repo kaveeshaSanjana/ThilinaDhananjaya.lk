@@ -77,7 +77,7 @@ export class UsersService {
     });
   }
 
-  async findAllStudents(search?: string) {
+  async findAllStudents(search?: string, page?: number, limit?: number) {
     const where: any = { role: 'STUDENT' };
 
     if (search) {
@@ -89,11 +89,21 @@ export class UsersService {
       ];
     }
 
-    return this.prisma.user.findMany({
-      where,
-      include: { profile: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
+    const skip = page && page > 1 ? (page - 1) * take : 0;
+
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: { profile: true },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   async updateProfile(userId: string, data: Partial<{
@@ -131,12 +141,16 @@ export class UsersService {
   }
 
   async delete(userId: string) {
-    await this.prisma.profile.deleteMany({ where: { userId } });
-    await this.prisma.refreshToken.deleteMany({ where: { userId } });
-    await this.prisma.attendance.deleteMany({ where: { userId } });
-    await this.prisma.paymentSlip.deleteMany({ where: { userId } });
-    await this.prisma.enrollment.deleteMany({ where: { userId } });
-    return this.prisma.user.delete({ where: { id: userId } });
+    return this.prisma.$transaction([
+      this.prisma.watchSession.deleteMany({ where: { userId } }),
+      this.prisma.classAttendance.deleteMany({ where: { userId } }),
+      this.prisma.attendance.deleteMany({ where: { userId } }),
+      this.prisma.paymentSlip.deleteMany({ where: { userId } }),
+      this.prisma.enrollment.deleteMany({ where: { userId } }),
+      this.prisma.profile.deleteMany({ where: { userId } }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
   }
 
   /** Generate an Institute ID like TD-2026-0001 */

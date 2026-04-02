@@ -39,7 +39,10 @@ export default function AdminRecordingHistory() {
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   const load = () => { setLoading(true); Promise.all([
-    api.get('/recordings').then(r => setRecordings(r.data)).catch(() => {}),
+    api.get('/recordings', { params: { limit: 200 } }).then(r => {
+      const res = r.data;
+      setRecordings(res?.data ? res.data : Array.isArray(res) ? res : []);
+    }).catch(() => {}),
     api.get('/classes').then(r => setClasses(r.data)).catch(() => {}),
   ]).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);

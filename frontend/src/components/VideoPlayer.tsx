@@ -25,6 +25,7 @@ interface VideoPlayerProps {
   recordingId: string;
   videoUrl: string;
   title: string;
+  skipTracking?: boolean;
   onSessionChange?: (state: SessionState) => void;
   endSessionRef?: React.MutableRefObject<(() => Promise<{ ok: boolean; error?: string; session: SessionState }>) | null>;
 }
@@ -54,12 +55,10 @@ function makeEvent(type: string, videoTime: number): SessionEvent {
   return { type, videoTime, wallTime: new Date().toISOString() };
 }
 
-export default function VideoPlayer({ recordingId, videoUrl, title, onSessionChange, endSessionRef }: VideoPlayerProps) {
+export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking, onSessionChange, endSessionRef }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [heartbeatInterval, setHeartbeatInterval] = useState(120);
 
   const sessionIdRef = useRef<string | null>(null);
-  const watchedSinceLastHbRef = useRef(0);
   const totalWatchedRef = useRef(0);
   const isPlayingRef = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,17 +87,12 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
 
   useEffect(() => { notifyParent(); }, [sessionStatus, notifyParent]);
 
-  useEffect(() => {
-    api.get('/attendance/config').then(r => {
-      setHeartbeatInterval(r.data.heartbeatIntervalSeconds || 120);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => { pushEvent('page_open', 0); }, [pushEvent]);
+  useEffect(() => { if (!skipTracking) pushEvent('page_open', 0); }, [pushEvent, skipTracking]);
 
   // ─── Session helpers ─────────────────────────────────────
 
   const startSession = useCallback(async (videoPos: number) => {
+    if (skipTracking) { setSessionStatus('watching'); return; }
     try {
       pushEvent('session_start', videoPos);
       const res = await api.post('/attendance/session/start', {
@@ -108,28 +102,12 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
       });
       sessionIdRef.current = res.data.id;
       pendingEventsRef.current = [];
-      watchedSinceLastHbRef.current = 0;
       setSessionStatus('watching');
     } catch { /* silent */ }
-  }, [recordingId, pushEvent]);
-
-  const sendHeartbeat = useCallback(async (videoPos: number) => {
-    if (!sessionIdRef.current) return;
-    try {
-      pushEvent('heartbeat', videoPos);
-      await api.post('/attendance/session/heartbeat', {
-        sessionId: sessionIdRef.current,
-        videoPosition: videoPos,
-        watchedSec: Math.round(watchedSinceLastHbRef.current),
-        events: pendingEventsRef.current,
-      });
-      pendingEventsRef.current = [];
-      watchedSinceLastHbRef.current = 0;
-    } catch { /* silent */ }
-  }, [pushEvent]);
+  }, [recordingId, pushEvent, skipTracking]);
 
   const endSessionAsync = useCallback(async (videoPos: number): Promise<{ ok: boolean; error?: string }> => {
-    if (!sessionIdRef.current) return { ok: true };
+    if (skipTracking || !sessionIdRef.current) return { ok: true };
     const sid = sessionIdRef.current;
     sessionIdRef.current = null;
     setSessionStatus('ended');
@@ -138,11 +116,10 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
       await api.post('/attendance/session/end', {
         sessionId: sid,
         videoPosition: videoPos,
-        watchedSec: Math.round(watchedSinceLastHbRef.current),
+        watchedSec: Math.round(totalWatchedRef.current),
         events: pendingEventsRef.current,
       });
       pendingEventsRef.current = [];
-      watchedSinceLastHbRef.current = 0;
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: err.response?.data?.message || err.message || 'Failed to save session' };
@@ -150,14 +127,14 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
   }, [pushEvent]);
 
   const endSessionBeacon = useCallback(() => {
-    if (!sessionIdRef.current) return;
+    if (skipTracking || !sessionIdRef.current) return;
     const video = videoRef.current;
     const videoPos = video ? video.currentTime : 0;
     pushEvent('tab_close', videoPos);
     const body = JSON.stringify({
       sessionId: sessionIdRef.current,
       videoPosition: videoPos,
-      watchedSec: Math.round(watchedSinceLastHbRef.current),
+      watchedSec: Math.round(totalWatchedRef.current),
       events: pendingEventsRef.current,
     });
     navigator.sendBeacon(
@@ -218,12 +195,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
         tickIntervalRef.current = setInterval(() => {
           if (!isPlayingRef.current) return;
           totalWatchedRef.current += 1;
-          watchedSinceLastHbRef.current += 1;
           setWatchedDisplay(totalWatchedRef.current);
-          if (watchedSinceLastHbRef.current >= heartbeatInterval && sessionIdRef.current) {
-            const v = videoRef.current;
-            if (v) sendHeartbeat(v.currentTime);
-          }
         }, 1000);
       }
     };
@@ -260,7 +232,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('seeked', onSeeked);
     };
-  }, [youtubeId, heartbeatInterval, startSession, sendHeartbeat, endSessionAsync, clearIdleTimer, startIdleTimer, pushEvent]);
+  }, [youtubeId, startSession, endSessionAsync, clearIdleTimer, startIdleTimer, pushEvent]);
 
   // ─── Tab close ──────────────────────────────────────────
 
@@ -289,10 +261,14 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
         events: {
           onReady: () => {
             if (!mounted) return;
-            pushEvent('youtube_session_start', 0);
-            api.post('/attendance/session/start', { recordingId, videoPosition: 0, events: pendingEventsRef.current })
-              .then(r => { if (mounted) { sessionIdRef.current = r.data.id; pendingEventsRef.current = []; setSessionStatus('watching'); } })
-              .catch(() => {});
+            if (!skipTracking) {
+              pushEvent('youtube_session_start', 0);
+              api.post('/attendance/session/start', { recordingId, videoPosition: 0, events: pendingEventsRef.current })
+                .then(r => { if (mounted) { sessionIdRef.current = r.data.id; pendingEventsRef.current = []; setSessionStatus('watching'); } })
+                .catch(() => {});
+            } else {
+              setSessionStatus('watching');
+            }
           },
           onStateChange: (event: any) => {
             if (!mounted) return;
@@ -304,18 +280,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
                 playInterval = setInterval(() => {
                   if (!ytIsPlaying) return;
                   totalWatchedRef.current += 1;
-                  watchedSinceLastHbRef.current += 1;
                   setWatchedDisplay(totalWatchedRef.current);
-                  if (watchedSinceLastHbRef.current >= heartbeatInterval && sessionIdRef.current) {
-                    const pos = ytPlayer?.getCurrentTime?.() || totalWatchedRef.current;
-                    pushEvent('heartbeat', pos);
-                    api.post('/attendance/session/heartbeat', {
-                      sessionId: sessionIdRef.current,
-                      videoPosition: pos,
-                      watchedSec: Math.round(watchedSinceLastHbRef.current),
-                      events: pendingEventsRef.current,
-                    }).then(() => { pendingEventsRef.current = []; watchedSinceLastHbRef.current = 0; }).catch(() => {});
-                  }
                 }, 1000);
               }
             } else if (event.data === 2) { // PAUSED
@@ -352,7 +317,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
       mounted = false;
       ytIsPlaying = false;
       if (playInterval) { clearInterval(playInterval); playInterval = null; }
-      if (ytPlayer && sessionIdRef.current) {
+      if (!skipTracking && ytPlayer && sessionIdRef.current) {
         const pos = ytPlayer.getCurrentTime?.() || 0;
         pushEvent('youtube_session_end', pos);
         navigator.sendBeacon(
@@ -360,14 +325,14 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
           new Blob([JSON.stringify({
             sessionId: sessionIdRef.current,
             videoPosition: pos,
-            watchedSec: Math.round(watchedSinceLastHbRef.current),
+            watchedSec: Math.round(totalWatchedRef.current),
             events: pendingEventsRef.current,
           })], { type: 'application/json' }),
         );
       }
       if (ytPlayer?.destroy) { try { ytPlayer.destroy(); } catch { /* ignore */ } }
     };
-  }, [youtubeId, recordingId, heartbeatInterval, pushEvent]);
+  }, [youtubeId, recordingId, pushEvent, skipTracking]);
 
   return (
     <div className="flex flex-col h-full">

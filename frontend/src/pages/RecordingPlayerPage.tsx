@@ -28,6 +28,7 @@ export default function RecordingPlayerPage() {
   const typingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const endSessionRef = useRef<(() => Promise<{ ok: boolean; error?: string; session: SessionState }>) | null>(null);
+  const isGuest = !user;
 
   // Fetch recording + sibling recordings from same month
   useEffect(() => {
@@ -84,7 +85,7 @@ export default function RecordingPlayerPage() {
     if (!showWelcome || !recording) return;
     const hour = new Date().getHours();
     const greet = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
-    const name = user?.profile?.fullName || 'Student';
+    const name = user?.profile?.fullName || 'Guest';
     const monthName = recording?.month?.name || '';
     const className = recording?.month?.class?.name || '';
     const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -112,7 +113,9 @@ export default function RecordingPlayerPage() {
       if (className) lines += ` from ${className}`;
       if (monthName) lines += ` — ${monthName}`;
       lines += '.';
-      lines += '\n\nYour attendance will be recorded once you start.';
+      if (!isGuest) {
+        lines += '\n\nYour attendance will be recorded once you start.';
+      }
     }
     setTypedText('');
     setTypingDone(false);
@@ -269,6 +272,7 @@ export default function RecordingPlayerPage() {
             recordingId={recording.id}
             videoUrl={recording.videoUrl}
             title={recording.title}
+            skipTracking={isGuest}
             endSessionRef={endSessionRef}
           />
         </div>

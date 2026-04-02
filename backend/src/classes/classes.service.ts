@@ -101,17 +101,19 @@ export class ClassesService {
 
   /** Assign months to a class from a list of month IDs */
   async assignMonthsToClass(classId: string, monthNames: { name: string; year: number; month: number }[]) {
-    const results = [];
-    for (const m of monthNames) {
-      const existing = await this.prisma.month.findUnique({
-        where: { classId_year_month: { classId, year: m.year, month: m.month } },
-      });
-      if (!existing) {
-        results.push(await this.prisma.month.create({ data: { ...m, classId } }));
-      } else {
-        results.push(existing);
+    return this.prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const m of monthNames) {
+        const existing = await tx.month.findUnique({
+          where: { classId_year_month: { classId, year: m.year, month: m.month } },
+        });
+        if (!existing) {
+          results.push(await tx.month.create({ data: { ...m, classId } }));
+        } else {
+          results.push(existing);
+        }
       }
-    }
-    return results;
+      return results;
+    });
   }
 }

@@ -74,14 +74,23 @@ export default function AdminClassDetail() {
   const loadMonths = () => api.get(`/classes/${id}/months`).then(r => setMonths(r.data)).catch(() => {});
   const loadRecordings = () => api.get(`/classes/${id}/recordings`).then(r => setRecordings(r.data)).catch(() => {});
   const loadEnrollments = () => api.get(`/enrollments/class/${id}`).then(r => setEnrollments(r.data || [])).catch(() => {});
-  const loadStudents = () => api.get('/users/students').then(r => setAllStudents(r.data || [])).catch(() => {});
+  const loadStudents = () => api.get('/users/students', { params: { limit: 200 } }).then(r => {
+    const res = r.data;
+    setAllStudents(res?.data ? res.data : Array.isArray(res) ? res : []);
+  }).catch(() => {});
   const loadWatchSessions = () => api.get(`/attendance/watch-sessions/class/${id}`).then(r => setWatchSessions(r.data || [])).catch(() => {});
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadClass(), loadMonths(), loadRecordings(), loadEnrollments(), loadStudents(), loadWatchSessions()])
+    Promise.all([loadClass(), loadMonths(), loadRecordings(), loadEnrollments()])
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Lazy-load students and watch sessions when their tabs are selected
+  useEffect(() => {
+    if (tab === 'students' && allStudents.length === 0) loadStudents();
+    if (tab === 'attendance' && watchSessions.length === 0) loadWatchSessions();
+  }, [tab]);
 
   // ─── Month handlers ─────────────────────
   const openNewMonth = () => { setMonthForm({ ...emptyMonthForm }); setEditingMonth(null); setShowMonthForm(true); setMonthError(''); };

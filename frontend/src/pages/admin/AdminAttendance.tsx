@@ -77,14 +77,34 @@ export default function AdminAttendance() {
   /* ─── Load data on mount ─────────────────────────── */
 
   useEffect(() => {
-    Promise.all([
-      api.get('/classes').then(r => setClasses(r.data)).catch(() => {}),
-      api.get('/recordings').then(r => setRecordings(r.data)).catch(() => {}),
-      api.get('/users/students').then(r => setStudents(r.data || [])).catch(() => {}),
-      api.get('/attendance/watch-sessions').then(r => setSessions(r.data || [])).catch(() => {}),
-      api.get('/attendance').then(r => setRecords(r.data || [])).catch(() => {}),
-    ]).finally(() => setFetching(false));
+    // Only load classes on mount — everything else is loaded on demand
+    api.get('/classes').then(r => setClasses(r.data)).catch(() => {});
+    setFetching(false);
   }, []);
+
+  /* ─── Load recordings when class selected ────────── */
+
+  useEffect(() => {
+    if (!selectedClassId) { setRecordings([]); return; }
+    api.get(`/classes/${selectedClassId}/recordings`).then(r => setRecordings(r.data || [])).catch(() => {});
+  }, [selectedClassId]);
+
+  /* ─── Load sessions / attendance lazily per tab ──── */
+
+  useEffect(() => {
+    if (tab === 'sessions' && sessions.length === 0) {
+      api.get('/attendance/watch-sessions', { params: { limit: 200 } }).then(r => {
+        const res = r.data;
+        setSessions(res?.data ? res.data : Array.isArray(res) ? res : []);
+      }).catch(() => {});
+    }
+    if (tab === 'attendance' && records.length === 0) {
+      api.get('/attendance', { params: { limit: 200 } }).then(r => {
+        const res = r.data;
+        setRecords(res?.data ? res.data : Array.isArray(res) ? res : []);
+      }).catch(() => {});
+    }
+  }, [tab]);
 
   /* ─── Derived: months + recordings for 3-step selection ─ */
 
@@ -140,7 +160,10 @@ export default function AdminAttendance() {
     setLoadingMonthStudents(true);
     Promise.all([
       api.get(`/enrollments/class/${selectedClassId}`).then(r => r.data || []).catch(() => []),
-      api.get(`/payments/all?monthId=${selectedMonthId}`).then(r => r.data || []).catch(() => []),
+      api.get(`/payments/all`, { params: { monthId: selectedMonthId, limit: 200 } }).then(r => {
+        const res = r.data;
+        return res?.data ? res.data : Array.isArray(res) ? res : [];
+      }).catch(() => []),
     ]).then(([enrolled, payments]) => {
       setMonthEnrolled(enrolled);
       setMonthPayData(payments);
@@ -209,13 +232,16 @@ export default function AdminAttendance() {
     Promise.all([
       api.get(`/attendance/recording/${selectedRecordingId}`).then(r => r.data || []).catch(() => []),
       classId ? api.get(`/enrollments/class/${classId}`).then(r => r.data || []).catch(() => []) : Promise.resolve([]),
-      monthId ? api.get(`/payments/all?monthId=${monthId}`).then(r => r.data || []).catch(() => []) : Promise.resolve([]),
+      monthId ? api.get(`/payments/all`, { params: { monthId, limit: 200 } }).then(r => {
+        const res = r.data;
+        return res?.data ? res.data : Array.isArray(res) ? res : [];
+      }).catch(() => []) : Promise.resolve([]),
     ]).then(([att, enrolled, payments]) => {
       setRecAttendance(att);
       setEnrolledStudents(enrolled);
       setMonthPayments(payments);
     }).finally(() => setLoadingAtt(false));
-  }, [selectedRecordingId, recordings]);
+  }, [selectedRecordingId]);
 
   /* ─── Merge enrolled students + attendance + payments ─ */
 
@@ -305,6 +331,27 @@ export default function AdminAttendance() {
 
   const update = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
+  const openManualForm = (prefill?: Partial<typeof form>) => {
+    setShowForm(true);
+    setError('');
+    setSuccess('');
+    if (prefill) setForm(p => ({ ...p, ...prefill }));
+    // Lazy-load students for dropdown if not loaded yet
+    if (students.length === 0) {
+      api.get('/users/students', { params: { limit: 200 } }).then(r => {
+        const res = r.data;
+        setStudents(res?.data ? res.data : Array.isArray(res) ? res : []);
+      }).catch(() => {});
+    }
+    // Lazy-load recordings for dropdown if not loaded yet
+    if (recordings.length === 0) {
+      api.get('/recordings', { params: { limit: 200 } }).then(r => {
+        const res = r.data;
+        setRecordings(res?.data ? res.data : Array.isArray(res) ? res : []);
+      }).catch(() => {});
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(''); setSuccess(''); setLoading(true);
@@ -316,8 +363,9 @@ export default function AdminAttendance() {
       });
       setSuccess('Attendance recorded');
       // Reload attendance data
-      const r = await api.get('/attendance');
-      setRecords(r.data || []);
+      const r = await api.get('/attendance', { params: { limit: 200 } });
+      const res = r.data;
+      setRecords(res?.data ? res.data : Array.isArray(res) ? res : []);
       // Reload recording attendance if same recording is selected
       if (form.recordingId && form.recordingId === selectedRecordingId) {
         const att = await api.get(`/attendance/recording/${selectedRecordingId}`);
@@ -419,7 +467,7 @@ export default function AdminAttendance() {
             <button
               onClick={() => {
                 setForm({ studentId: row.userId, recordingId: selectedRecordingId, date: new Date().toISOString().split('T')[0] });
-                setShowForm(true); setError(''); setSuccess('');
+                openManualForm({ studentId: row.userId, recordingId: selectedRecordingId, date: new Date().toISOString().split('T')[0] });
               }}
               className="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-600 hover:bg-purple-100 transition"
               title="Mark attendance manually"
@@ -535,7 +583,7 @@ export default function AdminAttendance() {
           <h1 className="text-xl font-bold text-slate-800">Attendance</h1>
           <p className="text-slate-500 text-sm mt-0.5">{records.length} records · {sessions.length} sessions</p>
         </div>
-        <button onClick={() => { setShowForm(true); setError(''); setSuccess(''); setForm({ studentId: '', recordingId: selectedRecordingId || '', date: new Date().toISOString().split('T')[0] }); }}
+        <button onClick={() => { openManualForm({ studentId: '', recordingId: selectedRecordingId || '', date: new Date().toISOString().split('T')[0] }); }}
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 flex items-center gap-1.5">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
           Mark Attendance

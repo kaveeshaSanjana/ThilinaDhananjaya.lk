@@ -21,6 +21,25 @@
   --danger: 0 84% 60%;
 }
 
+.dark {
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --primary-glow: 225 73% 65%;
+  --accent: 32 95% 58%;
+  --accent-foreground: 0 0% 100%;
+  --background: 222 47% 7%;
+  --foreground: 210 40% 96%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 96%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+  --border: 217 33% 20%;
+  --ring: 217 91% 60%;
+  --success: 142 71% 50%;
+  --warning: 38 92% 55%;
+  --danger: 0 84% 65%;
+}
+
 * {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
@@ -136,6 +155,67 @@ body {
 .dark .border-slate-200,
 .dark .border-slate-300 {
   border-color: hsl(var(--border)) !important;
+}
+
+/* Dark mode text color overrides for hardcoded slate colors */
+.dark .text-slate-800,
+.dark .text-slate-900 {
+  color: hsl(var(--foreground)) !important;
+}
+.dark .text-slate-700 {
+  color: hsl(210 40% 90%) !important;
+}
+.dark .text-slate-600 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+.dark .text-slate-500 {
+  color: hsl(215 20% 60%) !important;
+}
+.dark .text-slate-400 {
+  color: hsl(215 20% 50%) !important;
+}
+/* Dark mode background overrides for common patterns */
+.dark .bg-slate-50 {
+  background-color: hsl(var(--muted)) !important;
+}
+.dark .bg-slate-100 {
+  background-color: hsl(217 33% 15%) !important;
+}
+.dark .bg-slate-200 {
+  background-color: hsl(217 33% 20%) !important;
+}
+/* Dark mode form inputs */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+/* Dark mode badge overrides */
+.dark .bg-green-100 { background-color: hsl(142 71% 15%) !important; }
+.dark .text-green-700 { color: hsl(142 71% 65%) !important; }
+.dark .bg-blue-100 { background-color: hsl(217 91% 15%) !important; }
+.dark .text-blue-700 { color: hsl(217 91% 65%) !important; }
+.dark .bg-amber-100 { background-color: hsl(38 92% 15%) !important; }
+.dark .text-amber-700,
+.dark .text-amber-600 { color: hsl(38 92% 65%) !important; }
+.dark .bg-purple-100 { background-color: hsl(270 50% 15%) !important; }
+.dark .text-purple-700 { color: hsl(270 50% 65%) !important; }
+.dark .bg-red-100 { background-color: hsl(0 84% 15%) !important; }
+.dark .text-red-600,
+.dark .text-red-500 { color: hsl(0 84% 65%) !important; }
+.dark .bg-red-50 { background-color: hsl(0 84% 12%) !important; }
+.dark .bg-blue-50 { background-color: hsl(217 91% 12%) !important; }
+.dark .bg-emerald-50 { background-color: hsl(142 71% 12%) !important; }
+.dark .bg-amber-50 { background-color: hsl(38 92% 12%) !important; }
+/* Dark modal overlays */
+.dark .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
 .dark table, .dark thead, .dark tbody, .dark tr, .dark th, .dark td {

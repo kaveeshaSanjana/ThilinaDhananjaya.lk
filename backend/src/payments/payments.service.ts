@@ -49,31 +49,52 @@ export class PaymentsService {
   async getPendingSlips() {
     return this.prisma.paymentSlip.findMany({
       where: { status: 'PENDING' },
-      include: {
+      select: {
+        id: true, type: true, slipUrl: true, amount: true, status: true,
+        adminNote: true, createdAt: true, paidDate: true,
         user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
+          select: {
+            id: true, email: true,
+            profile: { select: { fullName: true, instituteId: true } },
+          },
         },
-        month: { include: { class: true } },
+        month: {
+          select: {
+            id: true, name: true, year: true, month: true,
+            class: { select: { id: true, name: true, subject: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   /** Admin: list all slips with optional status/month filter */
-  async getAllSlips(status?: PaymentSlipStatus, monthId?: string) {
+  async getAllSlips(status?: PaymentSlipStatus, monthId?: string, page?: number, limit?: number) {
     const where: any = {};
     if (status) where.status = status;
     if (monthId) where.monthId = monthId;
-    return this.prisma.paymentSlip.findMany({
-      where,
-      include: {
-        user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
+
+    const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
+    const skip = page && page > 1 ? (page - 1) * take : 0;
+
+    const [data, total] = await Promise.all([
+      this.prisma.paymentSlip.findMany({
+        where,
+        include: {
+          user: {
+            include: { profile: { select: { fullName: true, instituteId: true } } },
+          },
+          month: { include: { class: { select: { id: true, name: true, subject: true } } } },
         },
-        month: { include: { class: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.paymentSlip.count({ where }),
+    ]);
+
+    return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   /** Admin: verify a slip — if MONTHLY, this unlocks the month for the student */
@@ -148,18 +169,24 @@ export class PaymentsService {
     // All students enrolled in this class
     const enrollments = await this.prisma.enrollment.findMany({
       where: { classId },
-      include: {
+      select: {
+        userId: true,
         user: {
-          include: {
+          select: {
+            id: true, email: true,
             profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true } },
           },
         },
       },
     });
 
-    // All payment slips for this month
+    // All payment slips for this month — only needed fields
     const slips = await this.prisma.paymentSlip.findMany({
       where: { monthId: month.id },
+      select: {
+        id: true, userId: true, status: true, type: true, slipUrl: true,
+        amount: true, paidDate: true, adminNote: true, createdAt: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
 

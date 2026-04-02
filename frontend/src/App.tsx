@@ -54,8 +54,8 @@ function AppRoutes() {
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <RegisterPage />} />
 
-      {/* Fullscreen recording player — outside Layout */}
-      <Route path="recording/:id" element={<ProtectedRoute><RecordingPlayerPage /></ProtectedRoute>} />
+      {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
+      <Route path="recording/:id" element={<RecordingPlayerPage />} />
 
       {/* Live lecture join — outside Layout */}
       <Route path="live/:token" element={<LiveJoinPage />} />
