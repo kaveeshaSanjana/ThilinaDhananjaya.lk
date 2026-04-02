@@ -56,7 +56,7 @@ function PaymentBadge({ month, classStatus, payments, user }: {
 }
 
 /** Live lecture card — prominent red/emerald card */
-function LiveLectureCard({ rec, onJoin }: { rec: any; onJoin: (rec: any) => void }) {
+function LiveLectureCard({ rec, onJoin, onWatch }: { rec: any; onJoin: (rec: any) => void; onWatch: (rec: any) => void }) {
   const isLive = rec.isLive && !rec.liveEndedAt;
   const hasEnded = !!rec.liveEndedAt;
   const hasTime = !!rec.liveStartedAt;
@@ -154,8 +154,8 @@ function LiveLectureCard({ rec, onJoin }: { rec: any; onJoin: (rec: any) => void
         </div>
 
         {/* Action button */}
-        <div className="mt-3 flex items-center gap-2">
-          {isLive ? (
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {isLive && (
             <button
               onClick={(e) => { e.stopPropagation(); onJoin(rec); }}
               className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-all shadow-md shadow-red-200 flex items-center justify-center gap-2"
@@ -166,15 +166,21 @@ function LiveLectureCard({ rec, onJoin }: { rec: any; onJoin: (rec: any) => void
               </span>
               Join Live Class
             </button>
-          ) : hasEnded && rec.videoUrl ? (
+          )}
+          {rec.videoUrl && (
             <button
-              onClick={(e) => { e.stopPropagation(); onJoin(rec); }}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+              onClick={(e) => { e.stopPropagation(); onWatch(rec); }}
+              className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                isLive
+                  ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                  : 'bg-slate-700 text-white hover:bg-slate-800'
+              }`}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
               Watch Recording
             </button>
-          ) : !hasEnded ? (
+          )}
+          {!isLive && !rec.videoUrl && !hasEnded && (
             <button
               onClick={(e) => { e.stopPropagation(); onJoin(rec); }}
               className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2"
@@ -182,7 +188,7 @@ function LiveLectureCard({ rec, onJoin }: { rec: any; onJoin: (rec: any) => void
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               Join Lecture
             </button>
-          ) : null}
+          )}
           {rec.materials && (
             <a href={rec.materials} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
               className="px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition flex items-center gap-1.5">
@@ -320,6 +326,11 @@ export default function ClassDetailPage() {
     }
   };
 
+  /** Handle watch recording for a lecture that has videoUrl */
+  const handleWatchRecording = (rec: any) => {
+    navigate(`/recording/${rec.id}`);
+  };
+
   /** Collect all live lectures across all months, sorted: live first, then upcoming, then ended */
   const liveLectures = useMemo(() => {
     const all: any[] = [];
@@ -383,7 +394,7 @@ export default function ClassDetailPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {liveLectures.map(rec => (
-              <LiveLectureCard key={rec.id} rec={rec} onJoin={handleJoinLive} />
+              <LiveLectureCard key={rec.id} rec={rec} onJoin={handleJoinLive} onWatch={handleWatchRecording} />
             ))}
           </div>
         </div>
@@ -476,7 +487,7 @@ export default function ClassDetailPage() {
                               </p>
                               <div className="grid gap-3 sm:grid-cols-2">
                                 {liveRecs.map((rec: any) => (
-                                  <LiveLectureCard key={rec.id} rec={rec} onJoin={handleJoinLive} />
+                                  <LiveLectureCard key={rec.id} rec={rec} onJoin={handleJoinLive} onWatch={handleWatchRecording} />
                                 ))}
                               </div>
                             </div>
