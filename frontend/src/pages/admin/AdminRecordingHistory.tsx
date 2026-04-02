@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
+import CropImageInput from '../../components/CropImageInput';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 import WelcomeMessageEditor from '../../components/WelcomeMessageEditor';
 
@@ -275,137 +276,148 @@ export default function AdminRecordingHistory() {
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
               <div>
-                <h2 className="font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'Add Recording'}</h2>
+                <h2 className="text-lg font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'Add Recording'}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">{editingRec ? 'Update recording details' : 'Add a new video recording'}</p>
               </div>
               <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-5 space-y-3">
+            <form onSubmit={handleSave} className="overflow-y-auto max-h-[80vh]">
+            <div className="p-6 space-y-5">
               {error && (
                 <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
                   <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                   <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Class</label>
-                  <select value={form.classId} onChange={e => { update('classId', e.target.value); update('monthId', ''); }} required
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-                    <option value="">Select class</option>
-                    {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Month</label>
-                  <select value={form.monthId} onChange={e => update('monthId', e.target.value)} required disabled={!form.classId}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50">
-                    <option value="">{form.classId ? 'Select month' : 'Select class first'}</option>
-                    {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
-                  <input type="text" value={form.title} onChange={e => update('title', e.target.value)} placeholder="e.g. Lesson 01" required
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Visibility</label>
-                  <select value={form.status} onChange={e => update('status', e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-                    {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Video URL</label>
-                <input type="text" value={form.videoUrl} onChange={e => update('videoUrl', e.target.value)} placeholder="https://..."
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Video Type</label>
-                  <select value={form.videoType} onChange={e => update('videoType', e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-                    <option value="">None</option>
-                    {VIDEO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white cursor-pointer w-full hover:border-blue-300 transition">
-                    <input type="checkbox" checked={form.isLive} onChange={e => update('isLive', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500/30" />
-                    <span className="text-sm text-slate-700 font-medium">Live Lecture</span>
-                    {form.isLive && <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-                  </label>
-                </div>
-              </div>
-              {form.isLive && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Live Meeting URL (Zoom/Meet/etc)</label>
-                  <input type="text" value={form.liveUrl} onChange={e => update('liveUrl', e.target.value)} placeholder="https://zoom.us/j/123..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Thumbnail URL</label>
-                <div className="space-y-2">
-                  <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={e => handleThumbnailFileChange(e.target.files?.[0])}
-                      />
-                      {uploadingThumbnail ? 'Uploading...' : 'Upload Thumbnail'}
-                    </label>
-                    <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+
+              {/* Classification */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Classification</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Class</label>
+                    <select value={form.classId} onChange={e => { update('classId', e.target.value); update('monthId', ''); }} required
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">Select class</option>
+                      {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
                   </div>
-                  {form.thumbnail && (
-                    <img src={form.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-slate-200" />
-                  )}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Month</label>
+                    <select value={form.monthId} onChange={e => update('monthId', e.target.value)} required disabled={!form.classId}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50">
+                      <option value="">{form.classId ? 'Select month' : 'Select class first'}</option>
+                      {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Title</label>
+                    <input type="text" value={form.title} onChange={e => update('title', e.target.value)} placeholder="e.g. Lesson 01" required
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Visibility</label>
+                    <select value={form.status} onChange={e => update('status', e.target.value)}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Video */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Video</p>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Topic</label>
-                  <input type="text" value={form.topic} onChange={e => update('topic', e.target.value)} placeholder="Topic name"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Video URL</label>
+                  <input type="text" value={form.videoUrl} onChange={e => update('videoUrl', e.target.value)} placeholder="https://..."
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Video Type</label>
+                    <select value={form.videoType} onChange={e => update('videoType', e.target.value)}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">None</option>
+                      {VIDEO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-white cursor-pointer w-full hover:border-blue-300 transition">
+                      <input type="checkbox" checked={form.isLive} onChange={e => update('isLive', e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500/30" />
+                      <span className="text-sm text-slate-700 font-medium">Live Lecture</span>
+                      {form.isLive && <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                    </label>
+                  </div>
+                </div>
+                {form.isLive && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Live Meeting URL (Zoom/Meet/etc)</label>
+                    <input type="text" value={form.liveUrl} onChange={e => update('liveUrl', e.target.value)} placeholder="https://zoom.us/j/123..."
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                )}
+              </div>
+
+              {/* Media */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Media</p>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Thumbnail URL</label>
+                  <div className="space-y-2">
+                    <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CropImageInput onFile={handleThumbnailFileChange} aspectRatio={16 / 9} loading={uploadingThumbnail} label="Upload Thumbnail" cropTitle="Crop Thumbnail" />
+                      <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                    </div>
+                    {form.thumbnail && <img src={form.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-slate-200" />}
+                  </div>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Details</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Topic</label>
+                    <input type="text" value={form.topic} onChange={e => update('topic', e.target.value)} placeholder="Topic name"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Icon</label>
+                    <input type="text" value={form.icon} onChange={e => update('icon', e.target.value)} placeholder="Icon name/URL"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Icon</label>
-                  <input type="text" value={form.icon} onChange={e => update('icon', e.target.value)} placeholder="Icon name/URL"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Description</label>
+                  <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Optional notes..." rows={3}
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
                 </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Materials (JSON or links)</label>
+                  <textarea value={form.materials} onChange={e => update('materials', e.target.value)} placeholder='e.g. ["https://file1.pdf"]' rows={3}
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                </div>
+                <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => update('welcomeMessage', v)} />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
-                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Optional notes..." rows={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Materials (JSON or links)</label>
-                <textarea value={form.materials} onChange={e => update('materials', e.target.value)} placeholder='e.g. ["https://file1.pdf"]' rows={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
-              </div>
-              <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => update('welcomeMessage', v)} />
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+
+              <div className="flex gap-2 pt-2 pb-2">
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingRec ? 'Save' : 'Add'}
                 </button>
               </div>
+            </div>
             </form>
           </div>
           </div>

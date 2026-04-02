@@ -601,60 +601,65 @@ export default function AdminAttendance() {
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
                 <div>
-                  <h2 className="font-bold text-slate-800">Mark Attendance</h2>
+                  <h2 className="text-lg font-bold text-slate-800">Mark Attendance</h2>
                   <p className="text-xs text-slate-400 mt-0.5">Manually record attendance for a student</p>
                 </div>
                 <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
-              <form onSubmit={handleSubmit} className="p-5 space-y-3">
+              <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[80vh]">
+              <div className="p-6 space-y-5">
                 {error && (
                   <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
                     <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                     <p className="text-sm text-red-600">{error}</p>
                   </div>
                 )}
-                {/* Student */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Student</label>
-                  <select value={form.studentId} onChange={e => update('studentId', e.target.value)} required
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-                    <option value="">Select student</option>
-                    {students.map((s: any) => <option key={s.id} value={s.id}>{s.profile?.fullName || s.email}</option>)}
-                  </select>
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Attendance Record</p>
+                  {/* Student */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Student</label>
+                    <select value={form.studentId} onChange={e => update('studentId', e.target.value)} required
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">Select student</option>
+                      {students.map((s: any) => <option key={s.id} value={s.id}>{s.profile?.fullName || s.email}</option>)}
+                    </select>
+                  </div>
+                  {/* Recording (optional, with optgroup) */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Recording <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <select value={form.recordingId} onChange={e => update('recordingId', e.target.value)}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">— No specific recording —</option>
+                      {recordingsByClassMonth.map((g) => (
+                        <optgroup key={g.label} label={g.label}>
+                          {g.recordings.map((r: any) => (
+                            <option key={r.id} value={r.id}>{r.title}{r.isLive ? ' [LIVE]' : ''}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Date */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Date</label>
+                    <input type="date" value={form.date} onChange={e => update('date', e.target.value)} required
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
                 </div>
-                {/* Recording (optional, with optgroup) */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Recording <span className="text-slate-400 font-normal">(optional)</span></label>
-                  <select value={form.recordingId} onChange={e => update('recordingId', e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-                    <option value="">— No specific recording —</option>
-                    {recordingsByClassMonth.map((g) => (
-                      <optgroup key={g.label} label={g.label}>
-                        {g.recordings.map((r: any) => (
-                          <option key={r.id} value={r.id}>{r.title}{r.isLive ? ' [LIVE]' : ''}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-                {/* Date */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date</label>
-                  <input type="date" value={form.date} onChange={e => update('date', e.target.value)} required
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                  <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                <div className="flex gap-2 pt-2 pb-2">
+                  <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                  <button type="submit" disabled={loading} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                     {loading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                     {loading ? 'Saving...' : 'Save'}
                   </button>
                 </div>
+              </div>
               </form>
             </div>
           </div>

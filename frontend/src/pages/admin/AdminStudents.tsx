@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadStudentAvatar } from '../../lib/imageUpload';
+import CropImageInput from '../../components/CropImageInput';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 const STUDENT_STATUSES = ['ACTIVE', 'INACTIVE', 'PENDING', 'OLD'];
@@ -283,99 +284,116 @@ export default function AdminStudents() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-5 space-y-3">
+            <form onSubmit={handleSave} className="overflow-y-auto max-h-[80vh]">
+            <div className="p-6 space-y-5">
               {error && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Account */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Account</p>
                 <div className="col-span-1 sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Full Name <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Full Name <span className="text-red-500">*</span></label>
                   <input type="text" value={form.fullName} onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))} placeholder="John Doe" required
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                 </div>
-                <div className="col-span-1 sm:col-span-2 space-y-2">
-                  <label className="block text-xs font-medium text-slate-600">Avatar</label>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Avatar</label>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={e => handleAvatarFileChange(e.target.files?.[0])}
-                      />
-                      {uploadingAvatar ? 'Uploading...' : 'Upload Avatar'}
-                    </label>
+                    <CropImageInput onFile={handleAvatarFileChange} aspectRatio={1} loading={uploadingAvatar} label="Upload Avatar" cropTitle="Crop Avatar" />
                     <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
                   </div>
-                  {form.avatarUrl && (
-                    <img src={form.avatarUrl} alt="Avatar preview" className="w-16 h-16 rounded-full object-cover border border-slate-200" />
-                  )}
+                  {form.avatarUrl && <img src={form.avatarUrl} alt="Avatar preview" className="w-16 h-16 rounded-full object-cover border border-slate-200" />}
                 </div>
                 {!editingStudent && (
-                  <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Email <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Email <span className="text-red-500">*</span></label>
                       <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="student@email.com" required
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                        className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Password <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Password <span className="text-red-500">*</span></label>
                       <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 chars" required
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                        className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
-                  </>
+                  </div>
                 )}
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                  <input type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="07X XXXX XXX"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">WhatsApp Phone</label>
-                  <input type="text" value={form.whatsappPhone} onChange={e => setForm(p => ({ ...p, whatsappPhone: e.target.value }))} placeholder="07X XXXX XXX"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
-                  <input type="text" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} placeholder="Home address"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">School</label>
-                  <input type="text" value={form.school} onChange={e => setForm(p => ({ ...p, school: e.target.value }))} placeholder="School name"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
-                  <input type="date" value={form.dateOfBirth} onChange={e => setForm(p => ({ ...p, dateOfBirth: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Occupation</label>
-                  <input type="text" value={form.occupation} onChange={e => setForm(p => ({ ...p, occupation: e.target.value }))} placeholder="Student / Other"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Guardian Name</label>
-                  <input type="text" value={form.guardianName} onChange={e => setForm(p => ({ ...p, guardianName: e.target.value }))} placeholder="Parent / Guardian"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Guardian Phone</label>
-                  <input type="text" value={form.guardianPhone} onChange={e => setForm(p => ({ ...p, guardianPhone: e.target.value }))} placeholder="07X XXXX XXX"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Relationship</label>
-                  <input type="text" value={form.relationship} onChange={e => setForm(p => ({ ...p, relationship: e.target.value }))} placeholder="e.g. Father, Mother"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+              </div>
+
+              {/* Contact */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Contact</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Phone</label>
+                    <input type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="07X XXXX XXX"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">WhatsApp Phone</label>
+                    <input type="text" value={form.whatsappPhone} onChange={e => setForm(p => ({ ...p, whatsappPhone: e.target.value }))} placeholder="07X XXXX XXX"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Address</label>
+                    <input type="text" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} placeholder="Home address"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving || uploadingAvatar} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+
+              {/* Personal */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Personal</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">School</label>
+                    <input type="text" value={form.school} onChange={e => setForm(p => ({ ...p, school: e.target.value }))} placeholder="School name"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Date of Birth</label>
+                    <input type="date" value={form.dateOfBirth} onChange={e => setForm(p => ({ ...p, dateOfBirth: e.target.value }))}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Occupation</label>
+                    <input type="text" value={form.occupation} onChange={e => setForm(p => ({ ...p, occupation: e.target.value }))} placeholder="Student / Other"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Guardian */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Guardian</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Guardian Name</label>
+                    <input type="text" value={form.guardianName} onChange={e => setForm(p => ({ ...p, guardianName: e.target.value }))} placeholder="Parent / Guardian"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Guardian Phone</label>
+                    <input type="text" value={form.guardianPhone} onChange={e => setForm(p => ({ ...p, guardianPhone: e.target.value }))} placeholder="07X XXXX XXX"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Relationship</label>
+                    <input type="text" value={form.relationship} onChange={e => setForm(p => ({ ...p, relationship: e.target.value }))} placeholder="e.g. Father, Mother"
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2 pb-2">
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                <button type="submit" disabled={saving || uploadingAvatar} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingStudent ? 'Save Changes' : 'Create Student'}
                 </button>
               </div>
+            </div>
             </form>
           </div>
           </div>

@@ -291,8 +291,8 @@ export default function AdminClassDetail() {
     </div>
   );
 
-  const inp = "w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
-  const label = "block text-xs font-medium text-slate-600 mb-1";
+  const inp = "w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+  const label = "block text-sm font-semibold text-slate-600 mb-1.5";
 
   return (
     <div className="space-y-5">
@@ -360,41 +360,46 @@ export default function AdminClassDetail() {
           {showMonthForm && createPortal(
             <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowMonthForm(false)}>
               <div className="min-h-full flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
                   <div>
-                    <h2 className="font-bold text-slate-800">{editingMonth ? 'Edit Month' : 'New Month'}</h2>
+                    <h2 className="text-lg font-bold text-slate-800">{editingMonth ? 'Edit Month' : 'New Month'}</h2>
                     <p className="text-xs text-slate-400 mt-0.5">{editingMonth ? 'Update month details' : 'Add a new month to organize recordings'}</p>
                   </div>
                   <button onClick={() => setShowMonthForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
-                <form onSubmit={saveMonth} className="p-5 space-y-3">
+                <form onSubmit={saveMonth} className="overflow-y-auto max-h-[80vh]">
+                <div className="p-6 space-y-5">
                   {monthError && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{monthError}</div>}
-                  <div><label className={label}>Month Name</label><input type="text" value={monthForm.name} onChange={e => setMonthForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. January 2025" required className={inp} /></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div><label className={label}>Year</label><input type="number" value={monthForm.year} onChange={e => setMonthForm(p => ({ ...p, year: e.target.value }))} required className={inp} /></div>
-                    <div>
-                      <label className={label}>Month</label>
-                      <select value={monthForm.month} onChange={e => setMonthForm(p => ({ ...p, month: e.target.value }))} className={inp}>
-                        {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={label}>Visibility</label>
-                      <select value={monthForm.status} onChange={e => setMonthForm(p => ({ ...p, status: e.target.value }))} className={inp}>
-                        {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
-                      </select>
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Month Details</p>
+                    <div><label className={label}>Month Name</label><input type="text" value={monthForm.name} onChange={e => setMonthForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. January 2025" required className={inp} /></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div><label className={label}>Year</label><input type="number" value={monthForm.year} onChange={e => setMonthForm(p => ({ ...p, year: e.target.value }))} required className={inp} /></div>
+                      <div>
+                        <label className={label}>Month</label>
+                        <select value={monthForm.month} onChange={e => setMonthForm(p => ({ ...p, month: e.target.value }))} className={inp}>
+                          {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={label}>Visibility</label>
+                        <select value={monthForm.status} onChange={e => setMonthForm(p => ({ ...p, status: e.target.value }))} className={inp}>
+                          {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-3 pt-2">
-                    <button type="button" onClick={() => setShowMonthForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                    <button type="submit" disabled={monthSaving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <div className="flex gap-3 pt-2 pb-2">
+                    <button type="button" onClick={() => setShowMonthForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                    <button type="submit" disabled={monthSaving} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                       {monthSaving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                       {monthSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
+                </div>
                 </form>
               </div>
               </div>
@@ -450,49 +455,60 @@ export default function AdminClassDetail() {
           {showRecForm && createPortal(
             <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowRecForm(false)}>
               <div className="min-h-full flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
                   <div>
-                    <h2 className="font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'New Recording'}</h2>
+                    <h2 className="text-lg font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'New Recording'}</h2>
                     <p className="text-xs text-slate-400 mt-0.5">{editingRec ? 'Update recording details' : 'Add a new recording to this class'}</p>
                   </div>
                   <button onClick={() => setShowRecForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
-                <form onSubmit={saveRec} className="p-5 space-y-3">
+                <form onSubmit={saveRec} className="overflow-y-auto max-h-[80vh]">
+                <div className="p-6 space-y-5">
                   {recError && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{recError}</div>}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className={label}>Month</label>
-                      <select value={recForm.monthId} onChange={e => setRecForm(p => ({ ...p, monthId: e.target.value }))} required className={inp}>
-                        <option value="">Select month</option>
-                        {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Details</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={label}>Month</label>
+                        <select value={recForm.monthId} onChange={e => setRecForm(p => ({ ...p, monthId: e.target.value }))} required className={inp}>
+                          <option value="">Select month</option>
+                          {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={label}>Visibility</label>
+                        <select value={recForm.status} onChange={e => setRecForm(p => ({ ...p, status: e.target.value }))} className={inp}>
+                          {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className={label}>Visibility</label>
-                      <select value={recForm.status} onChange={e => setRecForm(p => ({ ...p, status: e.target.value }))} className={inp}>
-                        {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
-                      </select>
+                    <div><label className={label}>Title</label><input type="text" value={recForm.title} onChange={e => setRecForm(p => ({ ...p, title: e.target.value }))} required className={inp} placeholder="e.g. Lesson 01" /></div>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Video</p>
+                    <div><label className={label}>Video URL</label><input type="text" value={recForm.videoUrl} onChange={e => setRecForm(p => ({ ...p, videoUrl: e.target.value }))} required className={inp} placeholder="https://..." /></div>
+                    <div><label className={label}>Thumbnail URL</label><input type="text" value={recForm.thumbnail} onChange={e => setRecForm(p => ({ ...p, thumbnail: e.target.value }))} className={inp} placeholder="https://..." /></div>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Meta</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div><label className={label}>Topic</label><input type="text" value={recForm.topic} onChange={e => setRecForm(p => ({ ...p, topic: e.target.value }))} className={inp} placeholder="Topic name" /></div>
+                      <div><label className={label}>Icon</label><input type="text" value={recForm.icon} onChange={e => setRecForm(p => ({ ...p, icon: e.target.value }))} className={inp} placeholder="Icon name/URL" /></div>
                     </div>
+                    <div><label className={label}>Description</label><textarea value={recForm.description} onChange={e => setRecForm(p => ({ ...p, description: e.target.value }))} className={inp + " resize-none"} rows={3} placeholder="Optional notes..." /></div>
+                    <div><label className={label}>Materials (JSON or links)</label><textarea value={recForm.materials} onChange={e => setRecForm(p => ({ ...p, materials: e.target.value }))} className={inp + " resize-none"} rows={3} placeholder='e.g. ["https://file1.pdf"]' /></div>
                   </div>
-                  <div><label className={label}>Title</label><input type="text" value={recForm.title} onChange={e => setRecForm(p => ({ ...p, title: e.target.value }))} required className={inp} placeholder="e.g. Lesson 01" /></div>
-                  <div><label className={label}>Video URL</label><input type="text" value={recForm.videoUrl} onChange={e => setRecForm(p => ({ ...p, videoUrl: e.target.value }))} required className={inp} placeholder="https://..." /></div>
-                  <div><label className={label}>Thumbnail URL</label><input type="text" value={recForm.thumbnail} onChange={e => setRecForm(p => ({ ...p, thumbnail: e.target.value }))} className={inp} placeholder="https://..." /></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><label className={label}>Topic</label><input type="text" value={recForm.topic} onChange={e => setRecForm(p => ({ ...p, topic: e.target.value }))} className={inp} placeholder="Topic name" /></div>
-                    <div><label className={label}>Icon</label><input type="text" value={recForm.icon} onChange={e => setRecForm(p => ({ ...p, icon: e.target.value }))} className={inp} placeholder="Icon name/URL" /></div>
-                  </div>
-                  <div><label className={label}>Description</label><textarea value={recForm.description} onChange={e => setRecForm(p => ({ ...p, description: e.target.value }))} className={inp + " resize-none"} rows={2} placeholder="Optional notes..." /></div>
-                  <div><label className={label}>Materials (JSON or links)</label><textarea value={recForm.materials} onChange={e => setRecForm(p => ({ ...p, materials: e.target.value }))} className={inp + " resize-none"} rows={2} placeholder='e.g. ["https://file1.pdf"]' /></div>
-                  <div className="flex gap-3 pt-2">
-                    <button type="button" onClick={() => setShowRecForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                    <button type="submit" disabled={recSaving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <div className="flex gap-3 pt-2 pb-2">
+                    <button type="button" onClick={() => setShowRecForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                    <button type="submit" disabled={recSaving} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                       {recSaving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                       {recSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
+                </div>
                 </form>
               </div>
               </div>
