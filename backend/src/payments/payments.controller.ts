@@ -53,7 +53,7 @@ export class PaymentsController {
   @Roles('ADMIN')
   @Patch(':id/verify')
   verifySlip(@Param('id') id: string, @Body() body: AdminNoteDto) {
-    return this.paymentsService.verifySlip(id, body.adminNote);
+    return this.paymentsService.verifySlip(id, body.adminNote, body.paidDate);
   }
 
   /** Admin: reject slip */
@@ -74,8 +74,6 @@ export class PaymentsController {
 
   /**
    * Admin: Get all enrolled students for a class+month with payment status.
-   * Each student shows: PAID | LATE | PENDING | UNPAID
-   * Also includes a summary count.
    * GET /api/payments/class/:classId/month/:monthId
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -86,6 +84,17 @@ export class PaymentsController {
     @Param('monthId') monthId: string,
   ) {
     return this.paymentsService.getClassMonthPaymentStatus(classId, monthId);
+  }
+
+  /**
+   * Admin: Same as above but only needs the monthId — no classId required.
+   * GET /api/payments/month/:monthId
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('month/:monthId')
+  getMonthPaymentStatus(@Param('monthId') monthId: string) {
+    return this.paymentsService.getMonthPaymentStatus(monthId);
   }
 
   /**
@@ -106,6 +115,7 @@ export class PaymentsController {
       monthId,
       body.status,
       body.adminNote,
+      body.paidDate,
     );
   }
 }

@@ -14,6 +14,15 @@ export class PaymentsService {
     reason?: string;
     slipUrl: string;
   }) {
+    // Resolve the class monthlyFee to auto-fill amount
+    const month = await this.prisma.month.findUnique({
+      where: { id: data.monthId },
+      include: { class: { select: { monthlyFee: true } } },
+    });
+    if (!month) throw new NotFoundException('Month not found');
+
+    const amount = month.class.monthlyFee ?? null;
+
     return this.prisma.paymentSlip.create({
       data: {
         userId: data.userId,
@@ -21,6 +30,7 @@ export class PaymentsService {
         type: data.type,
         reason: data.reason,
         slipUrl: data.slipUrl,
+        amount,
       },
       include: { month: { include: { class: true } } },
     });
@@ -67,30 +77,30 @@ export class PaymentsService {
   }
 
   /** Admin: verify a slip — if MONTHLY, this unlocks the month for the student */
-  async verifySlip(slipId: string, adminNote?: string) {
-    const slip = await this.prisma.paymentSlip.findUnique({ where: { id: slipId } });
+  async verifySlip(slipId: string, adminNote?: string, paidDate?: string) {
+    const slip = await this.prisma.paymentSlip.findUnique({
+      where: { id: slipId },
+      include: { month: { include: { class: { select: { monthlyFee: true } } } } },
+    });
     if (!slip) throw new NotFoundException('Payment slip not found');
+
+    // Use existing amount if already set, otherwise pull from class.monthlyFee
+    const amount = slip.amount ?? slip.month.class.monthlyFee ?? null;
+    const resolvedPaidDate = paidDate ? new Date(paidDate) : new Date();
 
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: {
-        status: 'VERIFIED',
-        adminNote,
-      },
-      include: { month: { include: { class: true } }, user: true },
+      data: { status: 'VERIFIED', adminNote, amount, paidDate: resolvedPaidDate },
+      include: { month: { include: { class: true } }, user: { include: { profile: true } } },
     });
-    // Note: No extra "unlock" table needed — the Access Resolver checks for
-    // VERIFIED MONTHLY payment on-the-fly when filtering recordings.
   }
 
   /** Admin: reject a slip */
   async rejectSlip(slipId: string, adminNote?: string) {
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: {
-        status: 'REJECTED',
-        adminNote,
-      },
+      data: { status: 'REJECTED', adminNote },
+      include: { month: { include: { class: true } } },
     });
   }
 
@@ -114,6 +124,26 @@ export class PaymentsService {
       include: { class: { select: { id: true, name: true, subject: true } } },
     });
     if (!month) throw new NotFoundException('Month not found for this class');
+    return this.buildPaymentStatusResult(month);
+  }
+
+  /**
+   * Admin: Same as above but only requires monthId — classId is resolved automatically.
+   */
+  async getMonthPaymentStatus(monthId: string) {
+    const month = await this.prisma.month.findUnique({
+      where: { id: monthId },
+      include: { class: { select: { id: true, name: true, subject: true } } },
+    });
+    if (!month) throw new NotFoundException('Month not found');
+    return this.buildPaymentStatusResult(month);
+  }
+
+  private async buildPaymentStatusResult(month: {
+    id: string; name: string; year: number; month: number; classId: string;
+    class: { id: string; name: string; subject: string | null };
+  }) {
+    const { classId } = month;
 
     // All students enrolled in this class
     const enrollments = await this.prisma.enrollment.findMany({
@@ -129,7 +159,7 @@ export class PaymentsService {
 
     // All payment slips for this month
     const slips = await this.prisma.paymentSlip.findMany({
-      where: { monthId },
+      where: { monthId: month.id },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -169,6 +199,8 @@ export class PaymentsService {
               status: slip.status,
               type: slip.type,
               slipUrl: slip.slipUrl,
+              amount: slip.amount,
+              paidDate: slip.paidDate,
               adminNote: slip.adminNote,
               createdAt: slip.createdAt,
             }
@@ -179,6 +211,7 @@ export class PaymentsService {
     return {
       class: month.class,
       month: { id: month.id, name: month.name, year: month.year, month: month.month },
+      monthlyFee: (month.class as any).monthlyFee ?? null,
       students,
       summary: {
         total: students.length,
@@ -201,6 +234,7 @@ export class PaymentsService {
     monthId: string,
     status: 'PAID' | 'LATE' | 'UNPAID',
     adminNote?: string,
+    paidDate?: string,
   ) {
     // Verify user and month exist
     const [user, month] = await Promise.all([
@@ -225,6 +259,8 @@ export class PaymentsService {
     }
 
     const slipStatus = status === 'PAID' ? 'VERIFIED' : 'LATE';
+    const amount = (month as any).class?.monthlyFee ?? null;
+    const resolvedPaidDate = paidDate ? new Date(paidDate) : new Date();
 
     // Find the most recent slip for this student+month
     const existingSlip = await this.prisma.paymentSlip.findFirst({
@@ -235,7 +271,7 @@ export class PaymentsService {
     if (existingSlip) {
       const updated = await this.prisma.paymentSlip.update({
         where: { id: existingSlip.id },
-        data: { status: slipStatus, adminNote },
+        data: { status: slipStatus, adminNote, amount: existingSlip.amount ?? amount, paidDate: resolvedPaidDate },
         include: { month: { include: { class: true } } },
       });
       return { paymentStatus: status, slip: updated };
@@ -248,6 +284,8 @@ export class PaymentsService {
         monthId,
         type: 'MONTHLY',
         slipUrl: 'MANUAL_ENTRY',
+        amount,
+        paidDate: resolvedPaidDate,
         status: slipStatus,
         adminNote: adminNote ?? `Manually marked as ${status} by admin`,
       },

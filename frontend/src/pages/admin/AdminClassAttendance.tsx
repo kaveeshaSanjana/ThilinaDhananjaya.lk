@@ -34,12 +34,15 @@ interface PaymentOverviewStudent {
     status: string;
     type?: string;
     slipUrl?: string;
+    amount?: number | null;
+    paidDate?: string | null;
     adminNote?: string | null;
     createdAt?: string;
   } | null;
 }
 
 interface PaymentOverview {
+  monthlyFee?: number | null;
   summary: { total: number; paid: number; late: number; pending: number; unpaid: number };
   students: PaymentOverviewStudent[];
 }
@@ -222,40 +225,15 @@ export default function AdminClassAttendance() {
       .catch(() => setYearRecords([]));
   }, [selectedClassId, viewYear, tab]);
 
-  /* ─── Load payment months ───────────────────────── */
+  /* ─── Load payment months + overview ───────────────── */
 
-  useEffect(() => {
-    if (!selectedClassId || tab !== 'payments') return;
-    api.get(`/classes/${selectedClassId}/months`)
-      .then(r => {
-        const months = (r.data || []) as PaymentMonth[];
-        setPaymentMonths(months);
-        if (months.length === 0) {
-          setPaymentMonthId('');
-          setPaymentOverview(null);
-          setPaymentError('No months found for this class');
-          return;
-        }
-        setPaymentError('');
-        setPaymentMonthId(prev => {
-          const existsInThisClass = months.some(m => m.id === prev);
-          return existsInThisClass ? prev : months[months.length - 1].id;
-        });
-      })
-      .catch(() => {
-        setPaymentMonths([]);
-        setPaymentMonthId('');
-        setPaymentOverview(null);
-        setPaymentError('Failed to load class months');
-      });
-  }, [selectedClassId, tab]);
+  const paymentClassRef = useRef('');
 
-  const loadPaymentOverview = useCallback(async () => {
-    if (!selectedClassId || !paymentMonthId || tab !== 'payments') return;
+  const loadPaymentOverview = useCallback(async (classId: string, monthId: string) => {
     setPaymentLoading(true);
     setPaymentError('');
     try {
-      const { data } = await api.get(`/payments/class/${selectedClassId}/month/${paymentMonthId}`);
+      const { data } = await api.get(`/payments/class/${classId}/month/${monthId}`);
       setPaymentOverview(data || null);
     } catch (err: any) {
       setPaymentOverview(null);
@@ -263,11 +241,35 @@ export default function AdminClassAttendance() {
     } finally {
       setPaymentLoading(false);
     }
-  }, [selectedClassId, paymentMonthId, tab]);
+  }, []);
 
   useEffect(() => {
-    loadPaymentOverview();
-  }, [loadPaymentOverview]);
+    if (!selectedClassId || tab !== 'payments') return;
+    paymentClassRef.current = selectedClassId;
+    setPaymentOverview(null);
+    setPaymentMonthId('');
+    setPaymentMonths([]);
+    setPaymentLoading(true);
+    setPaymentError('');
+    api.get(`/classes/${selectedClassId}/months`)
+      .then(async r => {
+        const months = (r.data || []) as PaymentMonth[];
+        setPaymentMonths(months);
+        if (months.length === 0) {
+          setPaymentError('No months found for this class');
+          setPaymentLoading(false);
+          return;
+        }
+        const lastMonth = months[months.length - 1];
+        setPaymentMonthId(lastMonth.id);
+        await loadPaymentOverview(selectedClassId, lastMonth.id);
+      })
+      .catch(() => {
+        setPaymentMonths([]);
+        setPaymentError('Failed to load class months');
+        setPaymentLoading(false);
+      });
+  }, [selectedClassId, tab, loadPaymentOverview]);
 
   /* ─── Toast auto-dismiss ───────────────────────── */
 
@@ -422,7 +424,7 @@ export default function AdminClassAttendance() {
     try {
       await api.patch(`/payments/student/${userId}/month/${paymentMonthId}/status`, { status, adminNote: '' });
       setToast({ type: 'success', msg: `Payment marked as ${status}` });
-      await loadPaymentOverview();
+      await loadPaymentOverview(paymentClassRef.current, paymentMonthId);
     } catch (err: any) {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Failed to update payment status' });
     } finally {
@@ -661,6 +663,27 @@ export default function AdminClassAttendance() {
         ),
       },
       {
+        id: 'amount',
+        label: 'Amount (LKR)',
+        minWidth: 110,
+        align: 'right',
+        render: (student) => {
+          const amt = student.slip?.amount ?? paymentOverview?.monthlyFee;
+          return <span className="text-xs font-mono text-slate-600">{amt != null ? `Rs. ${Number(amt).toLocaleString()}` : '—'}</span>;
+        },
+      },
+      {
+        id: 'paidDate',
+        label: 'Paid Date',
+        minWidth: 110,
+        align: 'center',
+        render: (student) => (
+          <span className="text-xs text-slate-500">
+            {student.slip?.paidDate ? new Date(student.slip.paidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+          </span>
+        ),
+      },
+      {
         id: 'slip',
         label: 'Slip',
         minWidth: 110,
@@ -676,7 +699,7 @@ export default function AdminClassAttendance() {
         align: 'right',
         render: (student) => (
           <div className="flex flex-wrap justify-end gap-1.5">
-            {student.paymentStatus === 'UNPAID' && (
+            {(student.paymentStatus === 'UNPAID' || student.paymentStatus === 'LATE') && (
               <button
                 onClick={() => setStudentPaymentStatus(student.userId, 'PAID')}
                 disabled={!!paymentUpdatingId}
@@ -734,7 +757,7 @@ export default function AdminClassAttendance() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
-        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning • Payments</p>
+        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
       </div>
 
       {/* Class Selector + Date Controls */}
@@ -770,7 +793,6 @@ export default function AdminClassAttendance() {
           { key: 'mark' as TabKey, label: 'Mark Attendance' },
           { key: 'monthly' as TabKey, label: 'Monthly' },
           { key: 'yearly' as TabKey, label: 'Yearly' },
-          { key: 'payments' as TabKey, label: 'Payments' },
         ]).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex-1 px-4 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
@@ -1020,7 +1042,7 @@ export default function AdminClassAttendance() {
             <div className="flex flex-wrap items-center gap-3">
               <select
                 value={paymentMonthId}
-                onChange={e => setPaymentMonthId(e.target.value)}
+                onChange={e => { setPaymentMonthId(e.target.value); if (e.target.value) loadPaymentOverview(paymentClassRef.current, e.target.value); }}
                 className={`${selectCls} min-w-[220px]`}
               >
                 <option value="">Select Month...</option>

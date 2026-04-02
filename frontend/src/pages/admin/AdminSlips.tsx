@@ -1,27 +1,199 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
+type SlipsTab = 'online' | 'physical';
+
+interface ClassItem {
+  id: string;
+  name: string;
+  subject?: string;
+  monthlyFee?: number;
+}
+
+interface PaymentMonth {
+  id: string;
+  name: string;
+  year: number;
+  month: number;
+}
+
+interface PaymentOverviewStudent {
+  userId: string;
+  email: string;
+  profile?: {
+    fullName?: string;
+    instituteId?: string;
+    avatarUrl?: string | null;
+    phone?: string;
+  };
+  paymentStatus: 'PAID' | 'LATE' | 'PENDING' | 'UNPAID';
+  slip?: {
+    id: string;
+    status: string;
+    type?: string;
+    slipUrl?: string;
+    amount?: number | null;
+    paidDate?: string | null;
+    adminNote?: string | null;
+    createdAt?: string;
+  } | null;
+}
+
+interface PaymentOverview {
+  monthlyFee?: number | null;
+  summary: {
+    total: number;
+    paid: number;
+    late: number;
+    pending: number;
+    unpaid: number;
+  };
+  students: PaymentOverviewStudent[];
+}
+
+const PHYSICAL_PAY_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  PAID: { label: 'Paid', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+  LATE: { label: 'Late', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+  PENDING: { label: 'Pending', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+  UNPAID: { label: 'Unpaid', color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
+};
+
 export default function AdminSlips() {
+  const [tab, setTab] = useState<SlipsTab>('online');
+
+  // Online payments (slip upload approvals)
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('PENDING');
   const [preview, setPreview] = useState<any>(null);
   const [actingId, setActingId] = useState<string | null>(null);
 
+  // Physical class payments
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [paymentMonths, setPaymentMonths] = useState<PaymentMonth[]>([]);
+  const [paymentMonthId, setPaymentMonthId] = useState('');
+  const [paymentOverview, setPaymentOverview] = useState<PaymentOverview | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [payFilter, setPayFilter] = useState<'all' | 'PAID' | 'LATE' | 'PENDING' | 'UNPAID'>('all');
+  const [paymentUpdatingId, setPaymentUpdatingId] = useState('');
+  const [physicalVerifyModal, setPhysicalVerifyModal] = useState<{
+    userId: string;
+    studentName: string;
+    status: 'PAID' | 'LATE' | 'UNPAID';
+    adminNote: string;
+    paidDate: string;
+  } | null>(null);
+
+  const currentClassId = useRef('');
+  const overviewCache = useRef<Record<string, PaymentOverview>>({});
+
   const load = () => { setLoading(true); api.get('/payments/all').then(r => setPayments(r.data)).catch(() => {}).finally(() => setLoading(false)); };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get('/classes').then(r => setClasses(r.data || [])).catch(() => {});
+  }, []);
 
   const act = async (id: string, status: 'VERIFIED' | 'REJECTED') => {
     setActingId(id);
-    if (status === 'VERIFIED') await api.patch(`/payments/${id}/verify`, {}).catch(() => {});
+    if (status === 'VERIFIED') await api.patch(`/payments/${id}/verify`, { paidDate: new Date().toISOString().split('T')[0] }).catch(() => {});
     else await api.patch(`/payments/${id}/reject`, {}).catch(() => {});
     setActingId(null); load();
   };
 
   const filtered = payments.filter(p => filter === 'ALL' || p.status === filter);
   const counts = { PENDING: payments.filter(p => p.status === 'PENDING').length, VERIFIED: payments.filter(p => p.status === 'VERIFIED').length, REJECTED: payments.filter(p => p.status === 'REJECTED').length };
+
+  const fetchOverview = async (classId: string, monthId: string, forceRefresh = false) => {
+    const cacheKey = `${classId}:${monthId}`;
+    if (!forceRefresh && overviewCache.current[cacheKey]) {
+      setPaymentOverview(overviewCache.current[cacheKey]);
+      setPaymentLoading(false);
+      return;
+    }
+    setPaymentLoading(true);
+    setPaymentError('');
+    try {
+      const { data } = await api.get(`/payments/class/${classId}/month/${monthId}`);
+      overviewCache.current[cacheKey] = data || null;
+      setPaymentOverview(data || null);
+    } catch (err: any) {
+      setPaymentOverview(null);
+      setPaymentError(err.response?.data?.message || 'Failed to load payment overview');
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  // Single effect: fetches months then overview in one go
+  useEffect(() => {
+    if (!selectedClassId || tab !== 'physical') return;
+    currentClassId.current = selectedClassId;
+    setPaymentOverview(null);
+    setPaymentMonthId('');
+    setPaymentMonths([]);
+    setPaymentLoading(true);
+    setPaymentError('');
+    api.get(`/classes/${selectedClassId}/months`)
+      .then(async r => {
+        const months = (r.data || []) as PaymentMonth[];
+        setPaymentMonths(months);
+        if (months.length === 0) {
+          setPaymentError('No months found for this class');
+          setPaymentLoading(false);
+          return;
+        }
+        const lastMonth = months[months.length - 1];
+        setPaymentMonthId(lastMonth.id);
+        await fetchOverview(selectedClassId, lastMonth.id);
+      })
+      .catch(() => {
+        setPaymentMonths([]);
+        setPaymentError('Failed to load class months');
+        setPaymentLoading(false);
+      });
+  }, [selectedClassId, tab]);
+
+  const setStudentPaymentStatus = async (userId: string, status: 'PAID' | 'LATE' | 'UNPAID', adminNote = '', paidDate = '') => {
+    if (!paymentMonthId) return;
+    setPaymentUpdatingId(`${userId}:${status}`);
+    try {
+      await api.patch(`/payments/student/${userId}/month/${paymentMonthId}/status`, {
+        status,
+        adminNote,
+        ...(paidDate ? { paidDate } : {}),
+      });
+      // Force refresh from API and update cache
+      await fetchOverview(currentClassId.current, paymentMonthId, true);
+    } catch {
+      setPaymentError('Failed to update payment status');
+    } finally {
+      setPaymentUpdatingId('');
+    }
+  };
+
+  const filteredPhysicalStudents = (paymentOverview?.students || []).filter(student => {
+    if (payFilter !== 'all' && student.paymentStatus !== payFilter) return false;
+    if (!paymentSearch.trim()) return true;
+    const q = paymentSearch.toLowerCase();
+    return (
+      (student.profile?.fullName || '').toLowerCase().includes(q) ||
+      (student.profile?.instituteId || '').toLowerCase().includes(q) ||
+      (student.email || '').toLowerCase().includes(q)
+    );
+  });
+
+  const physicalCounts = {
+    all: paymentOverview?.summary?.total || 0,
+    PAID: paymentOverview?.summary?.paid || 0,
+    LATE: paymentOverview?.summary?.late || 0,
+    PENDING: paymentOverview?.summary?.pending || 0,
+    UNPAID: paymentOverview?.summary?.unpaid || 0,
+  };
 
   const statusBadge = (s: string) => {
     const map: Record<string, string> = {
@@ -87,12 +259,131 @@ export default function AdminSlips() {
     },
   ];
 
+  const physicalColumns: readonly StickyColumn<PaymentOverviewStudent>[] = [
+    {
+      id: 'fullName',
+      label: 'Full Name',
+      minWidth: 160,
+      render: (student) => (
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-[9px]">
+              {(student.profile?.fullName || student.email || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+          </div>
+          <span className="font-medium text-xs text-slate-800 truncate">{student.profile?.fullName || '—'}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'instituteId',
+      label: 'Institute ID',
+      minWidth: 120,
+      render: (student) => (
+        <span className="text-xs font-mono text-slate-500">{student.profile?.instituteId || '—'}</span>
+      ),
+    },
+    {
+      id: 'phone',
+      label: 'Phone',
+      minWidth: 130,
+      render: (student) => (
+        <span className="text-xs text-slate-500">{student.profile?.phone || '—'}</span>
+      ),
+    },
+    {
+      id: 'email',
+      label: 'Email',
+      minWidth: 180,
+      render: (student) => (
+        <span className="text-xs text-slate-500">{student.email || '—'}</span>
+      ),
+    },
+    {
+      id: 'paymentStatus',
+      label: 'Payment Status',
+      minWidth: 120,
+      align: 'center',
+      render: (student) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${PHYSICAL_PAY_CFG[student.paymentStatus]?.bg || PHYSICAL_PAY_CFG.UNPAID.bg} ${PHYSICAL_PAY_CFG[student.paymentStatus]?.color || PHYSICAL_PAY_CFG.UNPAID.color}`}>
+          {PHYSICAL_PAY_CFG[student.paymentStatus]?.label || student.paymentStatus}
+        </span>
+      ),
+    },
+    {
+      id: 'amount',
+      label: 'Amount (LKR)',
+      minWidth: 110,
+      align: 'right',
+      render: (student) => {
+        const amt = student.slip?.amount ?? paymentOverview?.monthlyFee;
+        return <span className="text-xs font-mono text-slate-600">{amt != null ? `Rs. ${Number(amt).toLocaleString()}` : '—'}</span>;
+      },
+    },
+    {
+      id: 'paidDate',
+      label: 'Paid Date',
+      minWidth: 110,
+      align: 'center',
+      render: (student) => (
+        <span className="text-xs text-slate-500">
+          {student.slip?.paidDate ? new Date(student.slip.paidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      minWidth: 140,
+      align: 'right',
+      render: (student) => (
+        <div className="flex justify-end">
+          {(student.paymentStatus === 'LATE' || student.paymentStatus === 'UNPAID') && (
+            <button
+              onClick={() => setPhysicalVerifyModal({
+                userId: student.userId,
+                studentName: student.profile?.fullName || student.email,
+                status: 'PAID',
+                adminNote: '',
+                paidDate: new Date().toISOString().split('T')[0],
+              })}
+              disabled={!!paymentUpdatingId}
+              className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              Verify
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const selectedClass = classes.find(c => c.id === selectedClassId);
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-slate-800">Payment Slips</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Review and verify student payment submissions</p>
+        <p className="text-slate-500 text-sm mt-0.5">Review online payment slips and manage physical class payments</p>
       </div>
+
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
+        {([
+          { key: 'online' as const, label: 'Online' },
+          { key: 'physical' as const, label: 'Physical' },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${tab === t.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'online' ? (
+        <>
 
       {/* Stat chips */}
       <div className="flex flex-wrap gap-3">
@@ -162,6 +453,186 @@ export default function AdminSlips() {
           />
         )}
       </div>
+
+        </>
+      ) : (
+        <>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+            <div className="flex flex-wrap gap-3 items-center">
+              <select
+                value={selectedClassId}
+                onChange={(e) => {
+                  setSelectedClassId(e.target.value);
+                  setPaymentSearch('');
+                  setPayFilter('all');
+                }}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 min-w-[220px]"
+              >
+                <option value="">Select Class...</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}{c.subject ? ` — ${c.subject}` : ''}</option>
+                ))}
+              </select>
+
+              <select
+                value={paymentMonthId}
+                onChange={e => { setPaymentMonthId(e.target.value); if (e.target.value) fetchOverview(currentClassId.current, e.target.value); }}
+                disabled={!selectedClassId || paymentMonths.length === 0}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 min-w-[220px] disabled:opacity-50"
+              >
+                <option value="">Select Month...</option>
+                {paymentMonths.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+
+              <input
+                type="text"
+                value={paymentSearch}
+                onChange={e => setPaymentSearch(e.target.value)}
+                placeholder="Search by student name, ID or email..."
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 w-full sm:w-72"
+              />
+
+              {(paymentSearch || payFilter !== 'all') && (
+                <button
+                  onClick={() => { setPaymentSearch(''); setPayFilter('all'); }}
+                  className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Clear Filters
+                </button>
+              )}
+
+              <span className="text-xs text-slate-500 ml-auto">
+                {filteredPhysicalStudents.length} student{filteredPhysicalStudents.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full overflow-x-auto">
+              {([
+                { key: 'all' as const, label: 'All', count: physicalCounts.all },
+                { key: 'PAID' as const, label: 'Paid', count: physicalCounts.PAID },
+                { key: 'LATE' as const, label: 'Late', count: physicalCounts.LATE },
+                { key: 'PENDING' as const, label: 'Pending', count: physicalCounts.PENDING },
+                { key: 'UNPAID' as const, label: 'Unpaid', count: physicalCounts.UNPAID },
+              ]).map(item => (
+                <button
+                  key={item.key}
+                  onClick={() => setPayFilter(item.key)}
+                  className={`flex-1 min-w-[96px] px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+                    payFilter === item.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                    payFilter === item.key ? 'bg-slate-100 text-slate-700' : 'bg-white/70 text-slate-500 border border-slate-200'
+                  }`}>
+                    {item.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!selectedClassId ? (
+            <div className="text-center py-12 text-slate-500"><p className="font-medium">Select a class to view physical payments</p></div>
+          ) : !paymentMonthId ? (
+            <div className="text-center py-12 text-slate-500"><p className="font-medium">Select a month to view payment statuses</p></div>
+          ) : paymentLoading ? (
+            <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
+          ) : paymentError ? (
+            <div className="text-center py-12 text-red-600"><p className="font-medium">{paymentError}</p></div>
+          ) : !paymentOverview ? (
+            <div className="text-center py-12 text-slate-500"><p className="font-medium">No payment data found</p></div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              {filteredPhysicalStudents.length === 0 ? (
+                <div className="text-center py-12 text-slate-500"><p className="font-medium">No students found</p></div>
+              ) : (
+                <StickyDataTable
+                  columns={physicalColumns}
+                  rows={filteredPhysicalStudents}
+                  getRowId={(row) => row.userId}
+                  tableHeight="calc(100vh - 380px)"
+                />
+              )}
+            </div>
+          )}
+
+          <p className="text-xs text-slate-500 text-center">
+            Payment status for {selectedClass?.name || 'selected class'} • {paymentOverview?.monthlyFee != null ? `Rs. ${Number(paymentOverview.monthlyFee).toLocaleString()}/month` : selectedClass?.monthlyFee ? `Rs. ${selectedClass.monthlyFee}/month` : 'No fee set'}
+          </p>
+
+          {physicalVerifyModal && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPhysicalVerifyModal(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                  <div>
+                    <p className="font-bold text-slate-800">Update Payment Status</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{physicalVerifyModal.studentName}</p>
+                  </div>
+                  <button onClick={() => setPhysicalVerifyModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Select Status</label>
+                    <select
+                      value={physicalVerifyModal.status}
+                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, status: e.target.value as 'PAID' | 'LATE' | 'UNPAID' } : prev)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"
+                    >
+                      <option value="PAID">Paid</option>
+                      <option value="LATE">Late</option>
+                      <option value="UNPAID">Unpaid</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Date</label>
+                    <input
+                      type="date"
+                      value={physicalVerifyModal.paidDate}
+                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, paidDate: e.target.value } : prev)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="font-normal text-slate-400">(optional)</span></label>
+                    <input
+                      type="text"
+                      value={physicalVerifyModal.adminNote}
+                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, adminNote: e.target.value } : prev)}
+                      placeholder="e.g. Cash paid in person"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+                  <button
+                    onClick={() => setPhysicalVerifyModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const current = physicalVerifyModal;
+                      if (!current) return;
+                      await setStudentPaymentStatus(current.userId, current.status, current.adminNote, current.paidDate);
+                      setPhysicalVerifyModal(null);
+                    }}
+                    disabled={!!paymentUpdatingId}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-green-700 transition disabled:opacity-50"
+                  >
+                    {paymentUpdatingId ? 'Saving...' : 'Save Status'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          , document.body)}
+        </>
+      )}
     </div>
   );
 }

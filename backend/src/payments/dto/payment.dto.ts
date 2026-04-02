@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDateString } from 'class-validator';
 
 enum PaymentType {
   MONTHLY = 'MONTHLY',
@@ -33,6 +33,10 @@ export class AdminNoteDto {
   @IsOptional()
   @IsString()
   adminNote?: string;
+
+  @IsOptional()
+  @IsDateString()
+  paidDate?: string;
 }
 
 export class SetPaymentStatusDto {
@@ -42,4 +46,8 @@ export class SetPaymentStatusDto {
   @IsOptional()
   @IsString()
   adminNote?: string;
+
+  @IsOptional()
+  @IsDateString()
+  paidDate?: string;
 }

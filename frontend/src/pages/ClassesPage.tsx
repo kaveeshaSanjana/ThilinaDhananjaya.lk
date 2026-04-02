@@ -97,13 +97,13 @@ export default function ClassesPage() {
           {search && <p className="text-[hsl(var(--muted-foreground)/0.6)] text-xs mt-1">Try a different search term</p>}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(280px,320px))] justify-center sm:justify-start gap-4">
           {filtered.map((cls: any, idx: number) => {
             const grad = gradients[idx % gradients.length];
             const badge = statusConfig[cls.status];
             return (
-              <div key={cls.id} className="relative flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-3 hover:shadow-xl">
-                <div className={`relative mx-3 -mt-1 h-12 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${grad}`}>
+              <div key={cls.id} className="relative w-full max-w-[320px] flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg">
+                <div className={`relative mx-3 mt-3 h-24 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${grad}`}>
                   {cls.thumbnail ? (
                     <img src={cls.thumbnail} alt={cls.name} className="w-full h-full object-cover" />
                   ) : (
@@ -112,22 +112,22 @@ export default function ClassesPage() {
                     </div>
                   )}
                   {badge && (
-                    <span className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${badge.class}`}>
+                    <span className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide ${badge.class}`}>
                       {badge.label}
                     </span>
                   )}
                 </div>
 
-                <div className="p-2.5">
-                  <h5 className="mb-1 block text-base font-semibold leading-snug tracking-normal text-slate-900 truncate">
+                <div className="p-4">
+                  <h5 className="mb-1.5 block text-lg font-semibold leading-snug tracking-normal text-slate-900 truncate">
                     {cls.name}
                   </h5>
-                  <p className="block text-[11px] font-light leading-relaxed text-slate-600 line-clamp-1 min-h-[18px]">
+                  <p className="block text-sm font-light leading-relaxed text-slate-600 line-clamp-2 min-h-[40px]">
                     {cls.description || 'No description available for this class yet.'}
                   </p>
-                  <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <div className="mt-2 flex items-center justify-between text-xs">
                     {cls.subject ? (
-                      <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold uppercase tracking-wide">
+                      <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold uppercase tracking-wide truncate max-w-[58%]">
                         {cls.subject}
                       </span>
                     ) : <span className="text-slate-400">No subject</span>}
@@ -139,10 +139,10 @@ export default function ClassesPage() {
                   </div>
                 </div>
 
-                <div className="p-2 pt-0">
+                <div className="p-4 pt-0 mt-auto">
                   <Link
                     to={`/classes/${cls.id}`}
-                    className="block w-full select-none rounded-lg bg-blue-500 py-1 px-3 text-center align-middle text-[9px] font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/40 focus:opacity-[0.85] focus:shadow-none active:opacity-[0.85] active:shadow-none"
+                    className="block w-full select-none rounded-lg bg-blue-500 py-2.5 px-4 text-center align-middle text-[11px] font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/35 focus:opacity-[0.85] focus:shadow-none active:opacity-[0.85] active:shadow-none"
                   >
                     Select Class
                   </Link>

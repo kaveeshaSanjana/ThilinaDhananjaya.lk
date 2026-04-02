@@ -226,6 +226,8 @@ model PaymentSlip {
   type      PaymentType
   reason    String?           // Required if type = OTHER
   slipUrl   String            // URL from S3/GCS/Drive signed upload
+  amount    Float?            // Amount paid (auto-filled from class.monthlyFee)
+  paidDate  DateTime?         // Date the payment was made (set by admin on verify)
   status    PaymentSlipStatus @default(PENDING)
   adminNote String?
   createdAt DateTime          @default(now())
