@@ -72,7 +72,10 @@ export class ClassesService {
     return this.prisma.month.findMany({
       where: { classId },
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
-      include: { _count: { select: { recordings: true } } },
+      include: {
+        _count: { select: { recordings: true } },
+        recordings: { orderBy: { order: 'asc' } },
+      },
     });
   }
 

@@ -279,8 +279,6 @@ export default function ClassDetailPage() {
   const [classData, setClassData] = useState<any>(null);
   const [months, setMonths] = useState<any[]>([]);
   const [expandedMonthId, setExpandedMonthId] = useState<string | null>(null);
-  const [recordingsMap, setRecordingsMap] = useState<Record<string, any[]>>({});
-  const [loadingRecs, setLoadingRecs] = useState<Record<string, boolean>>({});
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -307,17 +305,8 @@ export default function ClassDetailPage() {
     fetchData();
   }, [id, token]);
 
-  const toggleMonth = async (monthId: string) => {
-    if (expandedMonthId === monthId) { setExpandedMonthId(null); return; }
-    setExpandedMonthId(monthId);
-    if (recordingsMap[monthId]) return;
-    setLoadingRecs(prev => ({ ...prev, [monthId]: true }));
-    try {
-      const res = await api.get(`/recordings/by-month/${monthId}`);
-      setRecordingsMap(prev => ({ ...prev, [monthId]: res.data || [] }));
-    } catch {
-      setRecordingsMap(prev => ({ ...prev, [monthId]: [] }));
-    } finally { setLoadingRecs(prev => ({ ...prev, [monthId]: false })); }
+  const toggleMonth = (monthId: string) => {
+    setExpandedMonthId(prev => prev === monthId ? null : monthId);
   };
 
   /** Handle join for live lectures */
@@ -331,11 +320,11 @@ export default function ClassDetailPage() {
     }
   };
 
-  /** Collect all live lectures across loaded months, sorted: live first, then upcoming, then ended */
+  /** Collect all live lectures across all months, sorted: live first, then upcoming, then ended */
   const liveLectures = useMemo(() => {
     const all: any[] = [];
-    for (const recs of Object.values(recordingsMap)) {
-      for (const r of recs) {
+    for (const m of months) {
+      for (const r of (m.recordings || [])) {
         if (r.isLive || r.liveToken || r.liveUrl) all.push(r);
       }
     }
@@ -350,7 +339,7 @@ export default function ClassDetailPage() {
       if (aEnded && !bEnded) return 1;
       return 0;
     });
-  }, [recordingsMap]);
+  }, [months]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -421,13 +410,12 @@ export default function ClassDetailPage() {
           <div className="divide-y divide-slate-100">
             {months.map((m) => {
               const isExpanded = expandedMonthId === m.id;
-              const recs = recordingsMap[m.id];
-              const isLoadingRecs = loadingRecs[m.id];
-              const recCount = m._count?.recordings ?? 0;
+              const recs: any[] = m.recordings || [];
+              const recCount = m._count?.recordings ?? recs.length;
 
               // Separate live and regular recordings
-              const liveRecs = (recs || []).filter((r: any) => r.isLive || r.liveToken || r.liveUrl);
-              const regularRecs = (recs || []).filter((r: any) => !(r.isLive || r.liveToken || r.liveUrl));
+              const liveRecs = recs.filter((r: any) => r.isLive || r.liveToken || r.liveUrl);
+              const regularRecs = recs.filter((r: any) => !(r.isLive || r.liveToken || r.liveUrl));
               const hasLive = liveRecs.some((r: any) => r.isLive && !r.liveEndedAt);
 
               return (
@@ -470,11 +458,7 @@ export default function ClassDetailPage() {
                   {/* Expanded content */}
                   {isExpanded && (
                     <div className="bg-slate-50/50 border-t border-slate-100 px-4 sm:px-5 py-4">
-                      {isLoadingRecs ? (
-                        <div className="flex items-center justify-center py-8">
-                          <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                        </div>
-                      ) : !recs || recs.length === 0 ? (
+                      {recs.length === 0 ? (
                         <div className="py-8 text-center">
                           <svg className="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
