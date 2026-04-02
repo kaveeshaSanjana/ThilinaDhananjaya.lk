@@ -27,6 +27,10 @@ interface VideoPlayerProps {
   title: string;
   onSessionChange?: (state: SessionState) => void;
   endSessionRef?: React.MutableRefObject<(() => Promise<{ ok: boolean; error?: string; session: SessionState }>) | null>;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  userAvatar?: string;
 }
 
 function getYouTubeId(url: string): string | null {
@@ -54,9 +58,30 @@ function makeEvent(type: string, videoTime: number): SessionEvent {
   return { type, videoTime, wallTime: new Date().toISOString() };
 }
 
-export default function VideoPlayer({ recordingId, videoUrl, title, onSessionChange, endSessionRef }: VideoPlayerProps) {
+export default function VideoPlayer({ recordingId, videoUrl, title, onSessionChange, endSessionRef, userId, userName, userEmail, userAvatar }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [heartbeatInterval, setHeartbeatInterval] = useState(120);
+
+  // Watermark: random position + cycle one field at a time
+  const [wmPos, setWmPos] = useState({ top: 12, left: 8 });
+  const wmFields = [userId, userName, userEmail].filter(Boolean) as string[];
+  const [wmIndex, setWmIndex] = useState(0);
+  const [wmVisible, setWmVisible] = useState(true);
+  useEffect(() => {
+    if (wmFields.length === 0) return;
+    const cycle = () => {
+      // Fade out, then pick random next field + position, fade in
+      setWmVisible(false);
+      setTimeout(() => {
+        setWmIndex(Math.floor(Math.random() * wmFields.length));
+        setWmPos({ top: 8 + Math.random() * 72, left: 4 + Math.random() * 58 });
+        setWmVisible(true);
+      }, 600);
+    };
+    const t = setInterval(cycle, 4000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wmFields.length]);
 
   const sessionIdRef = useRef<string | null>(null);
   const watchedSinceLastHbRef = useRef(0);
@@ -371,20 +396,71 @@ export default function VideoPlayer({ recordingId, videoUrl, title, onSessionCha
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-black flex-1 min-h-0 flex items-center justify-center">
+      <div className="bg-black flex-1 min-h-0 flex items-center justify-center relative">
         {youtubeId ? (
           <div className="relative w-full h-full">
             <div id={`yt-player-${recordingId}`} className="absolute inset-0 w-full h-full" aria-label={title} />
+            {/* Watermark overlay — one field at a time */}
+            {wmFields.length > 0 && (
+              <div
+                className="absolute pointer-events-none select-none z-10"
+                style={{
+                  top: `${wmPos.top}%`,
+                  left: `${wmPos.left}%`,
+                  opacity: wmVisible ? 0.55 : 0,
+                  transition: 'opacity 0.6s ease-in-out',
+                }}
+              >
+                <span className="text-white font-mono font-semibold drop-shadow-lg" style={{ fontSize: '15px', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                  {wmFields[wmIndex]}
+                </span>
+              </div>
+            )}
           </div>
         ) : (
-          <video ref={videoRef} src={videoUrl} title={title} controls className="w-full h-full max-h-full" controlsList="nodownload" />
+          <div className="relative w-full h-full flex items-center justify-center">
+            <video ref={videoRef} src={videoUrl} title={title} controls className="w-full h-full max-h-full" controlsList="nodownload" />
+            {/* Watermark overlay — one field at a time */}
+            {wmFields.length > 0 && (
+              <div
+                className="absolute pointer-events-none select-none z-10"
+                style={{
+                  top: `${wmPos.top}%`,
+                  left: `${wmPos.left}%`,
+                  opacity: wmVisible ? 0.55 : 0,
+                  transition: 'opacity 0.6s ease-in-out',
+                }}
+              >
+                <span className="text-white font-mono font-semibold drop-shadow-lg" style={{ fontSize: '15px', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                  {wmFields[wmIndex]}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fixed user badge — bottom-left of video */}
+        {(userAvatar || userName) && (
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full pointer-events-none select-none"
+            style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+            {userAvatar ? (
+              <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full object-cover ring-2 ring-white/20 flex-shrink-0" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0" style={{ fontSize: '12px' }}>
+                {userName?.charAt(0)?.toUpperCase() || '?'}
+              </div>
+            )}
+            {userName && (
+              <span className="text-white font-medium truncate max-w-[140px]" style={{ fontSize: '12px' }}>{userName}</span>
+            )}
+          </div>
         )}
       </div>
 
       {/* Session status bar */}
       <div className="bg-slate-900 px-4 py-2 flex items-center justify-between text-xs flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex w-2 h-2 rounded-full ${
+          <span className={`inline-flex w-2 h-2 rounded-full flex-shrink-0 ${
             sessionStatus === 'watching' ? 'bg-green-500 animate-pulse' :
             sessionStatus === 'paused' ? 'bg-yellow-500' :
             sessionStatus === 'ended' ? 'bg-slate-500' : 'bg-slate-600'

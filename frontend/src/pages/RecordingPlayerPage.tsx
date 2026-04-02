@@ -20,7 +20,7 @@ export default function RecordingPlayerPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [failedSession, setFailedSession] = useState<SessionState | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [typingDone, setTypingDone] = useState(false);
@@ -270,6 +270,10 @@ export default function RecordingPlayerPage() {
             videoUrl={recording.videoUrl}
             title={recording.title}
             endSessionRef={endSessionRef}
+            userId={user?.id}
+            userName={user?.profile?.fullName || user?.email}
+            userEmail={user?.email}
+            userAvatar={user?.profile?.avatarUrl}
           />
         </div>
 
