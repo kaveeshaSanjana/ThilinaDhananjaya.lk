@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import api from '../../lib/api';
 import { uploadClassThumbnail, uploadImage } from '../../lib/imageUpload';
+import CropImageInput from '../../components/CropImageInput';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
@@ -162,8 +163,8 @@ export default function AdminClasses() {
           <div className="min-h-full flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800">Class Details</h2>
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+                <h2 className="text-lg font-bold text-slate-800">Class Details</h2>
                 <button onClick={() => setViewClass(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -224,7 +225,7 @@ export default function AdminClasses() {
                   <button onClick={() => { setViewClass(null); openEdit(viewClass); }} className="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-semibold hover:bg-blue-100 transition">
                     Edit
                   </button>
-                  <Link to={`/admin/classes/${viewClass.id}`} onClick={() => setViewClass(null)} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition text-center">
+                  <Link to={`/admin/classes/${viewClass.id}`} onClick={() => setViewClass(null)} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition text-center">
                     Manage
                   </Link>
                 </div>
@@ -238,57 +239,55 @@ export default function AdminClasses() {
       {showForm && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 rounded-t-2xl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
               <div>
-                <h2 className="font-bold text-slate-800">{editingClass ? 'Edit Class' : 'New Class'}</h2>
+                <h2 className="text-lg font-bold text-slate-800">{editingClass ? 'Edit Class' : 'New Class'}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">{editingClass ? 'Update class details' : 'Create a new class'}</p>
               </div>
               <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-5 space-y-3">
+            <form onSubmit={handleSave} className="p-6 space-y-4">
               {error && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Class Name</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Class Name</label>
                 <input type="text" value={form.name} onChange={e => update('name', e.target.value)} placeholder="e.g. Physics Grade 12" required
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Subject</label>
                 <input type="text" value={form.subject} onChange={e => update('subject', e.target.value)} placeholder="e.g. Physics"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Monthly Fee (Rs.)</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Monthly Fee (Rs.)</label>
                   <input type="number" value={form.monthlyFee} onChange={e => update('monthlyFee', e.target.value)} placeholder="e.g. 2500"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Visibility</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Visibility</label>
                   <select value={form.status} onChange={e => update('status', e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
                     {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Thumbnail URL</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Thumbnail URL</label>
                 <div className="space-y-2">
                   <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={e => handleThumbnailFileChange(e.target.files?.[0])}
-                      />
-                      {uploadingThumbnail ? 'Uploading...' : 'Upload Image'}
-                    </label>
+                    <CropImageInput
+                      onFile={handleThumbnailFileChange}
+                      aspectRatio={16 / 9}
+                      loading={uploadingThumbnail}
+                      label="Upload Image"
+                      cropTitle="Crop Thumbnail"
+                    />
                     <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
                   </div>
                   {form.thumbnail && (
@@ -297,28 +296,28 @@ export default function AdminClasses() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Intro Video URL</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Intro Video URL</label>
                 <input type="text" value={form.introVideoUrl} onChange={e => update('introVideoUrl', e.target.value)} placeholder="https://..."
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Description</label>
                 <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Brief class description..." rows={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Vision</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Vision</label>
                 <textarea value={form.vision} onChange={e => update('vision', e.target.value)} placeholder="Class vision..." rows={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Mission</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Mission</label>
                 <textarea value={form.mission} onChange={e => update('mission', e.target.value)} placeholder="Class mission..." rows={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                  className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                   {saving ? 'Saving...' : editingClass ? 'Save Changes' : 'Create Class'}
                 </button>

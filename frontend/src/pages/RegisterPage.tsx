@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { uploadImage } from '../lib/imageUpload';
+import CropImageInput from '../components/CropImageInput';
 
 const steps = ['Account', 'Profile', 'Confirm'];
 
@@ -139,15 +140,13 @@ export default function RegisterPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Profile photo <span className="text-slate-400 ml-1 text-xs font-normal">(optional)</span></label>
                 <div className="flex items-center flex-wrap gap-2">
-                  <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      className="hidden"
-                      onChange={e => handleAvatarUpload(e.target.files?.[0])}
-                    />
-                    {uploadingAvatar ? 'Uploading...' : 'Upload Avatar'}
-                  </label>
+                  <CropImageInput
+                    onFile={handleAvatarUpload}
+                    aspectRatio={1}
+                    loading={uploadingAvatar}
+                    label="Upload Avatar"
+                    cropTitle="Crop Profile Photo"
+                  />
                   <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
                 </div>
                 {avatarName && <p className="text-xs text-slate-500 mt-1.5">Selected: {avatarName}</p>}
