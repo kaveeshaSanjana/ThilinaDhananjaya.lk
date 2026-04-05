@@ -84,6 +84,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
   }, [wmFields.length]);
 
   const sessionIdRef = useRef<string | null>(null);
+  const ytPlayerRef = useRef<any>(null);
   const totalWatchedRef = useRef(0);
   const isPlayingRef = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,7 +155,8 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
   const endSessionBeacon = useCallback(() => {
     if (skipTracking || !sessionIdRef.current) return;
     const video = videoRef.current;
-    const videoPos = video ? video.currentTime : 0;
+    const yt = ytPlayerRef.current;
+    const videoPos = video ? video.currentTime : (yt?.getCurrentTime?.() || 0);
     pushEvent('tab_close', videoPos);
     const body = JSON.stringify({
       sessionId: sessionIdRef.current,
@@ -175,7 +177,8 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
     if (endSessionRef) {
       endSessionRef.current = async () => {
         const video = videoRef.current;
-        const pos = video ? video.currentTime : 0;
+        const yt = ytPlayerRef.current;
+        const pos = video ? video.currentTime : (yt?.getCurrentTime?.() || 0);
         if (tickIntervalRef.current) { clearInterval(tickIntervalRef.current); tickIntervalRef.current = null; }
         if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
         const result = await endSessionAsync(pos);
@@ -202,6 +205,30 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
   }, [clearIdleTimer, endSessionAsync]);
 
   // ─── Tick interval ──────────────────────────────────────
+
+  // ─── Periodic heartbeat — flush events to backend ───────
+
+  useEffect(() => {
+    if (skipTracking) return;
+    const HEARTBEAT_INTERVAL = 30_000; // 30 seconds
+    const hb = setInterval(async () => {
+      const sid = sessionIdRef.current;
+      if (!sid || pendingEventsRef.current.length === 0) return;
+      const video = videoRef.current;
+      const yt = ytPlayerRef.current;
+      const videoPos = video ? video.currentTime : (yt?.getCurrentTime?.() || 0);
+      try {
+        await api.post('/attendance/session/heartbeat', {
+          sessionId: sid,
+          videoPosition: videoPos,
+          watchedSec: Math.round(totalWatchedRef.current),
+          events: pendingEventsRef.current,
+        });
+        pendingEventsRef.current = [];
+      } catch { /* silent — events stay in buffer for next flush */ }
+    }, HEARTBEAT_INTERVAL);
+    return () => clearInterval(hb);
+  }, [skipTracking]);
 
   const youtubeId = getYouTubeId(videoUrl);
 
@@ -286,6 +313,7 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
         events: {
           onReady: () => {
             if (!mounted) return;
+            ytPlayerRef.current = ytPlayer;
             if (!skipTracking) {
               pushEvent('youtube_session_start', 0);
               api.post('/attendance/session/start', { recordingId, videoPosition: 0, events: pendingEventsRef.current })
@@ -297,10 +325,13 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
           },
           onStateChange: (event: any) => {
             if (!mounted) return;
+            const pos = ytPlayer?.getCurrentTime?.() || 0;
             if (event.data === 1) { // PLAYING
               ytIsPlaying = true;
               isPlayingRef.current = true;
+              pushEvent('play', pos);
               setSessionStatus('watching');
+              clearIdleTimer();
               if (!playInterval) {
                 playInterval = setInterval(() => {
                   if (!ytIsPlaying) return;
@@ -311,12 +342,16 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
             } else if (event.data === 2) { // PAUSED
               ytIsPlaying = false;
               isPlayingRef.current = false;
+              pushEvent('pause', pos);
               setSessionStatus('paused');
+              startIdleTimer();
             } else if (event.data === 0) { // ENDED
               ytIsPlaying = false;
               isPlayingRef.current = false;
+              pushEvent('video_ended', pos);
               setSessionStatus('ended');
               if (playInterval) { clearInterval(playInterval); playInterval = null; }
+              endSessionAsync(pos);
             }
           },
         },
@@ -356,8 +391,9 @@ export default function VideoPlayer({ recordingId, videoUrl, title, skipTracking
         );
       }
       if (ytPlayer?.destroy) { try { ytPlayer.destroy(); } catch { /* ignore */ } }
+      ytPlayerRef.current = null;
     };
-  }, [youtubeId, recordingId, pushEvent, skipTracking]);
+  }, [youtubeId, recordingId, pushEvent, skipTracking, clearIdleTimer, startIdleTimer, endSessionAsync]);
 
   return (
     <div className="flex flex-col h-full">

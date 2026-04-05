@@ -111,6 +111,13 @@ export class AccessResolverService {
   private async getUserAccessLevel(userId: string | undefined, classId: string, monthId: string): Promise<number> {
     if (!userId) return 0; // guest
 
+    // Check student profile status — only ACTIVE students get enrolled/paid access
+    const profile = await this.prisma.profile.findUnique({
+      where: { userId },
+      select: { status: true },
+    });
+    if (profile && profile.status !== 'ACTIVE') return 0; // INACTIVE/PENDING/OLD = guest level
+
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { userId_classId: { userId, classId } },
     });

@@ -636,20 +636,56 @@ export default function AdminRecordingHistory() {
                 /* ── Student Session Detail View ── */
                 <div className="flex-1 overflow-y-auto">
                   {/* Back button + student info */}
-                  <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-                    <button onClick={() => setSelectedStudent(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                    </button>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-bold text-[10px]">
-                        {(selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
-                      </span>
+                  <div className="px-6 py-3 bg-slate-50 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setSelectedStudent(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                      </button>
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white font-bold text-[10px]">
+                          {(selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-slate-800 text-sm">{selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || 'Unknown'}</p>
+                          {selectedStudent.user?.profile?.status && selectedStudent.user.profile.status !== 'ACTIVE' && (
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                              selectedStudent.user.profile.status === 'INACTIVE' ? 'bg-red-100 text-red-600 border-red-200' :
+                              selectedStudent.user.profile.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                              'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}>{selectedStudent.user.profile.status}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          {selectedStudent.user?.profile?.instituteId || '—'} · {selectedStudent.sessionCount} session{selectedStudent.sessionCount !== 1 ? 's' : ''} · {fmtDuration(selectedStudent.totalWatchedSec)} total
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">{selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || 'Unknown'}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {selectedStudent.user?.profile?.instituteId || '—'} · {selectedStudent.sessionCount} session{selectedStudent.sessionCount !== 1 ? 's' : ''} · {fmtDuration(selectedStudent.totalWatchedSec)} total
-                      </p>
+                    {/* Summary bar */}
+                    <div className="flex flex-wrap gap-2 mt-2 ml-10">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedStudent.attendanceStatus === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                        selectedStudent.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-100 text-amber-700' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {selectedStudent.attendanceStatus || 'NOT VIEWED'}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedStudent.paymentStatus === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
+                        selectedStudent.paymentStatus === 'FREE' ? 'bg-blue-100 text-blue-600' :
+                        selectedStudent.paymentStatus === 'PENDING' ? 'bg-amber-100 text-amber-600' :
+                        selectedStudent.paymentStatus === 'REJECTED' ? 'bg-red-100 text-red-600' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {selectedStudent.paymentStatus === 'VERIFIED' ? 'Paid' :
+                         selectedStudent.paymentStatus === 'FREE' ? 'Free' :
+                         selectedStudent.paymentStatus === 'PENDING' ? 'Pay Pending' :
+                         selectedStudent.paymentStatus === 'REJECTED' ? 'Pay Rejected' : 'Not Paid'}
+                      </span>
+                      {selectedStudent.enrolled && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Enrolled</span>}
+                      {!selectedStudent.enrolled && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">Not Enrolled</span>}
+                      {selectedStudent.liveJoinedAt && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">Live Joined</span>}
                     </div>
                   </div>
 
@@ -694,7 +730,10 @@ export default function AdminRecordingHistory() {
                                 <div className="relative pl-5 space-y-1.5">
                                   {/* Timeline line */}
                                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
-                                  {events.map((evt: any, ei: number) => {
+                                  {events.filter((evt: any) => {
+                                    const t = (evt.type || evt.event || '').toUpperCase();
+                                    return !t.includes('HEARTBEAT') && !t.includes('HB');
+                                  }).map((evt: any, ei: number) => {
                                     const evtType = (evt.type || evt.event || '').toUpperCase();
                                     const isPlay = evtType.includes('PLAY') || evtType.includes('START') || evtType.includes('RESUME');
                                     const isPause = evtType.includes('PAUSE');
@@ -702,13 +741,19 @@ export default function AdminRecordingHistory() {
                                     const isSeek = evtType.includes('SEEK');
                                     const isJoin = evtType.includes('JOIN');
                                     const dotColor = isPlay ? 'bg-green-400' : isPause ? 'bg-amber-400' : isEnd ? 'bg-red-400' : isSeek ? 'bg-blue-400' : isJoin ? 'bg-purple-400' : 'bg-slate-300';
+                                    const labelColor = isPlay ? 'text-green-700' : isPause ? 'text-amber-700' : isEnd ? 'text-red-600' : isSeek ? 'text-blue-600' : isJoin ? 'text-purple-600' : 'text-slate-600';
                                     const wallTime = evt.wallTime || evt.at || evt.timestamp;
+                                    const description = isPlay ? 'Started watching' :
+                                      isPause ? 'Paused video' :
+                                      isEnd ? 'Left / Ended' :
+                                      isSeek ? `Seeked to ${evt.videoTime != null ? fmtVideoPos(evt.videoTime) : '—'}` :
+                                      isJoin ? 'Joined live' : evtType || 'Event';
                                     return (
                                       <div key={ei} className="flex items-center gap-2.5 relative">
                                         <div className={`w-3.5 h-3.5 rounded-full border-2 border-white ${dotColor} flex-shrink-0 z-10 -ml-[7px]`} />
-                                        <span className="text-xs font-semibold text-slate-600 min-w-[70px]">{evtType || 'EVENT'}</span>
+                                        <span className={`text-xs font-semibold min-w-[90px] ${labelColor}`}>{description}</span>
                                         {evt.videoTime != null && (
-                                          <span className="text-[11px] text-slate-400 font-mono">@{fmtVideoPos(evt.videoTime)}</span>
+                                          <span className="text-[11px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">@{fmtVideoPos(evt.videoTime)}</span>
                                         )}
                                         {wallTime && (
                                           <span className="text-[11px] text-slate-400">{fmtTime(wallTime)}</span>
@@ -782,6 +827,18 @@ export default function AdminRecordingHistory() {
                           student.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-100 text-amber-700' :
                           student.attendanceStatus === 'MANUAL' ? 'bg-blue-100 text-blue-700' :
                           'bg-slate-100 text-slate-500';
+                        const profileStatus = student.user?.profile?.status;
+                        const profileColor =
+                          profileStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 border-green-200' :
+                          profileStatus === 'INACTIVE' ? 'bg-red-100 text-red-600 border-red-200' :
+                          profileStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                          profileStatus === 'OLD' ? 'bg-slate-100 text-slate-500 border-slate-200' : '';
+                        const payColor =
+                          student.paymentStatus === 'VERIFIED' ? 'text-emerald-600' :
+                          student.paymentStatus === 'PENDING' ? 'text-amber-500' :
+                          student.paymentStatus === 'REJECTED' ? 'text-red-500' :
+                          student.paymentStatus === 'FREE' ? 'text-blue-500' :
+                          'text-slate-400';
                         return (
                           <button
                             key={student.userId}
@@ -794,13 +851,27 @@ export default function AdminRecordingHistory() {
                               </span>
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <p className="text-sm font-semibold text-slate-800 truncate">{student.user?.profile?.fullName || student.user?.email || 'Unknown'}</p>
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${attColor}`}>
                                   {student.attendanceStatus || 'NOT VIEWED'}
                                 </span>
+                                {profileStatus && profileStatus !== 'ACTIVE' && (
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${profileColor}`}>
+                                    {profileStatus}
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-[11px] text-slate-400">{student.user?.profile?.instituteId || '—'}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-[11px] text-slate-400">{student.user?.profile?.instituteId || '—'}</p>
+                                <span className={`text-[10px] font-semibold ${payColor}`}>
+                                  {student.paymentStatus === 'VERIFIED' ? '● Paid' :
+                                   student.paymentStatus === 'FREE' ? '● Free' :
+                                   student.paymentStatus === 'PENDING' ? '● Pay Pending' :
+                                   student.paymentStatus === 'REJECTED' ? '● Pay Rejected' :
+                                   '● Not Paid'}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-4 flex-shrink-0">
                               <div className="text-right">

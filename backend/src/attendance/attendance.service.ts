@@ -289,7 +289,7 @@ export class AttendanceService {
     const [enrollments, attendances, sessions, payments] = await Promise.all([
       this.prisma.enrollment.findMany({
         where: { classId },
-        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, phone: true } } } } },
+        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, phone: true, status: true } } } } },
       }),
       this.prisma.attendance.findMany({ where: { recordingId } }),
       this.prisma.watchSession.findMany({ where: { recordingId }, orderBy: { startedAt: 'desc' } }),
@@ -362,7 +362,7 @@ export class AttendanceService {
     if (extraIds.size > 0) {
       const users = await this.prisma.user.findMany({
         where: { id: { in: [...extraIds] } },
-        include: { profile: { select: { fullName: true, instituteId: true, phone: true } } },
+        include: { profile: { select: { fullName: true, instituteId: true, phone: true, status: true } } },
       });
       const userMap = new Map(users.map(u => [u.id, u]));
       for (const uid of extraIds) {
@@ -425,7 +425,7 @@ export class AttendanceService {
       where: { id: sessionId },
       data: {
         videoEndPos: videoPosition,
-        totalWatchedSec: session.totalWatchedSec + watchedSec,
+        totalWatchedSec: Math.max(session.totalWatchedSec, watchedSec),
         endedAt: new Date(),
         events: mergedEvents,
       },
@@ -441,14 +441,16 @@ export class AttendanceService {
     const existingEvents = Array.isArray(session.events) ? session.events as any[] : [];
     const mergedEvents = events ? [...existingEvents, ...events] : existingEvents;
 
+    const finalWatched = Math.max(session.totalWatchedSec, watchedSec);
+
     // Also log END in attendance record
-    await this.logEnd(userId, session.recordingId, videoPosition, session.totalWatchedSec + watchedSec);
+    await this.logEnd(userId, session.recordingId, videoPosition, finalWatched);
 
     return this.prisma.watchSession.update({
       where: { id: sessionId },
       data: {
         videoEndPos: videoPosition,
-        totalWatchedSec: session.totalWatchedSec + watchedSec,
+        totalWatchedSec: finalWatched,
         endedAt: new Date(), status: 'ENDED',
         events: mergedEvents,
       },
@@ -464,14 +466,16 @@ export class AttendanceService {
     const existingEvents = Array.isArray(session.events) ? session.events as any[] : [];
     const mergedEvents = events ? [...existingEvents, ...events] : existingEvents;
 
+    const finalWatched = Math.max(session.totalWatchedSec, watchedSec);
+
     // Also log END in attendance record
-    await this.logEnd(session.userId, session.recordingId, videoPosition, session.totalWatchedSec + watchedSec);
+    await this.logEnd(session.userId, session.recordingId, videoPosition, finalWatched);
 
     return this.prisma.watchSession.update({
       where: { id: sessionId },
       data: {
         videoEndPos: videoPosition,
-        totalWatchedSec: session.totalWatchedSec + watchedSec,
+        totalWatchedSec: finalWatched,
         endedAt: new Date(), status: 'ENDED',
         events: mergedEvents,
       },

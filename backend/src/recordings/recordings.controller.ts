@@ -114,6 +114,13 @@ export class RecordingsController {
   @Post('live/:token/join')
   async joinLive(@Param('token') token: string, @Request() req: any) {
     const recording = await this.recordingsService.findByLiveToken(token);
+
+    // Check access — inactive/pending/old students are blocked
+    const canAccess = await this.accessResolver.canAccessRecording(recording.id, req.user.sub, req.user.role);
+    if (!canAccess) {
+      throw new ForbiddenException('You do not have access to this recording');
+    }
+
     // Mark live attendance
     await this.recordingsService.markLiveAttendance(req.user.sub, recording.id);
     return {
@@ -140,7 +147,7 @@ export class RecordingsController {
       title: recording.title,
       isLive: recording.isLive,
       liveEndedAt: recording.liveEndedAt,
-      videoUrl: recording.videoUrl,
+      hasVideo: !!recording.videoUrl,
       videoType: recording.videoType,
       className: recording.month?.class?.name,
       monthName: recording.month?.name,

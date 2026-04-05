@@ -173,7 +173,7 @@ export default function LiveJoinPage() {
                 Open Meeting
               </a>
             )}
-            {lecture.videoUrl && !lecture.isLive && (
+            {lecture.hasVideo && !lecture.isLive && (
               <button
                 onClick={() => navigate(`/recording/${lecture.id}`)}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition"
