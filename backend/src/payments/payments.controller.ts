@@ -3,7 +3,7 @@ import {
   UseGuards, Request,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { SubmitSlipDto, AdminNoteDto, SetPaymentStatusDto } from './dto/payment.dto';
+import { SubmitSlipDto, AdminNoteDto, VerifySlipDto, RejectSlipDto, SetPaymentStatusDto } from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -57,16 +57,16 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id/verify')
-  verifySlip(@Param('id') id: string, @Body() body: AdminNoteDto) {
-    return this.paymentsService.verifySlip(id, body.adminNote, body.paidDate);
+  verifySlip(@Param('id') id: string, @Body() body: VerifySlipDto) {
+    return this.paymentsService.verifySlip(id, body.transactionId, body.adminNote, body.paidDate);
   }
 
   /** Admin: reject slip */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id/reject')
-  rejectSlip(@Param('id') id: string, @Body() body: AdminNoteDto) {
-    return this.paymentsService.rejectSlip(id, body.adminNote);
+  rejectSlip(@Param('id') id: string, @Body() body: RejectSlipDto) {
+    return this.paymentsService.rejectSlip(id, body.rejectReason, body.adminNote);
   }
 
   /** Admin: payments for specific student */

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentType, PaymentSlipStatus } from '@prisma/client';
 
@@ -51,7 +51,7 @@ export class PaymentsService {
       where: { status: 'PENDING' },
       select: {
         id: true, type: true, slipUrl: true, amount: true, status: true,
-        adminNote: true, createdAt: true, paidDate: true,
+        adminNote: true, rejectReason: true, transactionId: true, createdAt: true, paidDate: true,
         user: {
           select: {
             id: true, email: true,
@@ -98,12 +98,28 @@ export class PaymentsService {
   }
 
   /** Admin: verify a slip — if MONTHLY, this unlocks the month for the student */
-  async verifySlip(slipId: string, adminNote?: string, paidDate?: string) {
+  async verifySlip(slipId: string, transactionId: string, adminNote?: string, paidDate?: string) {
     const slip = await this.prisma.paymentSlip.findUnique({
       where: { id: slipId },
-      include: { month: { include: { class: { select: { monthlyFee: true } } } } },
+      include: {
+        month: { include: { class: { select: { monthlyFee: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+      },
     });
     if (!slip) throw new NotFoundException('Payment slip not found');
+
+    // Check for duplicate transactionId
+    const existing = await this.prisma.paymentSlip.findFirst({
+      where: { transactionId, NOT: { id: slipId } },
+      include: { user: { include: { profile: { select: { fullName: true, instituteId: true } } } } },
+    });
+    if (existing) {
+      const name = existing.user?.profile?.fullName || existing.user?.email || 'Unknown';
+      const iid = existing.user?.profile?.instituteId || '';
+      throw new ConflictException(
+        `This transaction ID has already been used for ${name}${iid ? ` (${iid})` : ''}`,
+      );
+    }
 
     // Use existing amount if already set, otherwise pull from class.monthlyFee
     const amount = slip.amount ?? slip.month.class.monthlyFee ?? null;
@@ -111,16 +127,16 @@ export class PaymentsService {
 
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: { status: 'VERIFIED', adminNote, amount, paidDate: resolvedPaidDate },
+      data: { status: 'VERIFIED', transactionId, adminNote, amount, paidDate: resolvedPaidDate },
       include: { month: { include: { class: true } }, user: { include: { profile: true } } },
     });
   }
 
   /** Admin: reject a slip */
-  async rejectSlip(slipId: string, adminNote?: string) {
+  async rejectSlip(slipId: string, rejectReason: string, adminNote?: string) {
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: { status: 'REJECTED', adminNote },
+      data: { status: 'REJECTED', rejectReason, adminNote },
       include: { month: { include: { class: true } } },
     });
   }
@@ -185,7 +201,8 @@ export class PaymentsService {
       where: { monthId: month.id },
       select: {
         id: true, userId: true, status: true, type: true, slipUrl: true,
-        amount: true, paidDate: true, adminNote: true, createdAt: true,
+        amount: true, paidDate: true, adminNote: true, rejectReason: true,
+        transactionId: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });

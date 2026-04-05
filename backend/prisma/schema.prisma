@@ -232,18 +232,20 @@ model Enrollment {
 // ─── Payment Slip ────────────────────────────────────────
 
 model PaymentSlip {
-  id        String            @id @default(uuid())
-  userId    String
-  monthId   String
-  type      PaymentType
-  reason    String?           // Required if type = OTHER
-  slipUrl   String            @db.Text // URL from S3/GCS/Drive signed upload
-  amount    Float?            // Amount paid (auto-filled from class.monthlyFee)
-  paidDate  DateTime?         // Date the payment was made (set by admin on verify)
-  status    PaymentSlipStatus @default(PENDING)
-  adminNote String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  id            String            @id @default(uuid())
+  userId        String
+  monthId       String
+  type          PaymentType
+  reason        String?           // Required if type = OTHER
+  slipUrl       String            @db.Text // URL from S3/GCS/Drive signed upload
+  amount        Float?            // Amount paid (auto-filled from class.monthlyFee)
+  paidDate      DateTime?         // Date the payment was made (set by admin on verify)
+  transactionId String?           @unique  // Transaction/reference ID entered by admin on verify
+  status        PaymentSlipStatus @default(PENDING)
+  adminNote     String?
+  rejectReason  String?           @db.Text // Reason for rejection (required when rejecting)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)

@@ -79,6 +79,14 @@ export class AttendanceController {
     return this.attendanceService.getByUser(userId);
   }
 
+  /** Admin: aggregated student stats for a recording (sessions, watch time, etc.) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('recording/:recordingId/stats')
+  getRecordingStudentStats(@Param('recordingId') recordingId: string) {
+    return this.attendanceService.getRecordingStudentStats(recordingId);
+  }
+
   /** Admin: attendance for a recording */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

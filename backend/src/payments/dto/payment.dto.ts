@@ -39,6 +39,30 @@ export class AdminNoteDto {
   paidDate?: string;
 }
 
+export class VerifySlipDto {
+  @IsString()
+  @IsNotEmpty()
+  transactionId: string;
+
+  @IsOptional()
+  @IsString()
+  adminNote?: string;
+
+  @IsOptional()
+  @IsDateString()
+  paidDate?: string;
+}
+
+export class RejectSlipDto {
+  @IsString()
+  @IsNotEmpty()
+  rejectReason: string;
+
+  @IsOptional()
+  @IsString()
+  adminNote?: string;
+}
+
 export class SetPaymentStatusDto {
   @IsEnum(ManualPaymentStatus)
   status: ManualPaymentStatus;

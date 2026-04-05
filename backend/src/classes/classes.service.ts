@@ -48,7 +48,7 @@ export class ClassesService {
   async getRecordingsForClass(classId: string) {
     return this.prisma.recording.findMany({
       where: { month: { classId } },
-      include: { month: { select: { name: true, year: true, month: true, classId: true, class: { select: { name: true } } } } },
+      include: { month: { select: { id: true, name: true, year: true, month: true, classId: true, status: true, class: { select: { name: true, status: true } } } } },
       orderBy: [{ month: { year: 'desc' } }, { month: { month: 'desc' } }, { order: 'asc' }],
     });
   }
