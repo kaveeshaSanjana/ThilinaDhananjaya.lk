@@ -39,6 +39,13 @@ export default function AdminRecordingHistory() {
   const [copied, setCopied] = useState('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
+  // Watch History
+  const [watchHistoryRec, setWatchHistoryRec] = useState<any>(null);
+  const [watchHistoryData, setWatchHistoryData] = useState<any>(null);
+  const [watchHistoryLoading, setWatchHistoryLoading] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [watchSearch, setWatchSearch] = useState('');
+
   const load = () => { setLoading(true); Promise.all([
     api.get('/recordings', { params: { limit: 200 } }).then(r => {
       const res = r.data;
@@ -137,6 +144,37 @@ export default function AdminRecordingHistory() {
     } catch {}
   };
 
+  const handleViewWatchHistory = async (rec: any) => {
+    setWatchHistoryRec(rec);
+    setWatchHistoryData(null);
+    setSelectedStudent(null);
+    setWatchSearch('');
+    setWatchHistoryLoading(true);
+    try {
+      const res = await api.get(`/attendance/recording/${rec.id}/stats`);
+      setWatchHistoryData(res.data);
+    } catch {}
+    setWatchHistoryLoading(false);
+  };
+
+  const fmtDuration = (sec: number) => {
+    if (!sec || sec < 0) return '0s';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmtVideoPos = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this recording?')) return;
     await api.delete(`/recordings/${id}`).catch(() => {}); load();
@@ -213,7 +251,7 @@ export default function AdminRecordingHistory() {
     {
       id: 'actions',
       label: 'Actions',
-      minWidth: 340,
+      minWidth: 440,
       align: 'right',
       render: (rec) => (
         <div className="flex items-center justify-end gap-1 flex-wrap">
@@ -249,6 +287,10 @@ export default function AdminRecordingHistory() {
               Live Att.
             </button>
           )}
+          <button onClick={() => handleViewWatchHistory(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold hover:bg-indigo-100 transition">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Watch History
+          </button>
           <button onClick={() => handleDelete(rec.id)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             Del
@@ -562,6 +604,230 @@ export default function AdminRecordingHistory() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* Watch History Modal */}
+      {watchHistoryRec && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => { setWatchHistoryRec(null); setSelectedStudent(null); }}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+                <div>
+                  <h2 className="font-bold text-slate-800 text-lg">Watch History</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {watchHistoryRec.title}
+                    {watchHistoryData && ` — ${watchHistoryData.students?.length || 0} students`}
+                  </p>
+                </div>
+                <button onClick={() => { setWatchHistoryRec(null); setSelectedStudent(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              {watchHistoryLoading ? (
+                <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
+              ) : !watchHistoryData ? (
+                <div className="text-center py-16 text-slate-400">Failed to load watch history</div>
+              ) : selectedStudent ? (
+                /* ── Student Session Detail View ── */
+                <div className="flex-1 overflow-y-auto">
+                  {/* Back button + student info */}
+                  <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+                    <button onClick={() => setSelectedStudent(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white font-bold text-[10px]">
+                        {(selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">{selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || 'Unknown'}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {selectedStudent.user?.profile?.instituteId || '—'} · {selectedStudent.sessionCount} session{selectedStudent.sessionCount !== 1 ? 's' : ''} · {fmtDuration(selectedStudent.totalWatchedSec)} total
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    {selectedStudent.sessions.length === 0 ? (
+                      <p className="text-center text-sm text-slate-400 py-8">No session data recorded</p>
+                    ) : (
+                      selectedStudent.sessions.map((session: any, si: number) => {
+                        const events = Array.isArray(session.events) ? session.events : [];
+                        return (
+                          <div key={session.id} className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
+                            {/* Session header */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-slate-100/60">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                                  {si + 1}
+                                </span>
+                                <span className="text-sm font-semibold text-slate-700">
+                                  {fmtDate(session.startedAt)}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  {fmtTime(session.startedAt)}
+                                  {session.endedAt && ` → ${fmtTime(session.endedAt)}`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-slate-500">
+                                  {fmtVideoPos(session.videoStartPos)} → {fmtVideoPos(session.videoEndPos)}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                                  session.status === 'ENDED' ? 'bg-slate-200 text-slate-600' :
+                                  session.status === 'WATCHING' ? 'bg-green-100 text-green-600' :
+                                  'bg-amber-100 text-amber-600'
+                                }`}>{session.status}</span>
+                                <span className="font-semibold text-indigo-600">{fmtDuration(session.totalWatchedSec)}</span>
+                              </div>
+                            </div>
+
+                            {/* Session events timeline */}
+                            {events.length > 0 && (
+                              <div className="px-4 py-3">
+                                <div className="relative pl-5 space-y-1.5">
+                                  {/* Timeline line */}
+                                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
+                                  {events.map((evt: any, ei: number) => {
+                                    const evtType = (evt.type || evt.event || '').toUpperCase();
+                                    const isPlay = evtType.includes('PLAY') || evtType.includes('START') || evtType.includes('RESUME');
+                                    const isPause = evtType.includes('PAUSE');
+                                    const isEnd = evtType.includes('END') || evtType.includes('LEAVE') || evtType.includes('LEFT') || evtType.includes('CLOSE');
+                                    const isSeek = evtType.includes('SEEK');
+                                    const isJoin = evtType.includes('JOIN');
+                                    const dotColor = isPlay ? 'bg-green-400' : isPause ? 'bg-amber-400' : isEnd ? 'bg-red-400' : isSeek ? 'bg-blue-400' : isJoin ? 'bg-purple-400' : 'bg-slate-300';
+                                    const wallTime = evt.wallTime || evt.at || evt.timestamp;
+                                    return (
+                                      <div key={ei} className="flex items-center gap-2.5 relative">
+                                        <div className={`w-3.5 h-3.5 rounded-full border-2 border-white ${dotColor} flex-shrink-0 z-10 -ml-[7px]`} />
+                                        <span className="text-xs font-semibold text-slate-600 min-w-[70px]">{evtType || 'EVENT'}</span>
+                                        {evt.videoTime != null && (
+                                          <span className="text-[11px] text-slate-400 font-mono">@{fmtVideoPos(evt.videoTime)}</span>
+                                        )}
+                                        {wallTime && (
+                                          <span className="text-[11px] text-slate-400">{fmtTime(wallTime)}</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            {events.length === 0 && (
+                              <div className="px-4 py-2 text-xs text-slate-400">No event details recorded</div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ── Student List View ── */
+                <div className="flex-1 overflow-y-auto">
+                  {/* Summary stats */}
+                  {watchHistoryData.totals && (
+                    <div className="flex flex-wrap gap-3 px-6 py-3 bg-slate-50 border-b border-slate-100">
+                      {[
+                        { label: 'Enrolled', value: watchHistoryData.totals.enrolled, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                        { label: 'Completed', value: watchHistoryData.totals.completed, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+                        { label: 'Incomplete', value: watchHistoryData.totals.incomplete, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                        { label: 'Not Viewed', value: watchHistoryData.totals.notViewed, color: 'text-slate-500 bg-slate-100 border-slate-200' },
+                      ].map(s => (
+                        <span key={s.label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${s.color}`}>
+                          <span className="font-bold">{s.value}</span> {s.label}
+                        </span>
+                      ))}
+                      {watchHistoryData.recording?.duration && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border text-indigo-600 bg-indigo-50 border-indigo-200">
+                          Duration: {fmtDuration(watchHistoryData.recording.duration)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Search */}
+                  <div className="px-6 py-3 border-b border-slate-100">
+                    <input
+                      type="text"
+                      value={watchSearch}
+                      onChange={e => setWatchSearch(e.target.value)}
+                      placeholder="Search students..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 focus:bg-white transition"
+                    />
+                  </div>
+
+                  {/* Students list */}
+                  <div className="p-4 space-y-1.5">
+                    {(watchHistoryData.students || [])
+                      .filter((s: any) => {
+                        if (!watchSearch.trim()) return true;
+                        const q = watchSearch.toLowerCase();
+                        return (
+                          (s.user?.profile?.fullName || '').toLowerCase().includes(q) ||
+                          (s.user?.profile?.instituteId || '').toLowerCase().includes(q) ||
+                          (s.user?.email || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .sort((a: any, b: any) => (b.totalWatchedSec || 0) - (a.totalWatchedSec || 0))
+                      .map((student: any) => {
+                        const attColor =
+                          student.attendanceStatus === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                          student.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-100 text-amber-700' :
+                          student.attendanceStatus === 'MANUAL' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-100 text-slate-500';
+                        return (
+                          <button
+                            key={student.userId}
+                            onClick={() => setSelectedStudent(student)}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition text-left group"
+                          >
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                              <span className="text-white font-bold text-[10px]">
+                                {(student.user?.profile?.fullName || student.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-800 truncate">{student.user?.profile?.fullName || student.user?.email || 'Unknown'}</p>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${attColor}`}>
+                                  {student.attendanceStatus || 'NOT VIEWED'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400">{student.user?.profile?.instituteId || '—'}</p>
+                            </div>
+                            <div className="flex items-center gap-4 flex-shrink-0">
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-indigo-600">{fmtDuration(student.totalWatchedSec)}</p>
+                                <p className="text-[10px] text-slate-400">watch time</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-slate-700">{student.sessionCount}</p>
+                                <p className="text-[10px] text-slate-400">session{student.sessionCount !== 1 ? 's' : ''}</p>
+                              </div>
+                              {student.lastWatchedAt && (
+                                <div className="text-right hidden sm:block">
+                                  <p className="text-[11px] text-slate-500">{fmtDate(student.lastWatchedAt)}</p>
+                                  <p className="text-[10px] text-slate-400">last viewed</p>
+                                </div>
+                              )}
+                              <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    {(watchHistoryData.students || []).length === 0 && (
+                      <p className="text-center text-sm text-slate-400 py-8">No students found for this recording</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

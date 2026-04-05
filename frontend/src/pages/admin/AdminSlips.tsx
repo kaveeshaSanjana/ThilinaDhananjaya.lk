@@ -99,9 +99,7 @@ export default function AdminSlips() {
 
   const load = () => {
     setLoading(true);
-    const params: any = { limit: 200 };
-    if (filter && filter !== 'ALL') params.status = filter;
-    api.get('/payments/all', { params }).then(r => {
+    api.get('/payments/all', { params: { limit: 200 } }).then(r => {
       const res = r.data;
       setPayments(res?.data ? res.data : Array.isArray(res) ? res : []);
     }).catch(() => {}).finally(() => setLoading(false));
