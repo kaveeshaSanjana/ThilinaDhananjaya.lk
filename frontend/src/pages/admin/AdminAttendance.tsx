@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
+import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
 
 /* ─── Formatters ──────────────────────────────────────── */
 
@@ -20,28 +21,11 @@ function fmtDateTime(d: string) {
   return `${dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} ${dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 }
 
-const eventTypeLabel: Record<string, { label: string; color: string; icon: string }> = {
-  START: { label: 'Started Watching', color: 'text-blue-600 bg-blue-50', icon: '▶' },
-  PUSH: { label: 'Attendance Pushed', color: 'text-green-600 bg-green-50', icon: '✓' },
-  END: { label: 'Stopped Watching', color: 'text-slate-600 bg-slate-50', icon: '■' },
-  INCOMPLETE_EXIT: { label: 'Left Early', color: 'text-amber-600 bg-amber-50', icon: '⚠' },
-  LIVE_JOIN: { label: 'Joined Live', color: 'text-red-600 bg-red-50', icon: '●' },
-  MANUAL: { label: 'Manual Mark', color: 'text-purple-600 bg-purple-50', icon: '✎' },
-};
-
-const sessionEventLabel: Record<string, { label: string; color: string }> = {
-  play: { label: 'Play', color: 'text-green-600 bg-green-50' },
-  pause: { label: 'Pause', color: 'text-amber-600 bg-amber-50' },
-  seek: { label: 'Seek', color: 'text-blue-600 bg-blue-50' },
-  buffer: { label: 'Buffer', color: 'text-slate-500 bg-slate-50' },
-  ended: { label: 'Video End', color: 'text-slate-600 bg-slate-100' },
-};
-
 /* ─── Main Component ──────────────────────────────────── */
 
 export default function AdminAttendance() {
   /* ── Selectors ─── */
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]); 
   const [recordings, setRecordings] = useState<any[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedMonthId, setSelectedMonthId] = useState('');
@@ -52,7 +36,7 @@ export default function AdminAttendance() {
   const [loadingStats, setLoadingStats] = useState(false);
 
   /* ── UI state ─── */
-  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [studentPopup, setStudentPopup] = useState<{ recordingId: string; userId: string } | null>(null);
   const [search, setSearch] = useState('');
 
   /* ── Manual mark ─── */
@@ -78,7 +62,7 @@ export default function AdminAttendance() {
   useEffect(() => {
     if (!selectedRecordingId) { setStatsData(null); return; }
     setLoadingStats(true);
-    setExpandedUserId(null);
+    setStudentPopup(null);
     setSearch('');
     api.get(`/attendance/recording/${selectedRecordingId}/stats`)
       .then(r => setStatsData(r.data))
@@ -202,10 +186,19 @@ export default function AdminAttendance() {
     {
       id: 'student', label: 'Student', minWidth: 200,
       render: (row) => (
-        <div>
-          <p className="font-semibold text-slate-800 text-sm">{row.user?.profile?.fullName || 'Unknown'}</p>
-          <p className="text-xs text-slate-400">{row.user?.profile?.instituteId || row.user?.email || '—'}</p>
-          {!row.enrolled && <span className="text-[9px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">Not Enrolled</span>}
+        <div className="flex items-center gap-2.5">
+          {row.user?.profile?.avatarUrl ? (
+            <img src={row.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-[11px]">{(row.user?.profile?.fullName || row.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
+            </div>
+          )}
+          <div>
+            <p className="font-semibold text-slate-800 text-sm">{row.user?.profile?.fullName || 'Unknown'}</p>
+            <p className="text-xs text-slate-400">{row.user?.profile?.instituteId || row.user?.email || '—'}</p>
+            {!row.enrolled && <span className="text-[9px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">Not Enrolled</span>}
+          </div>
         </div>
       ),
     },
@@ -273,13 +266,11 @@ export default function AdminAttendance() {
           )}
           {(row.sessionCount > 0 || row.attendanceStatus) && (
             <button
-              onClick={() => setExpandedUserId(expandedUserId === row.userId ? null : row.userId)}
-              className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition ${
-                expandedUserId === row.userId ? 'bg-blue-100 text-blue-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-              }`}
+              onClick={() => setStudentPopup({ recordingId: selectedRecordingId, userId: row.userId })}
+              className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition bg-slate-50 text-slate-500 hover:bg-slate-100`}
             >
-              <svg className={`w-3 h-3 transition-transform ${expandedUserId === row.userId ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-              {expandedUserId === row.userId ? 'Hide' : 'Detail'}
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              Detail
             </button>
           )}
         </div>
@@ -572,190 +563,15 @@ export default function AdminAttendance() {
                 />
               </div>
 
-              {/* ═══ EXPANDED STUDENT DETAIL ═══ */}
-              {expandedUserId && (() => {
-                const student = statsData.students.find((s: any) => s.userId === expandedUserId);
-                if (!student) return null;
-                const attDetails: any[] = Array.isArray(student.attendanceDetails) ? student.attendanceDetails : [];
-                const sessions: any[] = Array.isArray(student.sessions) ? student.sessions : [];
 
-                return (
-                  <div className="mt-3 bg-white rounded-2xl border border-blue-200 shadow-sm overflow-hidden animate-fade-in">
-                    {/* Header */}
-                    <div className="px-5 py-3 border-b border-blue-100 bg-blue-50/50 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                          {(student.user?.profile?.fullName?.[0] || 'U').toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800">{student.user?.profile?.fullName || 'Unknown'}</p>
-                          <p className="text-[11px] text-slate-400">
-                            {student.user?.profile?.instituteId || student.user?.email || '—'}
-                            {student.user?.profile?.phone && <> · {student.user.profile.phone}</>}
-                          </p>
-                        </div>
-                      </div>
-                      <button onClick={() => setExpandedUserId(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">Close</button>
-                    </div>
-
-                    {/* Summary Stats Grid */}
-                    <div className="px-5 py-4 border-b border-slate-100">
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <p className="text-lg font-bold text-blue-600">{student.sessionCount}</p>
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase">Sessions</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <p className="text-lg font-bold text-slate-700">{fmtTime(student.totalWatchedSec)}</p>
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase">Total Watch</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <p className="text-lg font-bold text-slate-700">{fmtTime(student.attendanceWatchedSec)}</p>
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase">Att. Watch</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${statusBadge(student.attendanceStatus)}`}>
-                            {student.attendanceStatus || 'None'}
-                          </span>
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase mt-1">Status</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <p className="text-sm font-bold text-slate-600">{student.lastWatchedAt ? fmtDateTime(student.lastWatchedAt) : '-'}</p>
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">Last Watch</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Watch Sessions */}
-                    <div className="px-5 py-4">
-                      <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        Watch Sessions ({sessions.length})
-                      </h4>
-
-                      {sessions.length === 0 ? (
-                        <p className="text-sm text-slate-400 italic py-2">No watch sessions recorded</p>
-                      ) : (
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                          {sessions.map((sess: any, idx: number) => {
-                            const sessNum = sessions.length - idx;
-                            const durSec = sess.endedAt
-                              ? Math.round((new Date(sess.endedAt).getTime() - new Date(sess.startedAt).getTime()) / 1000)
-                              : null;
-                            const evts: any[] = Array.isArray(sess.events) ? sess.events : [];
-
-                            return (
-                              <div key={sess.id} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <div className="flex items-center justify-between mb-2.5">
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">Session {sessNum}</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                      sess.status === 'ENDED' ? 'bg-green-100 text-green-700' :
-                                      sess.status === 'WATCHING' ? 'bg-blue-100 text-blue-700' :
-                                      'bg-yellow-100 text-yellow-700'
-                                    }`}>{sess.status}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-sm font-bold text-slate-700">{fmtTime(sess.totalWatchedSec)} watched</span>
-                                    {durSec !== null && durSec > 0 && sess.totalWatchedSec > 0 && (
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                                        (sess.totalWatchedSec / durSec) >= 0.7 ? 'bg-green-100 text-green-700' :
-                                        (sess.totalWatchedSec / durSec) >= 0.3 ? 'bg-amber-100 text-amber-700' :
-                                        'bg-red-100 text-red-700'
-                                      }`}>
-                                        {Math.round((sess.totalWatchedSec / durSec) * 100)}% active
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
-                                  <div>
-                                    <span className="text-slate-400">Started:</span>{' '}
-                                    <span className="text-slate-600 font-medium">{fmtDateTime(sess.startedAt)}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-slate-400">Ended:</span>{' '}
-                                    <span className="text-slate-600 font-medium">{sess.endedAt ? fmtDateTime(sess.endedAt) : 'Still watching'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-slate-400">Video:</span>{' '}
-                                    <span className="text-slate-600 font-medium">{fmtTime(sess.videoStartPos)}</span>
-                                    <span className="text-slate-400"> → </span>
-                                    <span className="text-slate-600 font-medium">{fmtTime(sess.videoEndPos)}</span>
-                                  </div>
-                                  {durSec !== null && (
-                                    <div>
-                                      <span className="text-slate-400">Real time:</span>{' '}
-                                      <span className="text-slate-600 font-medium">{fmtTime(durSec)}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Session Events */}
-                                {evts.length > 0 && (
-                                  <div className="mt-3 pt-3 border-t border-slate-200/60">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Events ({evts.length})</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {evts.map((evt: any, eidx: number) => {
-                                        const meta = sessionEventLabel[evt.type] || { label: evt.type || '?', color: 'text-slate-500 bg-slate-100' };
-                                        return (
-                                          <span key={eidx} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200/60 text-[10px] ${meta.color}`}>
-                                            <span className="font-bold">{meta.label}</span>
-                                            {evt.videoTime != null && <span className="text-slate-500">@ {fmtTime(evt.videoTime)}</span>}
-                                            {evt.wallTime && (
-                                              <span className="text-slate-400 ml-0.5">
-                                                {new Date(evt.wallTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                              </span>
-                                            )}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Attendance Event Log */}
-                    {attDetails.length > 0 && (
-                      <div className="px-5 py-4 border-t border-slate-100">
-                        <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                          <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                          Attendance Event Log ({attDetails.length})
-                        </h4>
-                        <div className="relative pl-6">
-                          <div className="absolute left-2.5 top-1 bottom-1 w-px bg-slate-200" />
-                          {attDetails.map((evt: any, idx: number) => {
-                            const meta = eventTypeLabel[evt.type] || { label: evt.type, color: 'text-slate-600 bg-slate-50', icon: '·' };
-                            return (
-                              <div key={idx} className="relative flex items-start gap-3 pb-3 last:pb-0">
-                                <div className={`absolute left-[-18px] w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${meta.color} border-2 border-white shadow-sm`}>
-                                  {meta.icon}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${meta.color}`}>
-                                      {meta.label}
-                                    </span>
-                                    {evt.watchedSec != null && <span className="text-[11px] text-slate-500">watched: <strong>{fmtTime(evt.watchedSec)}</strong></span>}
-                                    {evt.videoPosition != null && <span className="text-[11px] text-slate-500">at: <strong>{fmtTime(evt.videoPosition)}</strong></span>}
-                                  </div>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">{evt.at ? fmtDateTime(evt.at) : '—'}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+      {/* Student Watch Detail Popup */}
+      {studentPopup && (
+        <StudentWatchDetailModal
+          recordingId={studentPopup.recordingId}
+          userId={studentPopup.userId}
+          onClose={() => setStudentPopup(null)}
+        />
+      )}
             </div>
           )}
         </>

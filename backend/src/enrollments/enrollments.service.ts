@@ -29,7 +29,7 @@ export class EnrollmentsService {
       where: { classId },
       include: {
         user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
+          include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } },
         },
       },
     });

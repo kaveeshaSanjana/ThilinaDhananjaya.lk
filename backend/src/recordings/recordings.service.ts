@@ -92,7 +92,7 @@ export class RecordingsService {
       where: { recordingId },
       include: {
         user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
+          include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -145,7 +145,7 @@ export class RecordingsService {
       where: { recordingId, eventName: 'LIVE_JOIN' },
       include: {
         user: {
-          include: { profile: { select: { fullName: true, instituteId: true } } },
+          include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },

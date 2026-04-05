@@ -55,7 +55,7 @@ export class PaymentsService {
         user: {
           select: {
             id: true, email: true,
-            profile: { select: { fullName: true, instituteId: true } },
+            profile: { select: { fullName: true, instituteId: true, avatarUrl: true } },
           },
         },
         month: {
@@ -83,7 +83,7 @@ export class PaymentsService {
         where,
         include: {
           user: {
-            include: { profile: { select: { fullName: true, instituteId: true } } },
+            include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } },
           },
           month: { include: { class: { select: { id: true, name: true, subject: true } } } },
         },
@@ -103,7 +103,7 @@ export class PaymentsService {
       where: { id: slipId },
       include: {
         month: { include: { class: { select: { monthlyFee: true } } } },
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
     });
     if (!slip) throw new NotFoundException('Payment slip not found');
@@ -111,7 +111,7 @@ export class PaymentsService {
     // Check for duplicate transactionId
     const existing = await this.prisma.paymentSlip.findFirst({
       where: { transactionId, NOT: { id: slipId } },
-      include: { user: { include: { profile: { select: { fullName: true, instituteId: true } } } } },
+      include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
     });
     if (existing) {
       const name = existing.user?.profile?.fullName || existing.user?.email || 'Unknown';

@@ -265,10 +265,19 @@ export default function AdminSlips() {
       label: 'Student',
       minWidth: 200,
       render: (p) => (
-        <>
-          <p className="font-semibold text-slate-800 text-sm">{p.user?.profile?.fullName || '-'}</p>
-          <p className="text-xs text-slate-400">{p.user?.email}</p>
-        </>
+        <div className="flex items-center gap-2.5">
+          {p.user?.profile?.avatarUrl ? (
+            <img src={p.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-[11px]">{(p.user?.profile?.fullName || p.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
+            </div>
+          )}
+          <div>
+            <p className="font-semibold text-slate-800 text-sm">{p.user?.profile?.fullName || '-'}</p>
+            <p className="text-xs text-slate-400">{p.user?.email}</p>
+          </div>
+        </div>
       ),
     },
     { id: 'class', label: 'Class', minWidth: 160, render: (p) => <span className="text-slate-600 text-sm">{p.month?.class?.name || '-'}</span> },
@@ -327,11 +336,15 @@ export default function AdminSlips() {
       minWidth: 160,
       render: (student) => (
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-[9px]">
-              {(student.profile?.fullName || student.email || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
-            </span>
-          </div>
+          {student.profile?.avatarUrl ? (
+            <img src={student.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-[9px]">
+                {(student.profile?.fullName || student.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+              </span>
+            </div>
+          )}
           <span className="font-medium text-xs text-slate-800 truncate">{student.profile?.fullName || '—'}</span>
         </div>
       ),

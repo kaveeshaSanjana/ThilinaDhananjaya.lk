@@ -229,7 +229,7 @@ export class AttendanceService {
       this.prisma.attendance.findMany({
         where,
         include: {
-          user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+          user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
           recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
         },
         orderBy: { createdAt: 'desc' },
@@ -256,7 +256,7 @@ export class AttendanceService {
     return this.prisma.attendance.findMany({
       where: { recording: { month: { classId } } },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
         recording: { select: { title: true, month: { select: { name: true, class: { select: { id: true, name: true } } } } } },
       },
       orderBy: { createdAt: 'desc' },
@@ -267,7 +267,7 @@ export class AttendanceService {
     return this.prisma.attendance.findMany({
       where: { recordingId },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -289,7 +289,7 @@ export class AttendanceService {
     const [enrollments, attendances, sessions, payments] = await Promise.all([
       this.prisma.enrollment.findMany({
         where: { classId },
-        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, phone: true, status: true } } } } },
+        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true, status: true } } } } },
       }),
       this.prisma.attendance.findMany({ where: { recordingId } }),
       this.prisma.watchSession.findMany({ where: { recordingId }, orderBy: { startedAt: 'desc' } }),
@@ -362,7 +362,7 @@ export class AttendanceService {
     if (extraIds.size > 0) {
       const users = await this.prisma.user.findMany({
         where: { id: { in: [...extraIds] } },
-        include: { profile: { select: { fullName: true, instituteId: true, phone: true, status: true } } },
+        include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true, status: true } } },
       });
       const userMap = new Map(users.map(u => [u.id, u]));
       for (const uid of extraIds) {
@@ -392,6 +392,87 @@ export class AttendanceService {
   }
 
   // ─── Watch Session Methods (unchanged) ─────────────────
+
+  /** Admin: get a single student's watch stats for a specific recording */
+  async getStudentRecordingStats(recordingId: string, userId: string) {
+    const recording = await this.prisma.recording.findUnique({
+      where: { id: recordingId },
+      include: { month: { include: { class: true } } },
+    });
+    if (!recording) throw new NotFoundException('Recording not found');
+
+    const [enrollment, attendance, sessions, payment, user] = await Promise.all([
+      this.prisma.enrollment.findUnique({
+        where: { userId_classId: { userId, classId: recording.month.classId } },
+      }),
+      this.prisma.attendance.findUnique({ where: { userId_recordingId: { userId, recordingId } } }),
+      this.prisma.watchSession.findMany({
+        where: { userId, recordingId },
+        orderBy: { startedAt: 'asc' },
+      }),
+      this.prisma.paymentSlip.findFirst({
+        where: { userId, monthId: recording.monthId, type: 'MONTHLY', status: 'VERIFIED' },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { profile: { select: { fullName: true, instituteId: true, phone: true, status: true, avatarUrl: true } } },
+      }),
+    ]);
+
+    const isFree = recording.month.status === 'ANYONE';
+    let paymentStatus = isFree ? 'FREE' : 'NOT_PAID';
+    if (!isFree) {
+      if (payment) {
+        paymentStatus = 'VERIFIED';
+      } else {
+        const pending = await this.prisma.paymentSlip.findFirst({
+          where: { userId, monthId: recording.monthId, type: 'MONTHLY' },
+          orderBy: { createdAt: 'desc' },
+        });
+        paymentStatus = pending?.status || 'NOT_PAID';
+      }
+    }
+
+    const totalWatchedSec = sessions.reduce((sum, s) => sum + (s.totalWatchedSec || 0), 0);
+
+    return {
+      recording: {
+        id: recording.id,
+        title: recording.title,
+        duration: recording.duration,
+        isLive: recording.isLive,
+        videoType: recording.videoType,
+        thumbnail: recording.thumbnail,
+      },
+      month: { id: recording.month.id, name: recording.month.name },
+      class: { id: recording.month.class.id, name: recording.month.class.name },
+      student: {
+        userId,
+        user,
+        enrolled: !!enrollment,
+        attendanceStatus: attendance?.status || null,
+        attendanceWatchedSec: attendance?.watchedSec || 0,
+        liveJoinedAt: attendance?.liveJoinedAt || null,
+        attendanceDetails: attendance?.details || [],
+        completedAt: attendance?.status === 'COMPLETED' ? attendance.updatedAt : null,
+        sessionCount: sessions.length,
+        totalWatchedSec,
+        lastWatchedAt: sessions.length > 0 ? sessions[sessions.length - 1].startedAt : null,
+        firstWatchedAt: sessions.length > 0 ? sessions[0].startedAt : null,
+        paymentStatus,
+        sessions: sessions.map(s => ({
+          id: s.id,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          videoStartPos: s.videoStartPos,
+          videoEndPos: s.videoEndPos,
+          totalWatchedSec: s.totalWatchedSec,
+          status: s.status,
+          events: s.events,
+        })),
+      },
+    };
+  }
 
   async startSession(userId: string, recordingId: string, videoPosition: number, events?: any[]) {
     await this.prisma.watchSession.updateMany({
@@ -502,7 +583,7 @@ export class AttendanceService {
     const [data, total] = await Promise.all([
       this.prisma.watchSession.findMany({
         include: {
-          user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+          user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
           recording: { select: { title: true, month: { select: { name: true, class: { select: { name: true } } } } } },
         },
         orderBy: { startedAt: 'desc' },
@@ -519,7 +600,7 @@ export class AttendanceService {
     return this.prisma.watchSession.findMany({
       where: { recordingId },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 200,
@@ -537,7 +618,7 @@ export class AttendanceService {
     return this.prisma.watchSession.findMany({
       where: { recording: { month: { classId } } },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
         recording: { select: { title: true, month: { select: { name: true } } } },
       },
       orderBy: { startedAt: 'desc' },
@@ -576,27 +657,15 @@ export class AttendanceService {
     throw new NotFoundException(`Student not found for identifier: ${identifier}`);
   }
 
-  /**
-   * Mark class attendance for a single student (by identifier).
-   */
-  async markClassAttendance(data: {
-    classId: string;
-    identifier: string;
-    date: string;
-    status: string;
-    method?: string;
-    note?: string;
-    markedBy?: string;
-  }) {
-    const userId = await this.resolveStudentId(data.identifier);
+  // ─── Shared upsert helper for class attendance ────────────
 
+  private async doUpsertClassAttendance(
+    userId: string,
+    data: { classId: string; date: string; status: string; method?: string; note?: string; markedBy?: string },
+  ) {
     return this.prisma.classAttendance.upsert({
       where: {
-        userId_classId_date: {
-          userId,
-          classId: data.classId,
-          date: new Date(data.date),
-        },
+        userId_classId_date: { userId, classId: data.classId, date: new Date(data.date) },
       },
       update: {
         status: data.status as ClassAttendanceStatus,
@@ -614,9 +683,56 @@ export class AttendanceService {
         markedBy: data.markedBy || null,
       },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
     });
+  }
+
+  /** Mark by barcodeId — single index lookup, fastest path (used by QR/barcode scanner) */
+  async markByBarcode(data: { classId: string; barcode: string; date: string; status: string; note?: string; markedBy?: string }) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { barcodeId: data.barcode },
+      select: { userId: true },
+    });
+    if (!profile) throw new NotFoundException(`No student found for barcode: ${data.barcode}`);
+    return this.doUpsertClassAttendance(profile.userId, { ...data, method: 'barcode' });
+  }
+
+  /** Mark by instituteId — single unique index lookup */
+  async markByInstituteId(data: { classId: string; instituteId: string; date: string; status: string; note?: string; markedBy?: string }) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { instituteId: data.instituteId },
+      select: { userId: true },
+    });
+    if (!profile) throw new NotFoundException(`No student found for institute ID: ${data.instituteId}`);
+    return this.doUpsertClassAttendance(profile.userId, { ...data, method: 'institute_id' });
+  }
+
+  /** Mark by phone number — single index lookup */
+  async markByPhone(data: { classId: string; phone: string; date: string; status: string; note?: string; markedBy?: string }) {
+    const profile = await this.prisma.profile.findFirst({
+      where: { phone: data.phone },
+      select: { userId: true },
+    });
+    if (!profile) throw new NotFoundException(`No student found for phone: ${data.phone}`);
+    return this.doUpsertClassAttendance(profile.userId, { ...data, method: 'phone' });
+  }
+
+  /**
+   * Mark class attendance for a single student (by identifier).
+   * Generic fallback — resolves in up to 4 queries. Prefer specific endpoints above.
+   */
+  async markClassAttendance(data: {
+    classId: string;
+    identifier: string;
+    date: string;
+    status: string;
+    method?: string;
+    note?: string;
+    markedBy?: string;
+  }) {
+    const userId = await this.resolveStudentId(data.identifier);
+    return this.doUpsertClassAttendance(userId, data);
   }
 
   /**
@@ -671,7 +787,7 @@ export class AttendanceService {
         date: new Date(date),
       },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true, phone: true } } } },
       },
       orderBy: { user: { profile: { fullName: 'asc' } } },
     });
@@ -690,7 +806,7 @@ export class AttendanceService {
         date: { gte: startDate, lte: endDate },
       },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true } } } },
       },
       orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
     });
@@ -709,7 +825,7 @@ export class AttendanceService {
         date: { gte: startDate, lte: endDate },
       },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true } } } },
       },
       orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
     });
@@ -732,6 +848,72 @@ export class AttendanceService {
   }
 
   /**
+   * Monitor: attendance grid for a class in a date range.
+   * Returns only dates that have at least one record, plus all enrolled students.
+   */
+  async getClassAttendanceMonitor(classId: string, from: string, to: string) {
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+
+    const [enrollments, records] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { classId },
+        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
+        orderBy: { user: { profile: { fullName: 'asc' } } },
+      }),
+      this.prisma.classAttendance.findMany({
+        where: { classId, date: { gte: startDate, lte: endDate } },
+        select: { userId: true, date: true, status: true },
+        orderBy: { date: 'asc' },
+      }),
+    ]);
+
+    // Unique dates that have at least one record
+    const dateSet = new Set<string>();
+    const grid: Record<string, Record<string, string>> = {}; // userId -> { dateStr -> status }
+    for (const rec of records) {
+      const ds = rec.date.toISOString().split('T')[0];
+      dateSet.add(ds);
+      if (!grid[rec.userId]) grid[rec.userId] = {};
+      grid[rec.userId][ds] = rec.status;
+    }
+
+    const dates = Array.from(dateSet).sort();
+
+    const students = enrollments.map(e => {
+      const statuses = grid[e.userId] || {};
+      let present = 0;
+      let late = 0;
+      let absent = 0;
+      let excused = 0;
+      for (const d of dates) {
+        const s = statuses[d];
+        if (s === 'PRESENT') present++;
+        else if (s === 'LATE') late++;
+        else if (s === 'ABSENT') absent++;
+        else if (s === 'EXCUSED') excused++;
+      }
+      const attended = present + late;
+      const pct = dates.length > 0 ? Math.round((attended / dates.length) * 100) : 0;
+
+      return {
+        userId: e.userId,
+        fullName: e.user?.profile?.fullName || e.user?.email || '—',
+        instituteId: e.user?.profile?.instituteId || '',
+        avatarUrl: e.user?.profile?.avatarUrl || null,
+        statuses,
+        present,
+        late,
+        absent,
+        excused,
+        percentage: pct,
+      };
+    });
+
+    return { dates, students };
+  }
+
+  /**
    * Delete a class attendance record.
    */
   async deleteClassAttendance(id: string) {
@@ -745,7 +927,7 @@ export class AttendanceService {
     const enrollments = await this.prisma.enrollment.findMany({
       where: { classId },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true, status: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true, phone: true, status: true } } } },
       },
       orderBy: { user: { profile: { fullName: 'asc' } } },
     });
@@ -757,6 +939,7 @@ export class AttendanceService {
       barcodeId: e.user.profile?.barcodeId || null,
       phone: e.user.profile?.phone || null,
       status: e.user.profile?.status || null,
+      avatarUrl: e.user.profile?.avatarUrl || null,
     }));
   }
 
@@ -774,7 +957,7 @@ export class AttendanceService {
     const enrollments = await this.prisma.enrollment.findMany({
       where: { classId },
       include: {
-        user: { include: { profile: { select: { fullName: true, instituteId: true, barcodeId: true, phone: true, status: true } } } },
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true, phone: true, status: true } } } },
       },
       orderBy: { user: { profile: { fullName: 'asc' } } },
     });

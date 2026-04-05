@@ -137,3 +137,71 @@ export class BulkClassAttendanceDto {
   @IsString()
   method?: string;
 }
+
+// ─── Specific identifier DTOs (one lookup each) ──────────
+
+export class MarkByBarcodeDto {
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  barcode: string;
+
+  @IsString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class MarkByInstituteIdDto {
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  instituteId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class MarkByPhoneDto {
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @IsString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}

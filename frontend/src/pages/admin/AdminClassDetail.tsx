@@ -210,9 +210,13 @@ export default function AdminClassDetail() {
       id: 'student', label: 'Student', minWidth: 220,
       render: (enr) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {(enr.user?.profile?.fullName || enr.user?.email || '?')[0].toUpperCase()}
-          </div>
+          {enr.user?.profile?.avatarUrl ? (
+            <img src={enr.user.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {(enr.user?.profile?.fullName || enr.user?.email || '?')[0].toUpperCase()}
+            </div>
+          )}
           <span className="font-semibold text-slate-800">{enr.user?.profile?.fullName || '-'}</span>
         </div>
       ),
@@ -235,10 +239,19 @@ export default function AdminClassDetail() {
     {
       id: 'student', label: 'Student', minWidth: 220,
       render: (s) => (
-        <>
-          <p className="font-medium text-slate-800">{s.user?.profile?.fullName || '-'}</p>
-          <p className="text-xs text-slate-400">{s.user?.email}</p>
-        </>
+        <div className="flex items-center gap-2.5">
+          {s.user?.profile?.avatarUrl ? (
+            <img src={s.user.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-[9px]">{(s.user?.profile?.fullName || s.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
+            </div>
+          )}
+          <div>
+            <p className="font-medium text-slate-800">{s.user?.profile?.fullName || '-'}</p>
+            <p className="text-xs text-slate-400">{s.user?.email}</p>
+          </div>
+        </div>
       ),
     },
     {

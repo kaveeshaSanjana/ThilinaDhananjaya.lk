@@ -5,6 +5,7 @@ import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 import WelcomeMessageEditor from '../../components/WelcomeMessageEditor';
+import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
 
 const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
 const VIDEO_TYPES = ['DRIVE', 'YOUTUBE', 'ZOOM', 'OTHER'];
@@ -43,8 +44,8 @@ export default function AdminRecordingHistory() {
   const [watchHistoryRec, setWatchHistoryRec] = useState<any>(null);
   const [watchHistoryData, setWatchHistoryData] = useState<any>(null);
   const [watchHistoryLoading, setWatchHistoryLoading] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [watchSearch, setWatchSearch] = useState('');
+  const [studentPopup, setStudentPopup] = useState<{ recordingId: string; userId: string } | null>(null);
 
   const load = () => { setLoading(true); Promise.all([
     api.get('/recordings', { params: { limit: 200 } }).then(r => {
@@ -147,7 +148,6 @@ export default function AdminRecordingHistory() {
   const handleViewWatchHistory = async (rec: any) => {
     setWatchHistoryRec(rec);
     setWatchHistoryData(null);
-    setSelectedStudent(null);
     setWatchSearch('');
     setWatchHistoryLoading(true);
     try {
@@ -167,13 +167,7 @@ export default function AdminRecordingHistory() {
     return `${s}s`;
   };
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const fmtVideoPos = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
-  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this recording?')) return;
@@ -587,11 +581,15 @@ export default function AdminRecordingHistory() {
                   <p className="text-center text-sm text-slate-400 py-8">No students have joined yet</p>
                 ) : (
                   <div className="space-y-2">
-                    {liveAttendance.map((att: any, i: number) => (
+                    {liveAttendance.map((att: any) => (
                       <div key={att.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                          {i + 1}
-                        </div>
+                        {att.user?.profile?.avatarUrl ? (
+                          <img src={att.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                            {(att.user?.profile?.fullName || att.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-slate-800 truncate">{att.user?.profile?.fullName || att.user?.email || 'Unknown'}</p>
                           <p className="text-xs text-slate-400">{att.user?.profile?.instituteId || '—'}</p>
@@ -611,7 +609,7 @@ export default function AdminRecordingHistory() {
 
       {/* Watch History Modal */}
       {watchHistoryRec && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => { setWatchHistoryRec(null); setSelectedStudent(null); }}>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setWatchHistoryRec(null)}>
           <div className="min-h-full flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
               {/* Header */}
@@ -623,7 +621,7 @@ export default function AdminRecordingHistory() {
                     {watchHistoryData && ` — ${watchHistoryData.students?.length || 0} students`}
                   </p>
                 </div>
-                <button onClick={() => { setWatchHistoryRec(null); setSelectedStudent(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <button onClick={() => setWatchHistoryRec(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -632,147 +630,6 @@ export default function AdminRecordingHistory() {
                 <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
               ) : !watchHistoryData ? (
                 <div className="text-center py-16 text-slate-400">Failed to load watch history</div>
-              ) : selectedStudent ? (
-                /* ── Student Session Detail View ── */
-                <div className="flex-1 overflow-y-auto">
-                  {/* Back button + student info */}
-                  <div className="px-6 py-3 bg-slate-50 border-b border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setSelectedStudent(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                      </button>
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-bold text-[10px]">
-                          {(selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-slate-800 text-sm">{selectedStudent.user?.profile?.fullName || selectedStudent.user?.email || 'Unknown'}</p>
-                          {selectedStudent.user?.profile?.status && selectedStudent.user.profile.status !== 'ACTIVE' && (
-                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                              selectedStudent.user.profile.status === 'INACTIVE' ? 'bg-red-100 text-red-600 border-red-200' :
-                              selectedStudent.user.profile.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                              'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}>{selectedStudent.user.profile.status}</span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          {selectedStudent.user?.profile?.instituteId || '—'} · {selectedStudent.sessionCount} session{selectedStudent.sessionCount !== 1 ? 's' : ''} · {fmtDuration(selectedStudent.totalWatchedSec)} total
-                        </p>
-                      </div>
-                    </div>
-                    {/* Summary bar */}
-                    <div className="flex flex-wrap gap-2 mt-2 ml-10">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        selectedStudent.attendanceStatus === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                        selectedStudent.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-100 text-amber-700' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
-                        {selectedStudent.attendanceStatus || 'NOT VIEWED'}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        selectedStudent.paymentStatus === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' :
-                        selectedStudent.paymentStatus === 'FREE' ? 'bg-blue-100 text-blue-600' :
-                        selectedStudent.paymentStatus === 'PENDING' ? 'bg-amber-100 text-amber-600' :
-                        selectedStudent.paymentStatus === 'REJECTED' ? 'bg-red-100 text-red-600' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
-                        {selectedStudent.paymentStatus === 'VERIFIED' ? 'Paid' :
-                         selectedStudent.paymentStatus === 'FREE' ? 'Free' :
-                         selectedStudent.paymentStatus === 'PENDING' ? 'Pay Pending' :
-                         selectedStudent.paymentStatus === 'REJECTED' ? 'Pay Rejected' : 'Not Paid'}
-                      </span>
-                      {selectedStudent.enrolled && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Enrolled</span>}
-                      {!selectedStudent.enrolled && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">Not Enrolled</span>}
-                      {selectedStudent.liveJoinedAt && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">Live Joined</span>}
-                    </div>
-                  </div>
-
-                  <div className="p-6 space-y-4">
-                    {selectedStudent.sessions.length === 0 ? (
-                      <p className="text-center text-sm text-slate-400 py-8">No session data recorded</p>
-                    ) : (
-                      selectedStudent.sessions.map((session: any, si: number) => {
-                        const events = Array.isArray(session.events) ? session.events : [];
-                        return (
-                          <div key={session.id} className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
-                            {/* Session header */}
-                            <div className="flex items-center justify-between px-4 py-3 bg-slate-100/60">
-                              <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
-                                  {si + 1}
-                                </span>
-                                <span className="text-sm font-semibold text-slate-700">
-                                  {fmtDate(session.startedAt)}
-                                </span>
-                                <span className="text-xs text-slate-400">
-                                  {fmtTime(session.startedAt)}
-                                  {session.endedAt && ` → ${fmtTime(session.endedAt)}`}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 text-xs">
-                                <span className="text-slate-500">
-                                  {fmtVideoPos(session.videoStartPos)} → {fmtVideoPos(session.videoEndPos)}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full font-semibold ${
-                                  session.status === 'ENDED' ? 'bg-slate-200 text-slate-600' :
-                                  session.status === 'WATCHING' ? 'bg-green-100 text-green-600' :
-                                  'bg-amber-100 text-amber-600'
-                                }`}>{session.status}</span>
-                                <span className="font-semibold text-indigo-600">{fmtDuration(session.totalWatchedSec)}</span>
-                              </div>
-                            </div>
-
-                            {/* Session events timeline */}
-                            {events.length > 0 && (
-                              <div className="px-4 py-3">
-                                <div className="relative pl-5 space-y-1.5">
-                                  {/* Timeline line */}
-                                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
-                                  {events.filter((evt: any) => {
-                                    const t = (evt.type || evt.event || '').toUpperCase();
-                                    return !t.includes('HEARTBEAT') && !t.includes('HB');
-                                  }).map((evt: any, ei: number) => {
-                                    const evtType = (evt.type || evt.event || '').toUpperCase();
-                                    const isPlay = evtType.includes('PLAY') || evtType.includes('START') || evtType.includes('RESUME');
-                                    const isPause = evtType.includes('PAUSE');
-                                    const isEnd = evtType.includes('END') || evtType.includes('LEAVE') || evtType.includes('LEFT') || evtType.includes('CLOSE');
-                                    const isSeek = evtType.includes('SEEK');
-                                    const isJoin = evtType.includes('JOIN');
-                                    const dotColor = isPlay ? 'bg-green-400' : isPause ? 'bg-amber-400' : isEnd ? 'bg-red-400' : isSeek ? 'bg-blue-400' : isJoin ? 'bg-purple-400' : 'bg-slate-300';
-                                    const labelColor = isPlay ? 'text-green-700' : isPause ? 'text-amber-700' : isEnd ? 'text-red-600' : isSeek ? 'text-blue-600' : isJoin ? 'text-purple-600' : 'text-slate-600';
-                                    const wallTime = evt.wallTime || evt.at || evt.timestamp;
-                                    const description = isPlay ? 'Started watching' :
-                                      isPause ? 'Paused video' :
-                                      isEnd ? 'Left / Ended' :
-                                      isSeek ? `Seeked to ${evt.videoTime != null ? fmtVideoPos(evt.videoTime) : '—'}` :
-                                      isJoin ? 'Joined live' : evtType || 'Event';
-                                    return (
-                                      <div key={ei} className="flex items-center gap-2.5 relative">
-                                        <div className={`w-3.5 h-3.5 rounded-full border-2 border-white ${dotColor} flex-shrink-0 z-10 -ml-[7px]`} />
-                                        <span className={`text-xs font-semibold min-w-[90px] ${labelColor}`}>{description}</span>
-                                        {evt.videoTime != null && (
-                                          <span className="text-[11px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">@{fmtVideoPos(evt.videoTime)}</span>
-                                        )}
-                                        {wallTime && (
-                                          <span className="text-[11px] text-slate-400">{fmtTime(wallTime)}</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                            {events.length === 0 && (
-                              <div className="px-4 py-2 text-xs text-slate-400">No event details recorded</div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
               ) : (
                 /* ── Student List View ── */
                 <div className="flex-1 overflow-y-auto">
@@ -842,14 +699,18 @@ export default function AdminRecordingHistory() {
                         return (
                           <button
                             key={student.userId}
-                            onClick={() => setSelectedStudent(student)}
+                            onClick={() => setStudentPopup({ recordingId: watchHistoryRec.id, userId: student.userId })}
                             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition text-left group"
                           >
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-                              <span className="text-white font-bold text-[10px]">
-                                {(student.user?.profile?.fullName || student.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
-                              </span>
-                            </div>
+                            {student.user?.profile?.avatarUrl ? (
+                              <img src={student.user.profile.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white font-bold text-[10px]">
+                                  {(student.user?.profile?.fullName || student.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                                </span>
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="text-sm font-semibold text-slate-800 truncate">{student.user?.profile?.fullName || student.user?.email || 'Unknown'}</p>
@@ -903,6 +764,15 @@ export default function AdminRecordingHistory() {
           </div>
         </div>
       , document.body)}
+
+      {/* Student Watch Detail Popup */}
+      {studentPopup && (
+        <StudentWatchDetailModal
+          recordingId={studentPopup.recordingId}
+          userId={studentPopup.userId}
+          onClose={() => setStudentPopup(null)}
+        />
+      )}
     </div>
   );
 }

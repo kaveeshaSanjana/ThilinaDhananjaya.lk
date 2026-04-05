@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto } from './dto/attendance.dto';
+import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -85,6 +85,17 @@ export class AttendanceController {
   @Get('recording/:recordingId/stats')
   getRecordingStudentStats(@Param('recordingId') recordingId: string) {
     return this.attendanceService.getRecordingStudentStats(recordingId);
+  }
+
+  /** Admin: single student's detailed watch stats for a recording */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('recording/:recordingId/student/:userId')
+  getStudentRecordingStats(
+    @Param('recordingId') recordingId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.attendanceService.getStudentRecordingStats(recordingId, userId);
   }
 
   /** Admin: attendance for a recording */
@@ -184,7 +195,40 @@ export class AttendanceController {
 
   // ─── Class Attendance (Physical / Date-based) Endpoints ───
 
-  /** Admin: mark single student class attendance (supports instituteId/barcode lookup) */
+  /** Admin: mark by barcode — 1 indexed lookup, fastest (used by QR / barcode scanner) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/mark/by-barcode')
+  markByBarcode(
+    @Request() req: any,
+    @Body() body: MarkByBarcodeDto,
+  ) {
+    return this.attendanceService.markByBarcode({ ...body, markedBy: req.user.sub });
+  }
+
+  /** Admin: mark by institute ID — 1 unique index lookup */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/mark/by-institute-id')
+  markByInstituteId(
+    @Request() req: any,
+    @Body() body: MarkByInstituteIdDto,
+  ) {
+    return this.attendanceService.markByInstituteId({ ...body, markedBy: req.user.sub });
+  }
+
+  /** Admin: mark by phone number — 1 indexed lookup */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/mark/by-phone')
+  markByPhone(
+    @Request() req: any,
+    @Body() body: MarkByPhoneDto,
+  ) {
+    return this.attendanceService.markByPhone({ ...body, markedBy: req.user.sub });
+  }
+
+  /** Admin: mark single student class attendance — generic fallback (up to 4 lookups) */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post('class-attendance/mark')
@@ -271,6 +315,18 @@ export class AttendanceController {
   @Delete('class-attendance/:id')
   deleteClassAttendance(@Param('id') id: string) {
     return this.attendanceService.deleteClassAttendance(id);
+  }
+
+  /** Admin: attendance monitor grid — date range */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/monitor')
+  getClassAttendanceMonitor(
+    @Param('classId') classId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.attendanceService.getClassAttendanceMonitor(classId, from, to);
   }
 
   /** Admin: get class-wise student payment statuses */
