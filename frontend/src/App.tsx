@@ -27,6 +27,7 @@ import AdminClassAttendance from './pages/admin/AdminClassAttendance';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
 import AdminMonthManage from './pages/admin/AdminMonthManage';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
+import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 
 import Layout from './components/Layout';
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="classes/:classId/months/:monthId" element={<ClassMonthRecordingsPage />} />
         <Route path="classes/:classId/months/:monthId/rec-attendance" element={<ProtectedRoute role="ADMIN"><AdminMonthRecAttendance /></ProtectedRoute>} />
         <Route path="classes/:classId/months/:monthId/my-attendance" element={<ProtectedRoute><StudentMonthRecAttendance /></ProtectedRoute>} />
+        <Route path="classes/:classId/months/:monthId/live-lessons" element={<ProtectedRoute><ClassMonthLiveLessonsPage /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
         <Route path="payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />

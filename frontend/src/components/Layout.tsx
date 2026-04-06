@@ -201,6 +201,16 @@ export default function Layout() {
         {isMonthDetail ? (
           <SideSection label="Month">
             <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}`} icon={icons.recordings} label="Recordings" exact />
+            <NavItem
+              to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/live-lessons`}
+              icon={
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              }
+              label="Live Lessons"
+              exact
+            />
             {user?.role === 'ADMIN' && (
               <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`} icon={icons.attend} label="Month Rec Attendance" exact />
             )}

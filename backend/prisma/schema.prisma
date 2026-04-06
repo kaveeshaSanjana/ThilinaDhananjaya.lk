@@ -45,6 +45,19 @@ enum ClassStatus {
   INACTIVE
 }
 
+enum LectureStatus {
+  ANYONE
+  STUDENTS_ONLY
+  PAID_ONLY
+  PRIVATE
+  INACTIVE
+}
+
+enum LectureMode {
+  ONLINE
+  OFFLINE
+}
+
 enum PaymentType {
   MONTHLY
   ADMISSION
@@ -175,9 +188,34 @@ model Month {
   class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
   recordings Recording[]
   payments   PaymentSlip[]
+  lectures   Lecture[]
 
   @@unique([classId, year, month])
   @@index([classId])
+}
+
+model Lecture {
+  id              String        @id @default(uuid())
+  monthId         String
+  title           String
+  description     String?       @db.Text
+  mode            LectureMode   @default(ONLINE)
+  platform        String?       // e.g. Zoom, Google Meet, Microsoft Teams
+  startTime       DateTime
+  endTime         DateTime
+  sessionLink     String?       @db.Text
+  meetingId       String?
+  meetingPassword String?
+  maxParticipants Int?
+  status          LectureStatus @default(STUDENTS_ONLY)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([status])
+  @@index([startTime])
 }
 
 model Recording {
