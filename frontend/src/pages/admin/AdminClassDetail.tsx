@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../lib/api';
+import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
+import CropImageInput from '../../components/CropImageInput';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
@@ -52,6 +54,7 @@ export default function AdminClassDetail() {
   const [recForm, setRecForm] = useState({ ...emptyRecForm });
   const [recSaving, setRecSaving] = useState(false);
   const [recError, setRecError] = useState('');
+  const [uploadingRecThumbnail, setUploadingRecThumbnail] = useState(false);
   const [filterMonth, setFilterMonth] = useState('');
 
   // Students
@@ -146,6 +149,22 @@ export default function AdminClassDetail() {
   const deleteRec = async (rid: string) => {
     if (!confirm('Delete this recording?')) return;
     await api.delete(`/recordings/${rid}`).catch(() => {}); loadRecordings();
+  };
+
+  const handleRecThumbnailChange = async (file?: File) => {
+    if (!file) return;
+    setRecError('');
+    setUploadingRecThumbnail(true);
+    try {
+      const url = editingRec
+        ? await uploadRecordingThumbnail(editingRec.id, file)
+        : await uploadImage(file, 'recordings');
+      setRecForm(p => ({ ...p, thumbnail: url }));
+    } catch (err: any) {
+      setRecError(err.message || 'Thumbnail upload failed');
+    } finally {
+      setUploadingRecThumbnail(false);
+    }
   };
 
   // ─── Enrollment handlers ────────────────
@@ -503,7 +522,25 @@ export default function AdminClassDetail() {
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Video</p>
                     <div><label className={label}>Video URL</label><input type="text" value={recForm.videoUrl} onChange={e => setRecForm(p => ({ ...p, videoUrl: e.target.value }))} required className={inp} placeholder="https://..." /></div>
-                    <div><label className={label}>Thumbnail URL</label><input type="text" value={recForm.thumbnail} onChange={e => setRecForm(p => ({ ...p, thumbnail: e.target.value }))} className={inp} placeholder="https://..." /></div>
+                    <div>
+                      <label className={label}>Thumbnail URL</label>
+                      <div className="space-y-2">
+                        <input type="text" value={recForm.thumbnail} onChange={e => setRecForm(p => ({ ...p, thumbnail: e.target.value }))} className={inp} placeholder="https://..." />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CropImageInput
+                            onFile={handleRecThumbnailChange}
+                            aspectRatio={16 / 9}
+                            loading={uploadingRecThumbnail}
+                            label="Upload Image"
+                            cropTitle="Crop Thumbnail"
+                          />
+                          <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                        </div>
+                        {recForm.thumbnail && (
+                          <img src={recForm.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-slate-200" />
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Meta</p>
@@ -516,9 +553,9 @@ export default function AdminClassDetail() {
                   </div>
                   <div className="flex gap-3 pt-2 pb-2">
                     <button type="button" onClick={() => setShowRecForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                    <button type="submit" disabled={recSaving} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
-                      {recSaving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                      {recSaving ? 'Saving...' : 'Save'}
+                    <button type="submit" disabled={recSaving || uploadingRecThumbnail} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                      {(recSaving || uploadingRecThumbnail) && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                      {recSaving ? 'Saving...' : uploadingRecThumbnail ? 'Uploading...' : 'Save'}
                     </button>
                   </div>
                 </div>

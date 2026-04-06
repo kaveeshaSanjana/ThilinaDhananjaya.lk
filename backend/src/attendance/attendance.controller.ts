@@ -71,6 +71,40 @@ export class AttendanceController {
     return this.attendanceService.getByUser(req.user.sub);
   }
 
+  /**
+   * Student: get my recording attendance for selected recordings, grouped by month.
+   * GET /attendance/my/recordings?ids=id1,id2,id3,...
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('my/recordings')
+  getMyRecordingsAttendance(
+    @Request() req: any,
+    @Query('ids') ids: string,
+  ) {
+    const recordingIds = ids ? ids.split(',').map(s => s.trim()).filter(Boolean) : [];
+    return this.attendanceService.getMyRecordingsAttendance(req.user.sub, recordingIds);
+  }
+
+  /**
+   * Admin: get all students' attendance for selected recordings, grouped by month + user.
+   * GET /attendance/recordings/users?ids=id1,id2,id3,...
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('recordings/users')
+  getRecordingsUsersAttendance(
+    @Query('ids') ids: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const recordingIds = ids ? ids.split(',').map(s => s.trim()).filter(Boolean) : [];
+    return this.attendanceService.getRecordingsUsersAttendance(
+      recordingIds,
+      page ? +page : undefined,
+      limit ? +limit : undefined,
+    );
+  }
+
   /** Admin: attendance for a student */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

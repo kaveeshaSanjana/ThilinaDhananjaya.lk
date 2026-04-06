@@ -63,6 +63,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [time, setTime] = useState(new Date());
   const [selectedClassName, setSelectedClassName] = useState('');
+  const [selectedMonthName, setSelectedMonthName] = useState('');
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 60000);
@@ -80,8 +81,14 @@ export default function Layout() {
   const hour = time.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  const isClassDetail = /^\/classes\/[^/]+(\/class-recordings)?$/.test(location.pathname) && location.pathname.startsWith('/classes/');
-  const classId = isClassDetail ? location.pathname.split('/')[2] : null;
+  // Detect class+month detail: /classes/:classId/months/:monthId[/...]
+  const classMonthMatch = location.pathname.match(/^\/classes\/([^/]+)\/months\/([^/]+)/);
+  const isMonthDetail = !!classMonthMatch;
+  const monthDetailClassId = classMonthMatch?.[1] ?? null;
+  const monthDetailMonthId = classMonthMatch?.[2] ?? null;
+
+  const isClassDetail = !isMonthDetail && (/^\/classes\/[^/]+(\/class-recordings)?$/.test(location.pathname) && location.pathname.startsWith('/classes/'));
+  const classId = isClassDetail ? location.pathname.split('/')[2] : (isMonthDetail ? monthDetailClassId : null);
 
   useEffect(() => {
     if (!classId) { setSelectedClassName(''); return; }
@@ -89,6 +96,16 @@ export default function Layout() {
       .then((res) => setSelectedClassName(res.data?.name || 'Selected Class'))
       .catch(() => setSelectedClassName('Selected Class'));
   }, [classId]);
+
+  useEffect(() => {
+    if (!monthDetailClassId || !monthDetailMonthId) { setSelectedMonthName(''); return; }
+    api.get(`/classes/${monthDetailClassId}/months`)
+      .then((res) => {
+        const month = (res.data || []).find((m: any) => m.id === monthDetailMonthId);
+        setSelectedMonthName(month?.name || 'Selected Month');
+      })
+      .catch(() => setSelectedMonthName('Selected Month'));
+  }, [monthDetailClassId, monthDetailMonthId]);
 
   // ---------- PUBLIC LAYOUT (no sidebar) ----------
   if (!user) {
@@ -153,24 +170,44 @@ export default function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 pb-3 overflow-y-auto sidebar-scroll">
-        {isClassDetail && (
+        {(isClassDetail || isMonthDetail) && (
           <div className="mt-3 rounded-xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.05)] overflow-hidden">
             <div className="px-3 py-2 border-b border-[hsl(var(--primary)/0.1)]">
               <p className="text-[10px] font-bold text-[hsl(var(--primary))] uppercase tracking-[0.14em]">Current Selection</p>
             </div>
-            <div className="px-3 py-2.5 flex items-center gap-2">
-              <span className="w-[16px] h-[16px] text-[hsl(var(--primary))] flex-shrink-0">{icons.classes}</span>
-              <p className="text-[13px] font-semibold text-[hsl(var(--foreground))] truncate flex-1">{selectedClassName || 'Loading...'}</p>
-              <Link to="/classes" className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-              </Link>
+            <div className="px-3 py-2 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-[16px] h-[16px] text-[hsl(var(--primary))] flex-shrink-0">{icons.classes}</span>
+                <p className="text-[13px] font-semibold text-[hsl(var(--foreground))] truncate flex-1">{selectedClassName || 'Loading...'}</p>
+                <Link to="/classes" className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                </Link>
+              </div>
+              {isMonthDetail && (
+                <div className="flex items-center gap-2">
+                  <span className="w-[16px] h-[16px] text-[hsl(var(--muted-foreground)/0.6)] flex-shrink-0">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </span>
+                  <p className="text-[12px] font-medium text-[hsl(var(--muted-foreground))] truncate flex-1">{selectedMonthName || 'Loading...'}</p>
+                  <Link to={`/classes/${monthDetailClassId}`} className="text-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--primary))] transition" aria-label="Back to months">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {isClassDetail ? (
+        {isMonthDetail ? (
+          <SideSection label="Month">
+            <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}`} icon={icons.recordings} label="Recordings" exact />
+            {user?.role === 'ADMIN' && (
+              <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`} icon={icons.attend} label="Month Rec Attendance" exact />
+            )}
+          </SideSection>
+        ) : isClassDetail ? (
           <SideSection label="Classes">
-            <NavItem to={`/classes/${classId}/class-recordings`} icon={icons.recordings} label="Class Recording" exact />
+            <NavItem to={`/classes/${classId}`} icon={icons.classes} label="Months" exact />
           </SideSection>
         ) : (
           <>

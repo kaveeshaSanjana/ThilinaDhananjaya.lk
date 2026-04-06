@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { AttendanceStatus, ClassAttendanceStatus } from '@prisma/client';
@@ -946,6 +946,310 @@ export class AttendanceService {
   /**
    * Get class-wise student payment status with submissions.
    */
+  /** Student: get my attendance for selected recordings (1 or more), grouped by month */
+  async getMyRecordingsAttendance(userId: string, recordingIds: string[]) {
+    if (!recordingIds.length) {
+      throw new BadRequestException('Provide at least one recording ID');
+    }
+
+    const [user, recordings, attendances, sessions] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, email: true,
+          profile: {
+            select: {
+              fullName: true, instituteId: true, avatarUrl: true,
+              phone: true, status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.recording.findMany({
+        where: { id: { in: recordingIds } },
+        select: {
+          id: true, title: true, duration: true, thumbnail: true,
+          topic: true, isLive: true, order: true, videoType: true,
+          month: {
+            select: {
+              id: true, name: true, year: true, month: true,
+              class: { select: { id: true, name: true, subject: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.attendance.findMany({
+        where: { userId, recordingId: { in: recordingIds } },
+        select: {
+          recordingId: true, status: true, watchedSec: true,
+          liveJoinedAt: true, updatedAt: true, details: true,
+        },
+      }),
+      this.prisma.watchSession.findMany({
+        where: { userId, recordingId: { in: recordingIds } },
+        select: {
+          recordingId: true, totalWatchedSec: true,
+          startedAt: true, endedAt: true, status: true,
+          videoStartPos: true, videoEndPos: true, events: true,
+        },
+        orderBy: { startedAt: 'desc' },
+      }),
+    ]);
+
+    const attMap = new Map(attendances.map(a => [a.recordingId!, a]));
+
+    // Group sessions by recordingId
+    const sessionMap = new Map<string, typeof sessions>();
+    for (const s of sessions) {
+      if (!sessionMap.has(s.recordingId)) sessionMap.set(s.recordingId, []);
+      sessionMap.get(s.recordingId)!.push(s);
+    }
+
+    const monthMap = new Map<string, {
+      month: { id: string; name: string; year: number; month: number; class: any };
+      recordings: any[];
+    }>();
+
+    for (const rec of recordings) {
+      const m = rec.month;
+      if (!monthMap.has(m.id)) {
+        monthMap.set(m.id, { month: m, recordings: [] });
+      }
+      const att = attMap.get(rec.id) || null;
+      const recSessions = sessionMap.get(rec.id) || [];
+      const totalWatchedSec = recSessions.reduce((sum, s) => sum + (s.totalWatchedSec || 0), 0);
+
+      monthMap.get(m.id)!.recordings.push({
+        id: rec.id,
+        title: rec.title,
+        duration: rec.duration,
+        thumbnail: rec.thumbnail,
+        topic: rec.topic,
+        isLive: rec.isLive,
+        order: rec.order,
+        videoType: rec.videoType,
+        attendance: att
+          ? {
+              status: att.status,
+              watchedSec: att.watchedSec,
+              liveJoinedAt: att.liveJoinedAt,
+              completedAt: att.status === 'COMPLETED' ? att.updatedAt : null,
+              details: att.details,
+            }
+          : null,
+        sessionCount: recSessions.length,
+        totalWatchedSec,
+        lastWatchedAt: recSessions[0]?.startedAt || null,
+        sessions: recSessions.map(s => ({
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          videoStartPos: s.videoStartPos,
+          videoEndPos: s.videoEndPos,
+          totalWatchedSec: s.totalWatchedSec,
+          status: s.status,
+          events: s.events,
+        })),
+      });
+    }
+
+    const result = Array.from(monthMap.values());
+    for (const entry of result) {
+      entry.recordings.sort((a, b) => a.order - b.order);
+    }
+    result.sort((a, b) => {
+      if (a.month.year !== b.month.year) return a.month.year - b.month.year;
+      return a.month.month - b.month.month;
+    });
+
+    return { user, months: result };
+  }
+
+  /**
+   * Admin: get all students' attendance for 1–3 selected recordings, grouped by month.
+   * Each student row shows per-recording attendance + watch sessions, same shape as getRecordingStudentStats.
+   */
+  async getRecordingsUsersAttendance(recordingIds: string[], page?: number, limit?: number) {
+    if (!recordingIds.length) {
+      throw new BadRequestException('Provide at least one recording ID');
+    }
+
+    // Load recordings + their months/classes
+    const recordings = await this.prisma.recording.findMany({
+      where: { id: { in: recordingIds } },
+      select: {
+        id: true, title: true, duration: true, thumbnail: true,
+        topic: true, isLive: true, order: true, videoType: true,
+        monthId: true,
+        month: {
+          select: {
+            id: true, name: true, year: true, month: true, status: true,
+            classId: true,
+            class: { select: { id: true, name: true, subject: true } },
+          },
+        },
+      },
+    });
+
+    if (!recordings.length) return { months: [], students: [] };
+
+    // Collect all unique classIds and monthIds across the selected recordings
+    const classIds = [...new Set(recordings.map(r => r.month.classId))];
+    const monthIds = [...new Set(recordings.map(r => r.monthId))];
+
+    const [enrollments, attendances, sessions, payments] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { classId: { in: classIds } },
+        include: {
+          user: {
+            include: {
+              profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true, status: true } },
+            },
+          },
+        },
+        orderBy: { user: { profile: { fullName: 'asc' } } },
+      }),
+      this.prisma.attendance.findMany({
+        where: { recordingId: { in: recordingIds } },
+      }),
+      this.prisma.watchSession.findMany({
+        where: { recordingId: { in: recordingIds } },
+        orderBy: { startedAt: 'desc' },
+      }),
+      this.prisma.paymentSlip.findMany({
+        where: { monthId: { in: monthIds } },
+      }),
+    ]);
+
+    // att keyed by userId+recordingId
+    const attMap = new Map<string, (typeof attendances)[0]>();
+    for (const a of attendances) attMap.set(`${a.userId}:${a.recordingId}`, a);
+
+    // sessions keyed by userId+recordingId
+    const sessionMap = new Map<string, (typeof sessions)>();
+    for (const s of sessions) {
+      const key = `${s.userId}:${s.recordingId}`;
+      if (!sessionMap.has(key)) sessionMap.set(key, []);
+      sessionMap.get(key)!.push(s);
+    }
+
+    // payment keyed by userId+monthId (best status wins)
+    const payMap = new Map<string, (typeof payments)[0]>();
+    for (const p of payments) {
+      const key = `${p.userId}:${p.monthId}`;
+      const ex = payMap.get(key);
+      if (!ex || p.status === 'VERIFIED' || (p.status === 'PENDING' && ex.status !== 'VERIFIED')) {
+        payMap.set(key, p);
+      }
+    }
+
+    // isFree map per monthId
+    const isFreeMap = new Map<string, boolean>();
+    for (const r of recordings) isFreeMap.set(r.monthId, r.month.status === 'ANYONE');
+
+    const buildRecordingRow = (uid: string, rec: (typeof recordings)[0]) => {
+      const att = attMap.get(`${uid}:${rec.id}`) || null;
+      const userSessions = sessionMap.get(`${uid}:${rec.id}`) || [];
+      const totalWatchedSec = userSessions.reduce((sum, s) => sum + (s.totalWatchedSec || 0), 0);
+      const isFree = isFreeMap.get(rec.monthId) ?? false;
+      const pay = payMap.get(`${uid}:${rec.monthId}`) || null;
+
+      return {
+        recordingId: rec.id,
+        attendanceStatus: att?.status || null,
+        attendanceWatchedSec: att?.watchedSec || 0,
+        liveJoinedAt: att?.liveJoinedAt || null,
+        completedAt: att?.status === 'COMPLETED' ? att.updatedAt : null,
+        sessionCount: userSessions.length,
+        totalWatchedSec,
+        lastWatchedAt: userSessions[0]?.startedAt || null,
+        paymentStatus: isFree ? 'FREE' : (pay?.status || 'NOT_PAID'),
+        sessions: userSessions.map(s => ({
+          id: s.id,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          totalWatchedSec: s.totalWatchedSec,
+          status: s.status,
+        })),
+      };
+    };
+
+    // Build student list from enrollments + anyone who has attendance/session but isn't enrolled
+    const seen = new Set<string>();
+    const students: any[] = [];
+
+    for (const enr of enrollments) {
+      if (seen.has(enr.userId)) continue;
+      seen.add(enr.userId);
+      students.push({
+        userId: enr.userId,
+        user: enr.user,
+        enrolled: true,
+        recordings: recordings.map(rec => buildRecordingRow(enr.userId, rec)),
+      });
+    }
+
+    const extraIds = new Set<string>();
+    for (const a of attendances) if (!seen.has(a.userId)) extraIds.add(a.userId);
+    for (const s of sessions) if (!seen.has(s.userId)) extraIds.add(s.userId);
+
+    if (extraIds.size > 0) {
+      const extraUsers = await this.prisma.user.findMany({
+        where: { id: { in: [...extraIds] } },
+        include: {
+          profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true, status: true } },
+        },
+      });
+      const userMap = new Map(extraUsers.map(u => [u.id, u]));
+      for (const uid of extraIds) {
+        seen.add(uid);
+        students.push({
+          userId: uid,
+          user: userMap.get(uid) || null,
+          enrolled: false,
+          recordings: recordings.map(rec => buildRecordingRow(uid, rec)),
+        });
+      }
+    }
+
+    // Build months metadata grouped by month (recordings sorted by order)
+    const monthMap = new Map<string, { month: any; recordings: any[] }>();
+    for (const rec of recordings) {
+      const m = rec.month;
+      if (!monthMap.has(m.id)) {
+        monthMap.set(m.id, {
+          month: { id: m.id, name: m.name, year: m.year, month: m.month, class: m.class },
+          recordings: [],
+        });
+      }
+      monthMap.get(m.id)!.recordings.push({
+        id: rec.id, title: rec.title, duration: rec.duration,
+        thumbnail: rec.thumbnail, topic: rec.topic, isLive: rec.isLive,
+        order: rec.order, videoType: rec.videoType,
+      });
+    }
+    for (const entry of monthMap.values()) {
+      entry.recordings.sort((a, b) => a.order - b.order);
+    }
+    const months = Array.from(monthMap.values()).sort((a, b) => {
+      if (a.month.year !== b.month.year) return a.month.year - b.month.year;
+      return a.month.month - b.month.month;
+    });
+
+    const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
+    const skip = page && page > 1 ? (page - 1) * take : 0;
+    const total = students.length;
+    const paginated = students.slice(skip, skip + take);
+
+    return {
+      months,
+      students: paginated,
+      total,
+      page: page || 1,
+      limit: take,
+      totalPages: Math.ceil(total / take),
+    };
+  }
+
   async getClassStudentPayments(classId: string) {
     // Get all months for this class
     const months = await this.prisma.month.findMany({

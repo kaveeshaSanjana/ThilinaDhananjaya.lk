@@ -24,6 +24,8 @@ import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
 import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
 import AdminClassAttendance from './pages/admin/AdminClassAttendance';
+import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
+import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 
 import Layout from './components/Layout';
 
@@ -64,8 +66,10 @@ function AppRoutes() {
       <Route path="/" element={<Layout />}>
         <Route index element={<ClassesPage />} />
         <Route path="classes" element={<ClassesPage />} />
-        <Route path="classes/:id" element={<Navigate to="class-recordings" replace />} />
+        <Route path="classes/:id" element={<ClassDetailPage />} />
         <Route path="classes/:id/class-recordings" element={<ClassDetailPage />} />
+        <Route path="classes/:classId/months/:monthId" element={<ClassMonthRecordingsPage />} />
+        <Route path="classes/:classId/months/:monthId/rec-attendance" element={<ProtectedRoute role="ADMIN"><AdminMonthRecAttendance /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
         <Route path="payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />
