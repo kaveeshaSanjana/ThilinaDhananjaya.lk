@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import * as XLSX from 'xlsx';
 import api from '../../lib/api';
 import { uploadImage, uploadStudentAvatar } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
@@ -30,7 +31,68 @@ export default function AdminStudents() {
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [viewStudent, setViewStudent] = useState<any>(null);
+  const [showExport, setShowExport] = useState(false);
+  const [exportCols, setExportCols] = useState<string[]>(['instituteId', 'fullName', 'email', 'phone', 'status']);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const EXPORT_COLUMNS = [
+    { key: 'instituteId',    label: 'Student ID' },
+    { key: 'fullName',       label: 'Full Name' },
+    { key: 'email',          label: 'Email' },
+    { key: 'phone',          label: 'Phone' },
+    { key: 'whatsappPhone',  label: 'WhatsApp' },
+    { key: 'status',         label: 'Status' },
+    { key: 'school',         label: 'School' },
+    { key: 'address',        label: 'Address' },
+    { key: 'occupation',     label: 'Occupation' },
+    { key: 'dateOfBirth',    label: 'Date of Birth' },
+    { key: 'guardianName',   label: 'Guardian Name' },
+    { key: 'guardianPhone',  label: 'Guardian Phone' },
+    { key: 'relationship',   label: 'Relationship' },
+    { key: 'barcodeId',      label: 'Barcode ID' },
+    { key: 'joined',         label: 'Joined Date' },
+  ];
+
+  const toggleExportCol = (key: string) =>
+    setExportCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+
+  const getCellValue = (s: any, key: string): string => {
+    switch (key) {
+      case 'instituteId':   return s.profile?.instituteId || '';
+      case 'fullName':      return s.profile?.fullName || '';
+      case 'email':         return s.email || '';
+      case 'phone':         return s.profile?.phone || '';
+      case 'whatsappPhone': return s.profile?.whatsappPhone || '';
+      case 'status':        return s.profile?.status || '';
+      case 'school':        return s.profile?.school || '';
+      case 'address':       return s.profile?.address || '';
+      case 'occupation':    return s.profile?.occupation || '';
+      case 'dateOfBirth':   return s.profile?.dateOfBirth ? new Date(s.profile.dateOfBirth).toLocaleDateString('en-GB') : '';
+      case 'guardianName':  return s.profile?.guardianName || '';
+      case 'guardianPhone': return s.profile?.guardianPhone || '';
+      case 'relationship':  return s.profile?.relationship || '';
+      case 'barcodeId':     return s.profile?.barcodeId || '';
+      case 'joined':        return s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB') : '';
+      default: return '';
+    }
+  };
+
+  const handleExport = () => {
+    if (exportCols.length === 0) return;
+    const headers = exportCols.map(k => EXPORT_COLUMNS.find(c => c.key === k)?.label || k);
+    const rows = students.map(s => exportCols.map(k => getCellValue(s, k)));
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    // Auto column widths
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] || '').length));
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `students_${date}.xlsx`);
+    setShowExport(false);
+  };
 
   const load = useCallback((searchTerm?: string) => {
     setLoading(true);
@@ -198,6 +260,13 @@ export default function AdminStudents() {
               <input value={search} onChange={e => handleSearch(e.target.value)} placeholder="Search by name, email, ID..."
                 className="pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 shadow-sm transition w-full sm:w-64" />
           </div>
+          <button
+            onClick={() => setShowExport(true)}
+            className="px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Export
+          </button>
           <button onClick={openNew}
             className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 flex items-center gap-1.5">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -205,6 +274,91 @@ export default function AdminStudents() {
           </button>
         </div>
       </div>
+
+      {/* Export Modal */}
+      {showExport && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowExport(false)}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+                <div>
+                  <h2 className="font-bold text-[hsl(var(--foreground))]">Export Students</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Select columns to include in the Excel file</p>
+                </div>
+                <button onClick={() => setShowExport(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Select all / none */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setExportCols(EXPORT_COLUMNS.map(c => c.key))}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                  >Select all</button>
+                  <span className="text-slate-300">·</span>
+                  <button
+                    onClick={() => setExportCols([])}
+                    className="text-xs font-semibold text-slate-400 hover:text-red-500 transition"
+                  >Clear</button>
+                  <span className="ml-auto text-xs text-slate-400">{exportCols.length} selected · {students.length} rows</span>
+                </div>
+                {/* Column checkboxes */}
+                <div className="grid grid-cols-2 gap-2">
+                  {EXPORT_COLUMNS.map(col => (
+                    <label
+                      key={col.key}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition select-none ${
+                        exportCols.includes(col.key)
+                          ? 'bg-blue-50 border-blue-300'
+                          : 'border-[hsl(var(--border))] hover:border-blue-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${
+                        exportCols.includes(col.key)
+                          ? 'bg-blue-600 border-blue-600'
+                          : 'border-slate-300'
+                      }`}>
+                        {exportCols.includes(col.key) && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium ${
+                        exportCols.includes(col.key) ? 'text-blue-700' : 'text-slate-600'
+                      }`}>{col.label}</span>
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={exportCols.includes(col.key)}
+                        onChange={() => toggleExportCol(col.key)}
+                      />
+                    </label>
+                  ))}
+                </div>
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowExport(false)}
+                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    disabled={exportCols.length === 0}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
 
       {/* View Detail Modal */}
       {viewStudent && createPortal(

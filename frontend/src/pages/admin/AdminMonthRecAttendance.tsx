@@ -1,5 +1,7 @@
 ﻿import { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import api from '../../lib/api';
 import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
 
@@ -205,6 +207,23 @@ function PaginationBar({ total, page, rowsPerPage, pageSizeOptions, onPageChange
   );
 }
 
+/*  Export Column Definitions  */
+
+const EXPORT_COL_DEFS: Record<string, { key: string; label: string }[]> = {
+  monitor: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'pct',         label: 'Completion %' },
+  ],
+  grid: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'email',       label: 'Email' },
+    { key: 'phone',       label: 'Phone' },
+    { key: 'pct',         label: 'Completion %' },
+  ],
+};
+
 /*  Main Component  */
 
 export default function AdminMonthRecAttendance() {
@@ -222,8 +241,93 @@ export default function AdminMonthRecAttendance() {
   const [page, setPage]                   = useState(0);
   const [rowsPerPage, setRowsPerPage]     = useState(10);
   const [popup, setPopup]                 = useState<{ recordingId: string; userId: string } | null>(null);
+  const [showExport, setShowExport]       = useState(false);
+  const [exportCols, setExportCols]       = useState<string[]>([]);
 
   const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+  const openExport = () => {
+    setExportCols((EXPORT_COL_DEFS[activeTab] || []).map(c => c.key));
+    setShowExport(true);
+  };
+
+  const toggleExportCol = (key: string) =>
+    setExportCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+
+  function handleExport() {
+    if (exportCols.length === 0 || !gridData) return;
+    const cols = exportCols;
+    const defs = EXPORT_COL_DEFS[activeTab] || [];
+    let headers: string[] = [];
+    let rows: (string | number)[][] = [];
+
+    if (activeTab === 'monitor') {
+      const fixedHdrs = cols.filter(k => ['name', 'instituteId'].includes(k)).map(k => defs.find(d => d.key === k)?.label || k);
+      headers = [
+        ...fixedHdrs,
+        ...gridColumns.map(col => col.title),
+        ...(cols.includes('pct') ? ['Completion %'] : []),
+      ];
+      rows = filteredStudents.map((s: StudentRow) => {
+        const completedCount = s.recordings.filter((r: RecordingCell) => r?.attendanceStatus === 'COMPLETED' || r?.attendanceStatus === 'MANUAL').length;
+        const pct = gridColumns.length > 0 ? Math.round((completedCount / gridColumns.length) * 100) : 0;
+        return [
+          ...(cols.includes('name')        ? [s.user?.profile?.fullName || ''] : []),
+          ...(cols.includes('instituteId') ? [s.user?.profile?.instituteId || ''] : []),
+          ...gridColumns.map((_col, ci) => {
+            const cell: RecordingCell | undefined = s.recordings[ci];
+            if (!cell) return '';
+            if (cell.attendanceStatus === 'COMPLETED' || cell.attendanceStatus === 'MANUAL') return 'Completed';
+            if (cell.attendanceStatus === 'INCOMPLETE') return 'Incomplete';
+            if (cell.sessionCount > 0) return 'Viewed';
+            return 'Not watched';
+          }),
+          ...(cols.includes('pct') ? [`${pct}%`] : []),
+        ];
+      });
+
+    } else if (activeTab === 'grid') {
+      const fixedHdrs = cols.filter(k => ['name', 'instituteId', 'email', 'phone'].includes(k)).map(k => defs.find(d => d.key === k)?.label || k);
+      headers = [
+        ...fixedHdrs,
+        ...gridColumns.flatMap(col => [`${col.title} - Status`, `${col.title} - Watch Time`, `${col.title} - Payment`]),
+        ...(cols.includes('pct') ? ['Completion %'] : []),
+      ];
+      rows = filteredStudents.map((s: StudentRow) => {
+        const completedCount = s.recordings.filter((r: RecordingCell) => r?.attendanceStatus === 'COMPLETED' || r?.attendanceStatus === 'MANUAL').length;
+        const pct = gridColumns.length > 0 ? Math.round((completedCount / gridColumns.length) * 100) : 0;
+        return [
+          ...(cols.includes('name')        ? [s.user?.profile?.fullName || ''] : []),
+          ...(cols.includes('instituteId') ? [s.user?.profile?.instituteId || ''] : []),
+          ...(cols.includes('email')       ? [s.user?.email || ''] : []),
+          ...(cols.includes('phone')       ? [s.user?.profile?.phone || ''] : []),
+          ...gridColumns.flatMap((_col, ci) => {
+            const cell: RecordingCell | undefined = s.recordings[ci];
+            if (!cell) return ['', '', ''];
+            const st =
+              cell.attendanceStatus === 'COMPLETED' || cell.attendanceStatus === 'MANUAL' ? 'Completed' :
+              cell.attendanceStatus === 'INCOMPLETE' ? 'Incomplete' :
+              cell.sessionCount > 0 ? 'Viewed' : 'Not watched';
+            return [st, fmtTime(cell.totalWatchedSec), PAYMENT_MAP[cell.paymentStatus]?.label || cell.paymentStatus];
+          }),
+          ...(cols.includes('pct') ? [`${pct}%`] : []),
+        ];
+      });
+    }
+
+    if (headers.length === 0) return;
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, activeTab === 'monitor' ? 'Monitor' : 'Grid');
+    const className = (classData?.name || 'class').replace(/\s+/g, '_');
+    const monthName = (monthData?.name || 'month').replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `${className}_${monthName}_rec_${activeTab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setShowExport(false);
+  }
 
   /*  Load class + month metadata  */
   useEffect(() => {
@@ -327,14 +431,25 @@ export default function AdminMonthRecAttendance() {
             </p>
           )}
         </div>
-        {selectedIds.length > 0 && (
-          <span className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
-            </svg>
-            {selectedIds.length} recording{selectedIds.length !== 1 ? 's' : ''} selected
-          </span>
-        )}
+        <div className="flex items-center gap-2 self-start sm:self-center flex-wrap justify-end">
+          {gridData && (
+            <button
+              onClick={openExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Export
+            </button>
+          )}
+          {selectedIds.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
+              </svg>
+              {selectedIds.length} recording{selectedIds.length !== 1 ? 's' : ''} selected
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Tabs ── */}
@@ -934,6 +1049,77 @@ export default function AdminMonthRecAttendance() {
           onClose={() => setPopup(null)}
         />
       )}
+
+      {/* Export Modal */}
+      {showExport && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowExport(false)}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+                <div>
+                  <h2 className="font-bold text-[hsl(var(--foreground))]">Export {activeTab === 'monitor' ? 'Monitor' : 'Attendance Grid'}</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Select columns • per-recording columns are auto-included</p>
+                </div>
+                <button onClick={() => setShowExport(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Select all / Clear */}
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setExportCols((EXPORT_COL_DEFS[activeTab] || []).map(c => c.key))} className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">Select all</button>
+                  <span className="text-slate-300">·</span>
+                  <button onClick={() => setExportCols([])} className="text-xs font-semibold text-slate-400 hover:text-red-500 transition">Clear</button>
+                  <span className="ml-auto text-xs text-slate-400">{exportCols.length} selected · {filteredStudents.length} rows</span>
+                </div>
+
+                {/* Dynamic columns note */}
+                <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                  {gridColumns.length} recording column{gridColumns.length !== 1 ? 's' : ''} automatically included.
+                  {activeTab === 'grid' && ' Each recording exports status, watch time and payment.'}
+                </p>
+
+                {/* Column checkboxes */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(EXPORT_COL_DEFS[activeTab] || []).map(col => (
+                    <label
+                      key={col.key}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition select-none ${
+                        exportCols.includes(col.key) ? 'bg-blue-50 border-blue-300' : 'border-[hsl(var(--border))] hover:border-blue-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${
+                        exportCols.includes(col.key) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                      }`}>
+                        {exportCols.includes(col.key) && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium ${exportCols.includes(col.key) ? 'text-blue-700' : 'text-slate-600'}`}>{col.label}</span>
+                      <input type="checkbox" className="sr-only" checked={exportCols.includes(col.key)} onChange={() => toggleExportCol(col.key)} />
+                    </label>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setShowExport(false)} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+                  <button
+                    onClick={handleExport}
+                    disabled={exportCols.length === 0}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }

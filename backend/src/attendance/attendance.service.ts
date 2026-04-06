@@ -1064,6 +1064,99 @@ export class AttendanceService {
     return { user, months: result };
   }
 
+  /** Student: get my attendance for all recordings in a specific class month */
+  async getMyMonthAttendance(userId: string, monthId: string) {
+    const [month, attendances, sessions] = await Promise.all([
+      this.prisma.month.findUnique({
+        where: { id: monthId },
+        select: {
+          id: true, name: true, year: true, month: true,
+          class: { select: { id: true, name: true, subject: true } },
+          recordings: {
+            where: { status: { not: 'INACTIVE' } },
+            orderBy: { order: 'asc' },
+            select: {
+              id: true, title: true, duration: true, thumbnail: true,
+              topic: true, isLive: true, order: true, videoType: true, status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.attendance.findMany({
+        where: { userId, recording: { monthId } },
+        select: {
+          recordingId: true, status: true, watchedSec: true,
+          liveJoinedAt: true, updatedAt: true, details: true,
+        },
+      }),
+      this.prisma.watchSession.findMany({
+        where: { userId, recording: { monthId } },
+        select: {
+          recordingId: true, totalWatchedSec: true,
+          startedAt: true, endedAt: true, status: true,
+          videoStartPos: true, videoEndPos: true,
+        },
+        orderBy: { startedAt: 'desc' },
+      }),
+    ]);
+
+    if (!month) throw new NotFoundException('Month not found');
+
+    const attMap = new Map(attendances.map(a => [a.recordingId!, a]));
+
+    const sessionMap = new Map<string, typeof sessions>();
+    for (const s of sessions) {
+      if (!sessionMap.has(s.recordingId)) sessionMap.set(s.recordingId, []);
+      sessionMap.get(s.recordingId)!.push(s);
+    }
+
+    const recordings = month.recordings.map(rec => {
+      const att = attMap.get(rec.id) || null;
+      const recSessions = sessionMap.get(rec.id) || [];
+      const totalWatchedSec = recSessions.reduce((sum, s) => sum + (s.totalWatchedSec || 0), 0);
+      return {
+        id: rec.id,
+        title: rec.title,
+        duration: rec.duration,
+        thumbnail: rec.thumbnail,
+        topic: rec.topic,
+        isLive: rec.isLive,
+        order: rec.order,
+        videoType: rec.videoType,
+        status: rec.status,
+        attendance: att
+          ? {
+              status: att.status,
+              watchedSec: att.watchedSec,
+              liveJoinedAt: att.liveJoinedAt,
+              completedAt: att.status === 'COMPLETED' ? att.updatedAt : null,
+              details: att.details,
+            }
+          : null,
+        sessionCount: recSessions.length,
+        totalWatchedSec,
+        lastWatchedAt: recSessions[0]?.startedAt || null,
+        sessions: recSessions.map(s => ({
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          videoStartPos: s.videoStartPos,
+          videoEndPos: s.videoEndPos,
+          totalWatchedSec: s.totalWatchedSec,
+          status: s.status,
+        })),
+      };
+    });
+
+    const completed = recordings.filter(r => r.attendance?.status === 'COMPLETED').length;
+    const total = recordings.length;
+
+    return {
+      month: { id: month.id, name: month.name, year: month.year, month: month.month, class: month.class },
+      recordings,
+      summary: { total, completed, incomplete: recordings.filter(r => r.attendance?.status === 'INCOMPLETE').length, notWatched: recordings.filter(r => !r.attendance).length },
+    };
+  }
+
   /**
    * Admin: get all students' attendance for 1–3 selected recordings, grouped by month.
    * Each student row shows per-recording attendance + watch sessions, same shape as getRecordingStudentStats.

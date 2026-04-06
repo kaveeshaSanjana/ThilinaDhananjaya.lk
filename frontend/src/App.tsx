@@ -25,7 +25,9 @@ import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
 import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
 import AdminClassAttendance from './pages/admin/AdminClassAttendance';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
+import AdminMonthManage from './pages/admin/AdminMonthManage';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
+import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 
 import Layout from './components/Layout';
 
@@ -70,6 +72,7 @@ function AppRoutes() {
         <Route path="classes/:id/class-recordings" element={<ClassDetailPage />} />
         <Route path="classes/:classId/months/:monthId" element={<ClassMonthRecordingsPage />} />
         <Route path="classes/:classId/months/:monthId/rec-attendance" element={<ProtectedRoute role="ADMIN"><AdminMonthRecAttendance /></ProtectedRoute>} />
+        <Route path="classes/:classId/months/:monthId/my-attendance" element={<ProtectedRoute><StudentMonthRecAttendance /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
         <Route path="payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />
@@ -79,6 +82,7 @@ function AppRoutes() {
         <Route path="admin/students" element={<ProtectedRoute role="ADMIN"><AdminStudents /></ProtectedRoute>} />
         <Route path="admin/classes" element={<ProtectedRoute role="ADMIN"><AdminClasses /></ProtectedRoute>} />
         <Route path="admin/classes/:id" element={<ProtectedRoute role="ADMIN"><AdminClassDetail /></ProtectedRoute>} />
+        <Route path="admin/classes/:classId/months/:monthId/manage" element={<ProtectedRoute role="ADMIN"><AdminMonthManage /></ProtectedRoute>} />
         <Route path="admin/slips" element={<ProtectedRoute role="ADMIN"><AdminSlips /></ProtectedRoute>} />
         <Route path="admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
         <Route path="admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminClassAttendance /></ProtectedRoute>} />

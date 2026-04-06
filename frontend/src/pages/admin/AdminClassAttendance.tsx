@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import * as XLSX from 'xlsx';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
@@ -121,6 +123,48 @@ function useBarcodeScanner(onScan: (code: string) => void) {
   return { videoRef, active, error, startCamera, stopCamera };
 }
 
+/* ─── Export Column Definitions ────────────────────── */
+const TAB_EXPORT_COLS: Record<string, { key: string; label: string }[]> = {
+  mark: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'barcodeId',   label: 'Barcode ID' },
+    { key: 'phone',       label: 'Phone' },
+    { key: 'status',      label: 'Attendance Status' },
+  ],
+  monthly: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'countP',      label: 'Present Days' },
+    { key: 'countA',      label: 'Absent Days' },
+    { key: 'countL',      label: 'Late Days' },
+    { key: 'pct',         label: 'Attendance %' },
+  ],
+  yearly: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'totalP',      label: 'Total Present' },
+    { key: 'totalA',      label: 'Total Absent' },
+    { key: 'totalL',      label: 'Total Late' },
+    { key: 'total',       label: 'Total Days' },
+    { key: 'pct',         label: 'Attendance %' },
+  ],
+  payments: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'email',       label: 'Email' },
+    { key: 'phone',       label: 'Phone' },
+    { key: 'payStatus',   label: 'Payment Status' },
+    { key: 'amount',      label: 'Amount (LKR)' },
+    { key: 'paidDate',    label: 'Paid Date' },
+  ],
+  monitor: [
+    { key: 'name',        label: 'Full Name' },
+    { key: 'instituteId', label: 'Student ID' },
+    { key: 'pct',         label: 'Attendance %' },
+  ],
+};
+
 /* ═══════════════════════════════════════════════════════ */
 /*                    MAIN COMPONENT                      */
 /* ═══════════════════════════════════════════════════════ */
@@ -170,6 +214,154 @@ export default function AdminClassAttendance() {
   // Deduplication: track last scan id + timestamp to reject identical scans within 2 s
   const lastScanRef = useRef<{ code: string; ts: number }>({ code: '', ts: 0 });
   const markingRef = useRef(false);
+
+  /* ─── Export ──────────────────────────────────── */
+  const [showExport, setShowExport] = useState(false);
+  const [exportCols, setExportCols] = useState<string[]>([]);
+
+  const openExport = () => {
+    setExportCols((TAB_EXPORT_COLS[tab] || []).map(c => c.key));
+    setShowExport(true);
+  };
+
+  const toggleExportCol = (key: string) =>
+    setExportCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+
+  function handleExport() {
+    if (exportCols.length === 0) return;
+    const cols = exportCols;
+    const defs = TAB_EXPORT_COLS[tab] || [];
+    let headers: string[] = [];
+    let rows: (string | number)[][] = [];
+
+    if (tab === 'mark') {
+      headers = cols.map(k => defs.find(d => d.key === k)?.label || k);
+      rows = filteredStudents.map(s => cols.map(k => {
+        switch (k) {
+          case 'name':        return s.fullName;
+          case 'instituteId': return s.instituteId;
+          case 'barcodeId':   return s.barcodeId || '';
+          case 'phone':       return s.phone || '';
+          case 'status':      return localStatuses[s.userId] || 'Unmarked';
+          default: return '';
+        }
+      }));
+
+    } else if (tab === 'monthly') {
+      const fixedCols   = cols.filter(k => ['name', 'instituteId'].includes(k));
+      const summaryCols = cols.filter(k => ['countP', 'countA', 'countL', 'pct'].includes(k));
+      const dateHdrs = monthDates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }));
+      headers = [
+        ...fixedCols.map(k => defs.find(d => d.key === k)?.label || k),
+        ...dateHdrs,
+        ...summaryCols.map(k => defs.find(d => d.key === k)?.label || k),
+      ];
+      rows = monthlySummary.map(row => [
+        ...fixedCols.map(k => {
+          switch (k) {
+            case 'name':        return row.student?.profile?.fullName || '';
+            case 'instituteId': return row.student?.profile?.instituteId || '';
+            default: return '';
+          }
+        }),
+        ...monthDates.map(d => row.dates[d] || ''),
+        ...summaryCols.map(k => {
+          const total = row.counts.PRESENT + row.counts.ABSENT + row.counts.LATE + row.counts.EXCUSED;
+          switch (k) {
+            case 'countP': return row.counts.PRESENT;
+            case 'countA': return row.counts.ABSENT;
+            case 'countL': return row.counts.LATE;
+            case 'pct':    return total > 0 ? `${Math.round(((row.counts.PRESENT + row.counts.LATE) / total) * 100)}%` : '0%';
+            default: return '';
+          }
+        }),
+      ]);
+
+    } else if (tab === 'yearly') {
+      const fixedCols   = cols.filter(k => ['name', 'instituteId'].includes(k));
+      const summaryCols = cols.filter(k => ['totalP', 'totalA', 'totalL', 'total', 'pct'].includes(k));
+      headers = [
+        ...fixedCols.map(k => defs.find(d => d.key === k)?.label || k),
+        ...yearActiveMonths.map(m => shortMonth(m)),
+        ...summaryCols.map(k => defs.find(d => d.key === k)?.label || k),
+      ];
+      rows = yearlySummary.map(row => [
+        ...fixedCols.map(k => {
+          switch (k) {
+            case 'name':        return row.student?.profile?.fullName || '';
+            case 'instituteId': return row.student?.profile?.instituteId || '';
+            default: return '';
+          }
+        }),
+        ...yearActiveMonths.map(m => {
+          const mc = row.months[m];
+          if (!mc) return '';
+          const p = mc.PRESENT || 0; const l = mc.LATE || 0;
+          const mt = p + (mc.ABSENT || 0) + l + (mc.EXCUSED || 0);
+          return mt > 0 ? `${Math.round(((p + l) / mt) * 100)}%` : '0%';
+        }),
+        ...summaryCols.map(k => {
+          switch (k) {
+            case 'totalP': return row.totalP;
+            case 'totalA': return row.totalA;
+            case 'totalL': return row.totalL;
+            case 'total':  return row.total;
+            case 'pct':    return row.total > 0 ? `${Math.round(((row.totalP + row.totalL) / row.total) * 100)}%` : '0%';
+            default: return '';
+          }
+        }),
+      ]);
+
+    } else if (tab === 'payments') {
+      headers = cols.map(k => defs.find(d => d.key === k)?.label || k);
+      rows = filteredPayStudents.map(s => cols.map(k => {
+        switch (k) {
+          case 'name':        return s.profile?.fullName || '';
+          case 'instituteId': return s.profile?.instituteId || '';
+          case 'email':       return s.email || '';
+          case 'phone':       return s.profile?.phone || '';
+          case 'payStatus':   return s.paymentStatus;
+          case 'amount':      return s.slip?.amount ?? paymentOverview?.monthlyFee ?? '';
+          case 'paidDate':    return s.slip?.paidDate ? new Date(s.slip.paidDate).toLocaleDateString('en-GB') : '';
+          default: return '';
+        }
+      }));
+
+    } else if (tab === 'monitor' && monitorData) {
+      const hasName = cols.includes('name');
+      const hasId   = cols.includes('instituteId');
+      const hasPct  = cols.includes('pct');
+      const filteredM = monitorSearch
+        ? monitorData.students.filter(s =>
+            s.fullName.toLowerCase().includes(monitorSearch.toLowerCase()) ||
+            s.instituteId.toLowerCase().includes(monitorSearch.toLowerCase()))
+        : monitorData.students;
+      headers = [
+        ...(hasName ? ['Full Name'] : []),
+        ...(hasId   ? ['Student ID'] : []),
+        ...monitorData.dates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })),
+        ...(hasPct  ? ['Attendance %'] : []),
+      ];
+      rows = filteredM.map(s => [
+        ...(hasName ? [s.fullName] : []),
+        ...(hasId   ? [s.instituteId] : []),
+        ...monitorData.dates.map(d => s.statuses[d] || ''),
+        ...(hasPct  ? [`${s.percentage}%`] : []),
+      ]);
+    }
+
+    if (headers.length === 0) return;
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tab.charAt(0).toUpperCase() + tab.slice(1));
+    const className = (selectedClass?.name || 'class').replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `${className}_${tab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setShowExport(false);
+  }
 
   /* ─── Barcode scanner ─────────────────────────── */
 
@@ -825,9 +1017,18 @@ export default function AdminClassAttendance() {
       )}
 
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
-        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
+          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
+        </div>
+        <button
+          onClick={openExport}
+          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition shadow-sm"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          Export
+        </button>
       </div>
 
       {/* Class Selector + Date Controls */}
@@ -1299,6 +1500,103 @@ export default function AdminClassAttendance() {
           })()}
         </div>
       ) : null}
+
+      {/* Export Modal */}
+      {showExport && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowExport(false)}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+                <div>
+                  <h2 className="font-bold text-[hsl(var(--foreground))]">Export {tab.charAt(0).toUpperCase() + tab.slice(1)} Attendance</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Select columns to include in the Excel file</p>
+                </div>
+                <button onClick={() => setShowExport(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Select all / none + row count */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setExportCols((TAB_EXPORT_COLS[tab] || []).map(c => c.key))}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                  >Select all</button>
+                  <span className="text-slate-300">·</span>
+                  <button
+                    onClick={() => setExportCols([])}
+                    className="text-xs font-semibold text-slate-400 hover:text-red-500 transition"
+                  >Clear</button>
+                  <span className="ml-auto text-xs text-slate-400">
+                    {exportCols.length} selected · {
+                      tab === 'mark'     ? filteredStudents.length :
+                      tab === 'monthly'  ? monthlySummary.length :
+                      tab === 'yearly'   ? yearlySummary.length :
+                      tab === 'payments' ? filteredPayStudents.length :
+                      (monitorData?.students.length || 0)
+                    } rows
+                  </span>
+                </div>
+
+                {/* Dynamic-columns note */}
+                {(tab === 'monthly' || tab === 'yearly' || tab === 'monitor') && (
+                  <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                    {tab === 'monthly' ? `${monthDates.length} date column${monthDates.length !== 1 ? 's' : ''} are automatically included.` :
+                     tab === 'yearly'  ? `${yearActiveMonths.length} month column${yearActiveMonths.length !== 1 ? 's' : ''} are automatically included.` :
+                     `${monitorData?.dates.length || 0} per-date columns are automatically included.`}
+                  </p>
+                )}
+
+                {/* Column checkboxes */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(TAB_EXPORT_COLS[tab] || []).map(col => (
+                    <label
+                      key={col.key}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition select-none ${
+                        exportCols.includes(col.key)
+                          ? 'bg-blue-50 border-blue-300'
+                          : 'border-[hsl(var(--border))] hover:border-blue-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${
+                        exportCols.includes(col.key) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                      }`}>
+                        {exportCols.includes(col.key) && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium ${
+                        exportCols.includes(col.key) ? 'text-blue-700' : 'text-slate-600'
+                      }`}>{col.label}</span>
+                      <input type="checkbox" className="sr-only" checked={exportCols.includes(col.key)} onChange={() => toggleExportCol(col.key)} />
+                    </label>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowExport(false)}
+                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    disabled={exportCols.length === 0}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }

@@ -204,6 +204,9 @@ export default function Layout() {
             {user?.role === 'ADMIN' && (
               <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`} icon={icons.attend} label="Month Rec Attendance" exact />
             )}
+            {user?.role === 'STUDENT' && (
+              <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`} icon={icons.attend} label="Rec Attendance" exact />
+            )}
           </SideSection>
         ) : isClassDetail ? (
           <SideSection label="Classes">

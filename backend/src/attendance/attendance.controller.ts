@@ -86,6 +86,19 @@ export class AttendanceController {
   }
 
   /**
+   * Student: get my attendance for all recordings in a specific class month.
+   * GET /attendance/my/month/:monthId
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('my/month/:monthId')
+  getMyMonthAttendance(
+    @Request() req: any,
+    @Param('monthId') monthId: string,
+  ) {
+    return this.attendanceService.getMyMonthAttendance(req.user.sub, monthId);
+  }
+
+  /**
    * Admin: get all students' attendance for selected recordings, grouped by month + user.
    * GET /attendance/recordings/users?ids=id1,id2,id3,...
    */
