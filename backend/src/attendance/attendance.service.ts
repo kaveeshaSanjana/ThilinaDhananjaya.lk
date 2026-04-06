@@ -1064,6 +1064,59 @@ export class AttendanceService {
     return { user, months: result };
   }
 
+  /** Student: get my own class (physical) attendance, optionally filtered by classId */
+  async getMyClassAttendance(userId: string, classId?: string) {
+    const where: any = { userId };
+    if (classId) where.classId = classId;
+
+    const records = await this.prisma.classAttendance.findMany({
+      where,
+      include: {
+        class: { select: { id: true, name: true, subject: true } },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    // Group records by class
+    const classMap = new Map<string, { class: { id: string; name: string; subject: string | null }; records: any[]; summary: any }>();
+
+    for (const rec of records) {
+      const cid = rec.class.id;
+      if (!classMap.has(cid)) {
+        classMap.set(cid, { class: rec.class, records: [], summary: { total: 0, present: 0, late: 0, absent: 0, excused: 0 } });
+      }
+      const entry = classMap.get(cid)!;
+      entry.records.push({
+        id: rec.id,
+        date: rec.date,
+        status: rec.status,
+        method: rec.method,
+        note: rec.note,
+      });
+      entry.summary.total++;
+      if (rec.status === 'PRESENT') entry.summary.present++;
+      else if (rec.status === 'LATE') entry.summary.late++;
+      else if (rec.status === 'ABSENT') entry.summary.absent++;
+      else if (rec.status === 'EXCUSED') entry.summary.excused++;
+    }
+
+    const classes = Array.from(classMap.values()).map(c => ({
+      ...c,
+      summary: {
+        ...c.summary,
+        attendancePercentage: c.summary.total > 0
+          ? Math.round(((c.summary.present + c.summary.late) / c.summary.total) * 100)
+          : 0,
+      },
+    }));
+
+    return {
+      userId,
+      totalClasses: classes.length,
+      classes,
+    };
+  }
+
   /** Student: get my attendance for all recordings in a specific class month */
   async getMyMonthAttendance(userId: string, monthId: string) {
     const [month, attendances, sessions] = await Promise.all([

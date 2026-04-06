@@ -240,6 +240,7 @@ export default function Layout() {
                 </SideSection>
                 <SideSection label="Activity">
                   <NavItem to="/watch-history" icon={icons.recordings} label="Watch History" />
+                  <NavItem to="/my-class-attendance" icon={icons.attend} label="My Attendance" />
                 </SideSection>
               </>
             )}

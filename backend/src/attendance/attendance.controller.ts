@@ -86,6 +86,19 @@ export class AttendanceController {
   }
 
   /**
+   * Student: get my own class (physical) attendance, optionally filtered by classId.
+   * GET /attendance/my/class-attendance?classId=...
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('my/class-attendance')
+  getMyClassAttendance(
+    @Request() req: any,
+    @Query('classId') classId?: string,
+  ) {
+    return this.attendanceService.getMyClassAttendance(req.user.sub, classId);
+  }
+
+  /**
    * Student: get my attendance for all recordings in a specific class month.
    * GET /attendance/my/month/:monthId
    */

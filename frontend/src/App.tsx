@@ -29,6 +29,7 @@ import AdminMonthManage from './pages/admin/AdminMonthManage';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
+import MyClassAttendancePage from './pages/MyClassAttendancePage';
 
 import Layout from './components/Layout';
 
@@ -79,6 +80,7 @@ function AppRoutes() {
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
         <Route path="payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />
         <Route path="watch-history" element={<ProtectedRoute><WatchHistoryPage /></ProtectedRoute>} />
+        <Route path="my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />
 
         <Route path="admin" element={<ProtectedRoute role="ADMIN"><AdminDashboard /></ProtectedRoute>} />
         <Route path="admin/students" element={<ProtectedRoute role="ADMIN"><AdminStudents /></ProtectedRoute>} />
