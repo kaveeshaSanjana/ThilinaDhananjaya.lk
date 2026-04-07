@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
 
 /* -------- Sidebar Nav Item -------- */
@@ -58,6 +59,7 @@ const icons = {
 export default function Layout() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { institutes, selected, select } = useInstitute();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -170,6 +172,32 @@ export default function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 pb-3 overflow-y-auto sidebar-scroll">
+        {/* Institute switcher — admin only, shown when in main nav */}
+        {user?.role === 'ADMIN' && institutes.length > 0 && !isClassDetail && !isMonthDetail && (
+          <div className="mt-3 mb-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] overflow-hidden">
+            {institutes.length === 1 ? (
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {selected?.logoUrl
+                    ? <img src={selected.logoUrl} alt="" className="w-7 h-7 object-cover" />
+                    : <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate">{selected?.name}</p>
+                  <p className="text-[10px] text-[hsl(var(--muted-foreground))]">Institute</p>
+                </div>
+              </div>
+            ) : (
+              <div className="px-2 py-2">
+                <p className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5 px-1">Institute</p>
+                <select value={selected?.id || ''} onChange={e => select(e.target.value)}
+                  className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 outline-none">
+                  {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
         {(isClassDetail || isMonthDetail) && (
           <div className="mt-3 rounded-xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.05)] overflow-hidden">
             <div className="px-3 py-2 border-b border-[hsl(var(--primary)/0.1)]">
@@ -253,6 +281,8 @@ export default function Layout() {
                 <NavItem to="/admin/attendance" icon={icons.attend} label="Recording Attendance" />
                 <NavItem to="/admin/class-attendance" icon={icons.attend} label="Class Attendance" />
                 <NavItem to="/admin/recordings" icon={icons.recordings} label="Recordings" />
+                <NavItem to="/admin/id-cards" icon={icons.students} label="ID Cards" />
+                <NavItem to="/admin/institute" icon={icons.admin} label="Institute Settings" />
               </SideSection>
             )}
           </>

@@ -26,6 +26,7 @@ export default function RecordingPlayerPage() {
   const [typingDone, setTypingDone] = useState(false);
   const classIdRef = useRef<string | null>(null);
   const typingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const endSessionRef = useRef<(() => Promise<{ ok: boolean; error?: string; session: SessionState }>) | null>(null);
   const isGuest = !user;
@@ -77,6 +78,7 @@ export default function RecordingPlayerPage() {
   // Skip welcome overlay
   const handleSkip = useCallback(() => {
     if (typingRef.current) { clearInterval(typingRef.current); typingRef.current = null; }
+    if (speechRef.current) { window.speechSynthesis.cancel(); speechRef.current = null; }
     setShowWelcome(false);
   }, []);
 
@@ -120,6 +122,70 @@ export default function RecordingPlayerPage() {
     setTypedText('');
     setTypingDone(false);
 
+    // Start natural TTS alongside typing
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+
+      // Strip emojis for clean speech
+      const cleanText = lines.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim();
+
+      // Split into sentences for natural pacing with pauses between
+      const sentences = cleanText
+        .split(/(?<=[.!?])\s+|\n\n+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      // Rank voice quality — prefer known high-quality voices
+      const PREFERRED_VOICES = [
+        'google uk english female', 'google us english', 'microsoft zira',
+        'microsoft jenny', 'samantha', 'karen', 'moira', 'tessa',
+        'google uk english male', 'daniel', 'microsoft david',
+      ];
+      const pickVoice = (): SpeechSynthesisVoice | null => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) return null;
+        // First try known high-quality voices
+        for (const name of PREFERRED_VOICES) {
+          const v = voices.find(v => v.name.toLowerCase().includes(name));
+          if (v) return v;
+        }
+        // Then prefer remote/cloud English voices (usually higher quality)
+        const remote = voices.find(v => v.lang.startsWith('en') && !v.localService);
+        if (remote) return remote;
+        return voices.find(v => v.lang.startsWith('en')) || null;
+      };
+
+      const speakSentences = (voice: SpeechSynthesisVoice | null) => {
+        sentences.forEach((sentence, idx) => {
+          const utt = new SpeechSynthesisUtterance(sentence);
+          utt.rate = 0.92;   // slightly slower = more natural
+          utt.pitch = 1.05;  // slightly warm
+          utt.volume = 1;
+          if (voice) utt.voice = voice;
+          // Add a brief pause between sentences for natural rhythm
+          if (idx > 0) {
+            const pause = new SpeechSynthesisUtterance('');
+            pause.volume = 0;
+            // Short empty utterance acts as a natural pause
+            window.speechSynthesis.speak(pause);
+          }
+          speechRef.current = utt;
+          window.speechSynthesis.speak(utt);
+        });
+      };
+
+      const voice = pickVoice();
+      if (voice) {
+        speakSentences(voice);
+      } else {
+        // Voices not loaded yet — wait for them
+        window.speechSynthesis.onvoiceschanged = () => {
+          speakSentences(pickVoice());
+          window.speechSynthesis.onvoiceschanged = null;
+        };
+      }
+    }
+
     let i = 0;
     const interval = setInterval(() => {
       i++;
@@ -131,7 +197,10 @@ export default function RecordingPlayerPage() {
       }
     }, 28);
     typingRef.current = interval;
-    return () => { clearInterval(interval); typingRef.current = null; };
+    return () => {
+      clearInterval(interval); typingRef.current = null;
+      window.speechSynthesis.cancel(); speechRef.current = null;
+    };
   }, [showWelcome, recording, user]);
 
   // Parse materials

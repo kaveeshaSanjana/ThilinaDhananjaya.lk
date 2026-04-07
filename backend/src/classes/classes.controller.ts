@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete, Param, Body, UseGuards,
-  UploadedFile, UseInterceptors,
+  UploadedFile, UseInterceptors, Headers, Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -24,13 +24,13 @@ export class ClassesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
-  createClass(@Body() body: CreateClassDto) {
-    return this.classesService.createClass(body);
+  createClass(@Request() req: any, @Headers('x-institute-id') orgId: string | undefined, @Body() body: CreateClassDto) {
+    return this.classesService.createClass({ ...body, orgId: orgId || undefined });
   }
 
   @Get()
-  findAll() {
-    return this.classesService.findAll();
+  findAll(@Headers('x-institute-id') orgId?: string) {
+    return this.classesService.findAll(orgId);
   }
 
   @Get(':id')

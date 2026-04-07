@@ -16,6 +16,8 @@ interface CreateUserData {
   relationship?: string;
   occupation?: string;
   avatarUrl?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  orgId?: string; // assigned institute
 }
 
 @Injectable()
@@ -40,6 +42,7 @@ export class UsersService {
         email: data.email,
         password: data.password,
         role: 'STUDENT',
+        orgId: data.orgId || null,
         profile: {
           create: {
             instituteId,
@@ -50,6 +53,7 @@ export class UsersService {
             address: data.address,
             school: data.school,
             occupation: data.occupation,
+            gender: data.gender as any,
             dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
             guardianName: data.guardianName,
             guardianPhone: data.guardianPhone,
@@ -77,8 +81,9 @@ export class UsersService {
     });
   }
 
-  async findAllStudents(search?: string, page?: number, limit?: number) {
+  async findAllStudents(search?: string, page?: number, limit?: number, orgId?: string) {
     const where: any = { role: 'STUDENT' };
+    if (orgId) where.orgId = orgId;
 
     if (search) {
       where.OR = [
@@ -117,6 +122,8 @@ export class UsersService {
     guardianName: string;
     guardianPhone: string;
     relationship: string;
+    occupation: string;
+    gender: 'MALE' | 'FEMALE' | 'OTHER';
     status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'OLD';
   }>) {
     const updateData: any = { ...data };
@@ -151,6 +158,84 @@ export class UsersService {
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
       this.prisma.user.delete({ where: { id: userId } }),
     ]);
+  }
+
+  /**
+   * Fetch student data for ID card generation.
+   * Filters: classId, studentId (userId), enrolled date range.
+   */
+  async getIdCardData(filters: {
+    classId?: string;
+    studentId?: string;
+    enrolledFrom?: string;
+    enrolledTo?: string;
+    orgId?: string;
+  }) {
+    const where: any = { role: 'STUDENT' };
+    const profileWhere: any = {};
+    if (filters.orgId) where.orgId = filters.orgId;
+
+    if (filters.enrolledFrom || filters.enrolledTo) {
+      profileWhere.enrolledDate = {};
+      if (filters.enrolledFrom) profileWhere.enrolledDate.gte = new Date(filters.enrolledFrom);
+      if (filters.enrolledTo) profileWhere.enrolledDate.lte = new Date(filters.enrolledTo);
+    }
+
+    if (Object.keys(profileWhere).length > 0) {
+      where.profile = profileWhere;
+    }
+
+    if (filters.studentId) {
+      where.id = filters.studentId;
+    }
+
+    if (filters.classId) {
+      where.enrollments = { some: { classId: filters.classId } };
+    }
+
+    const students = await this.prisma.user.findMany({
+      where,
+      include: {
+        profile: {
+          select: {
+            fullName: true,
+            instituteId: true,
+            barcodeId: true,
+            avatarUrl: true,
+            school: true,
+            phone: true,
+            status: true,
+            enrolledDate: true,
+            gender: true,
+          },
+        },
+        enrollments: {
+          include: { class: { select: { id: true, name: true, subject: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    return students
+      .filter((s) => s.profile)
+      .map((s) => ({
+        userId: s.id,
+        fullName: s.profile!.fullName,
+        instituteId: s.profile!.instituteId,
+        barcodeId: s.profile!.barcodeId,
+        avatarUrl: s.profile!.avatarUrl,
+        school: s.profile!.school,
+        phone: s.profile!.phone,
+        gender: (s.profile! as any).gender ?? null,
+        status: s.profile!.status,
+        enrolledDate: s.profile!.enrolledDate,
+        classes: s.enrollments.map((e) => ({
+          id: e.class.id,
+          name: e.class.name,
+          subject: e.class.subject,
+        })),
+      }));
   }
 
   /** Generate an Institute ID like TD-2026-0001 */

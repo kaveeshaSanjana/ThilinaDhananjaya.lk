@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { InstituteProvider } from './context/InstituteContext';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -26,6 +27,8 @@ import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
 import AdminClassAttendance from './pages/admin/AdminClassAttendance';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
 import AdminMonthManage from './pages/admin/AdminMonthManage';
+import AdminIdCards from './pages/admin/AdminIdCards';
+import AdminInstitute from './pages/admin/AdminInstitute';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
@@ -91,6 +94,8 @@ function AppRoutes() {
         <Route path="admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
         <Route path="admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminClassAttendance /></ProtectedRoute>} />
         <Route path="admin/recordings" element={<ProtectedRoute role="ADMIN"><AdminRecordingHistory /></ProtectedRoute>} />
+        <Route path="admin/id-cards" element={<ProtectedRoute role="ADMIN"><AdminIdCards /></ProtectedRoute>} />
+        <Route path="admin/institute" element={<ProtectedRoute role="ADMIN"><AdminInstitute /></ProtectedRoute>} />
         <Route path="admin/recordings/:recordingId/student/:userId" element={<ProtectedRoute role="ADMIN"><AdminStudentWatchDetail /></ProtectedRoute>} />
       </Route>
     </Routes>
@@ -102,7 +107,9 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <AppRoutes />
+          <InstituteProvider>
+            <AppRoutes />
+          </InstituteProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

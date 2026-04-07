@@ -7,13 +7,14 @@ export class ClassesService {
 
   async createClass(data: {
     name: string; subject?: string; description?: string; monthlyFee?: number;
-    thumbnail?: string; vision?: string; mission?: string; introVideoUrl?: string; status?: any;
+    thumbnail?: string; vision?: string; mission?: string; introVideoUrl?: string; status?: any; orgId?: string;
   }) {
     return this.prisma.class.create({ data });
   }
 
-  async findAll() {
+  async findAll(orgId?: string) {
     return this.prisma.class.findMany({
+      where: orgId ? { orgId } : undefined,
       include: { _count: { select: { months: true, enrollments: true } } },
       orderBy: { createdAt: 'desc' },
     });

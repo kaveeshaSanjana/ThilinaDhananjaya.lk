@@ -90,6 +90,46 @@ enum VideoType {
   OTHER
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ─── Institute (Multi-Tenant) ──────────────────────────────
+
+model Institute {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?  @db.Text
+  address     String?
+  phone       String?
+  description String?  @db.Text
+  themeColor  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users   User[]   @relation("UserOrg")
+  classes Class[]  @relation("ClassOrg")
+  admins  AdminInstitute[]
+}
+
+model AdminInstitute {
+  id          String    @id @default(uuid())
+  adminId     String
+  instituteId String
+  isOwner     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  admin     User      @relation("AdminAccess", fields: [adminId], references: [id], onDelete: Cascade)
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, instituteId])
+  @@index([adminId])
+  @@index([instituteId])
+}
+
 // ─── Auth / User ─────────────────────────────────────────
 
 model User {
@@ -97,9 +137,12 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(STUDENT)
+  orgId     String?  // FK to Institute (set for students; also set for admins as default institute)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  org              Institute?        @relation("UserOrg", fields: [orgId], references: [id])
+  adminAccess      AdminInstitute[]  @relation("AdminAccess")
   profile          Profile?
   enrollments      Enrollment[]
   payments         PaymentSlip[]
@@ -107,6 +150,8 @@ model User {
   watchSessions    WatchSession[]
   refreshTokens    RefreshToken[]
   classAttendances ClassAttendance[]
+
+  @@index([orgId])
 }
 
 // ─── Refresh Token ───────────────────────────────────────
@@ -142,6 +187,7 @@ model Profile {
   guardianPhone String?
   relationship  String?
   occupation    String?
+  gender        Gender?
   status        StudentStatus @default(PENDING)
   enrolledDate  DateTime      @default(now())
   createdAt     DateTime      @default(now())
@@ -167,12 +213,16 @@ model Class {
   mission        String?     @db.Text
   introVideoUrl  String?     @db.Text // Intro/promo video URL
   status         ClassStatus @default(ANYONE)
+  orgId          String?     // FK to Institute
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  months      Month[]
-  enrollments Enrollment[]
+  org              Institute?        @relation("ClassOrg", fields: [orgId], references: [id])
+  months           Month[]
+  enrollments      Enrollment[]
   classAttendances ClassAttendance[]
+
+  @@index([orgId])
 }
 
 model Month {

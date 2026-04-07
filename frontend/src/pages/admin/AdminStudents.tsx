@@ -17,7 +17,12 @@ const studentStatusBadge = (s: string) => {
   return map[s] || map.ACTIVE;
 };
 
-const emptyForm = { fullName: '', email: '', password: '', phone: '', whatsappPhone: '', address: '', school: '', occupation: '', dateOfBirth: '', guardianName: '', guardianPhone: '', relationship: '', avatarUrl: '' };
+const emptyForm = { fullName: '', email: '', password: '', phone: '', whatsappPhone: '', address: '', school: '', occupation: '', gender: '', dateOfBirth: '', guardianName: '', guardianPhone: '', relationship: '', avatarUrl: '' };
+const GENDERS = [
+  { value: 'MALE', label: 'Male' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 export default function AdminStudents() {
   const [students, setStudents] = useState<any[]>([]);
@@ -49,6 +54,7 @@ export default function AdminStudents() {
     { key: 'guardianName',   label: 'Guardian Name' },
     { key: 'guardianPhone',  label: 'Guardian Phone' },
     { key: 'relationship',   label: 'Relationship' },
+    { key: 'gender',         label: 'Gender' },
     { key: 'barcodeId',      label: 'Barcode ID' },
     { key: 'joined',         label: 'Joined Date' },
   ];
@@ -71,6 +77,7 @@ export default function AdminStudents() {
       case 'guardianName':  return s.profile?.guardianName || '';
       case 'guardianPhone': return s.profile?.guardianPhone || '';
       case 'relationship':  return s.profile?.relationship || '';
+      case 'gender':        return s.profile?.gender || '';
       case 'barcodeId':     return s.profile?.barcodeId || '';
       case 'joined':        return s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB') : '';
       default: return '';
@@ -123,6 +130,7 @@ export default function AdminStudents() {
       phone: s.profile?.phone || '', whatsappPhone: s.profile?.whatsappPhone || '',
       address: s.profile?.address || '', school: s.profile?.school || '',
       occupation: s.profile?.occupation || '',
+      gender: s.profile?.gender || '',
       dateOfBirth: s.profile?.dateOfBirth ? new Date(s.profile.dateOfBirth).toISOString().split('T')[0] : '',
       guardianName: s.profile?.guardianName || '', guardianPhone: s.profile?.guardianPhone || '',
       relationship: s.profile?.relationship || '', avatarUrl: s.profile?.avatarUrl || '',
@@ -137,6 +145,7 @@ export default function AdminStudents() {
         const payload: any = {
           fullName: form.fullName, phone: form.phone || undefined, whatsappPhone: form.whatsappPhone || undefined,
           address: form.address || undefined, school: form.school || undefined, occupation: form.occupation || undefined,
+          gender: form.gender || undefined,
           dateOfBirth: form.dateOfBirth || undefined, guardianName: form.guardianName || undefined,
           guardianPhone: form.guardianPhone || undefined, relationship: form.relationship || undefined,
           avatarUrl: form.avatarUrl || undefined,
@@ -147,7 +156,8 @@ export default function AdminStudents() {
           fullName: form.fullName, email: form.email, password: form.password,
           phone: form.phone || undefined, whatsappPhone: form.whatsappPhone || undefined,
           address: form.address || undefined, school: form.school || undefined,
-          occupation: form.occupation || undefined, dateOfBirth: form.dateOfBirth || undefined,
+          occupation: form.occupation || undefined, gender: form.gender || undefined,
+          dateOfBirth: form.dateOfBirth || undefined,
           guardianName: form.guardianName || undefined, guardianPhone: form.guardianPhone || undefined,
           relationship: form.relationship || undefined, avatarUrl: form.avatarUrl || undefined,
         });
@@ -399,6 +409,7 @@ export default function AdminStudents() {
                     { label: 'Occupation', value: viewStudent.profile?.occupation },
                     { label: 'Date of Birth', value: viewStudent.profile?.dateOfBirth ? new Date(viewStudent.profile.dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null },
                     { label: 'Joined', value: viewStudent.createdAt ? new Date(viewStudent.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null },
+                    { label: 'Gender', value: viewStudent.profile?.gender ? GENDERS.find(g => g.value === viewStudent.profile.gender)?.label : null },
                     { label: 'Guardian', value: viewStudent.profile?.guardianName },
                     { label: 'Guardian Phone', value: viewStudent.profile?.guardianPhone },
                     { label: 'Relationship', value: viewStudent.profile?.relationship },
@@ -514,6 +525,14 @@ export default function AdminStudents() {
                     <label className="block text-sm font-semibold text-slate-600 mb-1.5">Occupation</label>
                     <input type="text" value={form.occupation} onChange={e => setForm(p => ({ ...p, occupation: e.target.value }))} placeholder="Student / Other"
                       className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Gender <span className="text-slate-400 font-normal text-xs">(optional)</span></label>
+                    <select value={form.gender} onChange={e => setForm(p => ({ ...p, gender: e.target.value }))}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">— Select —</option>
+                      {GENDERS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                    </select>
                   </div>
                 </div>
               </div>

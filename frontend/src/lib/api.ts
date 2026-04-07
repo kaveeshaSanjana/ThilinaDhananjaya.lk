@@ -5,11 +5,15 @@ const api = axios.create({
   withCredentials: true, // Send cookies (refresh token) with every request
 });
 
-// Attach access token to every request
+// Attach access token and selected institute to every request
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const instituteId = localStorage.getItem('selectedInstituteId');
+  if (instituteId) {
+    config.headers['X-Institute-Id'] = instituteId;
   }
   return config;
 });

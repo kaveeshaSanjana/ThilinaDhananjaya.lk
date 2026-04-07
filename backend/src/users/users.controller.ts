@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors, Request, Headers } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UsersService } from './users.service';
@@ -19,27 +19,42 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.usersService.findAllStudents(undefined, page ? +page : undefined, limit ? +limit : undefined);
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string, @Headers('x-institute-id') orgId?: string) {
+    return this.usersService.findAllStudents(undefined, page ? +page : undefined, limit ? +limit : undefined, orgId);
   }
 
   /** Admin: list all students, searchable by instituteId/school/name */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('students')
-  findAllStudents(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.usersService.findAllStudents(search, page ? +page : undefined, limit ? +limit : undefined);
+  findAllStudents(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string, @Headers('x-institute-id') orgId?: string) {
+    return this.usersService.findAllStudents(search, page ? +page : undefined, limit ? +limit : undefined, orgId);
+  }
+
+  /** Admin: get student data for ID card generation */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('students/id-card-data')
+  getIdCardData(
+    @Query('classId') classId?: string,
+    @Query('studentId') studentId?: string,
+    @Query('enrolledFrom') enrolledFrom?: string,
+    @Query('enrolledTo') enrolledTo?: string,
+    @Headers('x-institute-id') orgId?: string,
+  ) {
+    return this.usersService.getIdCardData({ classId, studentId, enrolledFrom, enrolledTo, orgId });
   }
 
   /** Admin: create a student */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post('students')
-  async createStudent(@Body() body: {
+  async createStudent(@Request() req: any, @Headers('x-institute-id') orgId: string | undefined, @Body() body: {
     email: string; password: string; fullName: string;
     phone?: string; whatsappPhone?: string; address?: string; school?: string;
     dateOfBirth?: string; guardianName?: string; guardianPhone?: string;
     relationship?: string; occupation?: string; avatarUrl?: string;
+    gender?: 'MALE' | 'FEMALE' | 'OTHER';
   }) {
     const hashed = await bcrypt.hash(body.password, 12);
     return this.usersService.create({
@@ -47,7 +62,8 @@ export class UsersController {
       phone: body.phone, whatsappPhone: body.whatsappPhone, address: body.address,
       school: body.school, dateOfBirth: body.dateOfBirth, guardianName: body.guardianName,
       guardianPhone: body.guardianPhone, relationship: body.relationship,
-      occupation: body.occupation, avatarUrl: body.avatarUrl,
+      occupation: body.occupation, avatarUrl: body.avatarUrl, gender: body.gender,
+      orgId: orgId || undefined,
     });
   }
 
