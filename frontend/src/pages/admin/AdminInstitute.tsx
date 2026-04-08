@@ -198,7 +198,7 @@ export default function AdminInstitute() {
 
   if (ctxLoading) return <div className="flex justify-center items-center h-60"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  if (!selected) return <CreateInstituteForm onCreated={async () => { await refresh(); navigate("/admin/institute"); }} />;
+  if (!selected) return <CreateInstituteForm onCreated={async () => { await refresh(); navigate("/admin/select-institute"); }} />;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">

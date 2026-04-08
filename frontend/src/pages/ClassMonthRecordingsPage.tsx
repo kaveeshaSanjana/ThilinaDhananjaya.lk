@@ -1,7 +1,230 @@
 import { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import CropImageInput from '../components/CropImageInput';
+import { uploadImage } from '../lib/imageUpload';
+import { getInstitutePath } from '../lib/instituteRoutes';
+
+/* ─── Types ──────────────────────────────────────────── */
+const VIDEO_TYPES = ['ZOOM', 'YOUTUBE', 'DRIVE', 'OTHER'] as const;
+const RECORDING_STATUSES = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'] as const;
+
+const EMPTY_FORM = {
+  title: '',
+  description: '',
+  videoUrl: '',
+  videoType: 'OTHER' as string,
+  thumbnail: '',
+  topic: '',
+  icon: '',
+  materials: '',
+  duration: '',
+  status: 'PAID_ONLY' as string,
+  order: '',
+  welcomeMessage: '',
+  isLive: false,
+  liveUrl: '',
+};
+
+/* ─── Create Recording Modal ─────────────────────────── */
+function CreateRecordingModal({
+  monthId,
+  onClose,
+  onCreated,
+}: {
+  monthId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+
+  const handleThumbUpload = async (file: File) => {
+    setUploadingThumb(true); setErr('');
+    try {
+      const url = await uploadImage(file, 'recordings');
+      setForm(p => ({ ...p, thumbnail: url }));
+    } catch (e: any) {
+      setErr(e.message || 'Thumbnail upload failed');
+    } finally { setUploadingThumb(false); }
+  };
+
+  const set = (key: keyof typeof EMPTY_FORM, val: string | boolean) =>
+    setForm(p => ({ ...p, [key]: val }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) { setErr('Title is required'); return; }
+    setSaving(true); setErr('');
+    try {
+      const body: Record<string, unknown> = { monthId, title: form.title.trim() };
+      if (form.description.trim())    body.description    = form.description.trim();
+      if (form.videoUrl.trim())       body.videoUrl       = form.videoUrl.trim();
+      if (form.videoType)             body.videoType      = form.videoType;
+      if (form.thumbnail.trim())      body.thumbnail      = form.thumbnail.trim();
+      if (form.topic.trim())          body.topic          = form.topic.trim();
+      if (form.icon.trim())           body.icon           = form.icon.trim();
+      if (form.materials.trim())      body.materials      = form.materials.trim();
+      if (form.duration !== '')       body.duration       = Number(form.duration);
+      if (form.status)                body.status         = form.status;
+      if (form.order !== '')          body.order          = Number(form.order);
+      if (form.welcomeMessage.trim()) body.welcomeMessage = form.welcomeMessage.trim();
+      body.isLive = form.isLive;
+      if (form.liveUrl.trim())        body.liveUrl        = form.liveUrl.trim();
+      await api.post('/recordings', body);
+      onCreated();
+      onClose();
+    } catch (e: any) {
+      setErr(e.response?.data?.message || 'Failed to create recording');
+    } finally { setSaving(false); }
+  };
+
+  const inputCls = 'w-full px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
+  const labelCls = 'block text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1';
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-lg bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">
+          <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Create Recording</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
+
+          {/* Title */}
+          <div>
+            <label className={labelCls}>Title <span className="text-red-500">*</span></label>
+            <input className={inputCls} placeholder="e.g. Chapter 5 — Algebra" value={form.title} onChange={e => set('title', e.target.value)} />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className={labelCls}>Description</label>
+            <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+
+          {/* Video URL + Type */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className={labelCls}>Video URL</label>
+              <input className={inputCls} placeholder="https://..." value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Video Type</label>
+              <select className={inputCls} value={form.videoType} onChange={e => set('videoType', e.target.value)}>
+                {VIDEO_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Topic + Icon */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Topic</label>
+              <input className={inputCls} placeholder="e.g. Algebra" value={form.topic} onChange={e => set('topic', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Icon (emoji)</label>
+              <input className={inputCls} placeholder="e.g. 📹" value={form.icon} onChange={e => set('icon', e.target.value)} />
+            </div>
+          </div>
+
+          {/* Thumbnail */}
+          <div>
+            <label className={labelCls}>Thumbnail</label>
+            <div className="space-y-2">
+              <input className={inputCls} placeholder="https://... or upload below" value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <CropImageInput
+                  onFile={handleThumbUpload}
+                  aspectRatio={16 / 9}
+                  loading={uploadingThumb}
+                  label="Upload Image"
+                  cropTitle="Crop Thumbnail"
+                />
+                <span className="text-[11px] text-[hsl(var(--muted-foreground))]">JPEG/PNG/WebP/GIF · max 5 MB</span>
+              </div>
+              {form.thumbnail && (
+                <img src={form.thumbnail} alt="Thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-[hsl(var(--border))]" />
+              )}
+            </div>
+          </div>
+
+          {/* Materials */}
+          <div>
+            <label className={labelCls}>Materials URL</label>
+            <input className={inputCls} placeholder="https://..." value={form.materials} onChange={e => set('materials', e.target.value)} />
+          </div>
+
+          {/* Duration + Order + Status */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Duration (sec)</label>
+              <input className={inputCls} type="number" min={0} placeholder="0" value={form.duration} onChange={e => set('duration', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Order</label>
+              <input className={inputCls} type="number" min={0} placeholder="0" value={form.order} onChange={e => set('order', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Visibility</label>
+              <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+                {RECORDING_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Welcome Message */}
+          <div>
+            <label className={labelCls}>Welcome Message</label>
+            <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Optional welcome message..." value={form.welcomeMessage} onChange={e => set('welcomeMessage', e.target.value)} />
+          </div>
+
+          {/* Is Live */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Live Lecture</label>
+              <select className={inputCls} value={form.isLive ? 'yes' : 'no'} onChange={e => set('isLive', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+            {form.isLive && (
+              <div>
+                <label className={labelCls}>Live URL</label>
+                <input className={inputCls} placeholder="https://..." value={form.liveUrl} onChange={e => set('liveUrl', e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving || uploadingThumb} className="px-5 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition flex items-center gap-2">
+              {saving && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
+              {saving ? 'Creating...' : 'Create Recording'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 /* ─── Helpers ────────────────────────────────────────── */
 
@@ -209,33 +432,34 @@ function RecordingCard({ rec, idx, onClick }: { rec: any; idx: number; onClick: 
 /* ═══════════════════════════════════════════════════════ */
 
 export default function ClassMonthRecordingsPage() {
-  const { classId, monthId } = useParams<{ classId: string; monthId: string }>();
+  const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   const [classData, setClassData] = useState<any>(null);
   const [monthData, setMonthData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [classRes, monthsRes] = await Promise.all([
-          api.get(`/classes/${classId}`),
-          api.get(`/classes/${classId}/months`),
-        ]);
-        setClassData(classRes.data);
-        const month = (monthsRes.data || []).find((m: any) => m.id === monthId);
-        if (!month) throw new Error('Month not found');
-        setMonthData(month);
-        if (token) { /* token used to attach auth header via interceptor */ }
-      } catch (e: any) {
-        setError(e.response?.data?.message || e.message || 'Failed to load');
-      } finally { setLoading(false); }
-    };
-    fetchData();
-  }, [classId, monthId, token]);
+  const fetchData = async () => {
+    try {
+      const [classRes, monthsRes] = await Promise.all([
+        api.get(`/classes/${classId}`),
+        api.get(`/classes/${classId}/months`),
+      ]);
+      setClassData(classRes.data);
+      const month = (monthsRes.data || []).find((m: any) => m.id === monthId);
+      if (!month) throw new Error('Month not found');
+      setMonthData(month);
+      if (token) { /* token used to attach auth header via interceptor */ }
+    } catch (e: any) {
+      setError(e.response?.data?.message || e.message || 'Failed to load');
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, [classId, monthId, token]);
 
   const handleJoinLive = (rec: any) => {
     if (rec.liveToken) navigate(`/live/${rec.liveToken}`);
@@ -267,7 +491,7 @@ export default function ClassMonthRecordingsPage() {
   if (error) return (
     <div className="max-w-lg mx-auto mt-16 text-center bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-12 shadow-sm">
       <p className="text-[hsl(var(--muted-foreground))] text-sm font-medium">{error}</p>
-      <Link to={`/classes/${classId}/class-recordings`} className="mt-4 inline-flex items-center gap-1.5 text-sm text-[hsl(var(--primary))] font-semibold hover:opacity-80">
+      <Link to={getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${classId}/class-recordings`)} className="mt-4 inline-flex items-center gap-1.5 text-sm text-[hsl(var(--primary))] font-semibold hover:opacity-80">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Back to months
       </Link>
@@ -276,28 +500,46 @@ export default function ClassMonthRecordingsPage() {
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
+      {/* Create Recording Modal */}
+      {showCreate && monthId && (
+        <CreateRecordingModal
+          monthId={monthId}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => { setLoading(true); fetchData(); }}
+        />
+      )}
+
       {/* Back link */}
-      <Link to={`/classes/${classId}/class-recordings`}
+      <Link to={getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${classId}/class-recordings`)}
         className="inline-flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         Back to months
       </Link>
 
       {/* Header */}
-      <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-[hsl(var(--primary)/0.1)] flex items-center justify-center shrink-0">
-          <svg className="w-6 h-6 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-[hsl(var(--primary)/0.1)] flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">{classData?.name}</p>
+            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">{monthData?.name}</h1>
+            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
+              {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
+              {liveRecs.length > 0 ? ` · ${liveRecs.length} live lecture${liveRecs.length !== 1 ? 's' : ''}` : ''}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">{classData?.name}</p>
-          <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">{monthData?.name}</h1>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-            {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
-            {liveRecs.length > 0 ? ` · ${liveRecs.length} live lecture${liveRecs.length !== 1 ? 's' : ''}` : ''}
-          </p>
-        </div>
+        {isAdmin && (
+          <button onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20 transition-all shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Create Recording
+          </button>
+        )}
       </div>
 
       {/* Live Lectures */}

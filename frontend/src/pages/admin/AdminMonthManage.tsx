@@ -5,6 +5,7 @@ import api from '../../lib/api';
 import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
 import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
+import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
 /* ─── Constants ──────────────────────────────────────── */
 
@@ -156,7 +157,7 @@ const emptyRecForm = {
 /* ══════════════════════════════════════════════════════ */
 
 export default function AdminMonthManage() {
-  const { classId, monthId } = useParams<{ classId: string; monthId: string }>();
+  const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
 
   /* ─── Core data ─────────────────────────────────────── */
   const [classData, setClassData] = useState<any>(null);
@@ -339,7 +340,7 @@ export default function AdminMonthManage() {
       {/* ── Breadcrumb + Header ── */}
       <div>
         <Link
-          to={`/admin/classes/${classId}`}
+          to={getInstituteAdminPath(instituteId, `/classes/${classId}`)}
           className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium mb-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

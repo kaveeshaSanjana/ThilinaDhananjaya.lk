@@ -1,5 +1,6 @@
 ﻿import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import api from "../lib/api";
+import { useAuth } from "./AuthContext";
 
 export interface Institute {
   id: string;
@@ -33,6 +34,7 @@ const InstituteContext = createContext<InstituteContextType>({
 });
 
 export function InstituteProvider({ children }: { children: ReactNode }) {
+  const { user, token } = useAuth();
   const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [selected, setSelected] = useState<Institute | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,11 +45,14 @@ export function InstituteProvider({ children }: { children: ReactNode }) {
       const { data } = await api.get<Institute[]>("/institutes/my");
       setInstitutes(data);
 
-      // Pick previously stored selection or first
       const stored = localStorage.getItem("selectedInstituteId");
-      const match = data.find((i) => i.id === stored) ?? data[0] ?? null;
+      const match = stored ? data.find((i) => i.id === stored) ?? null : null;
       setSelected(match);
-      if (match) localStorage.setItem("selectedInstituteId", match.id);
+      if (match) {
+        localStorage.setItem("selectedInstituteId", match.id);
+      } else {
+        localStorage.removeItem("selectedInstituteId");
+      }
     } catch {
       setInstitutes([]);
       setSelected(null);
@@ -57,8 +62,15 @@ export function InstituteProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!token || user?.role !== "ADMIN") {
+      setInstitutes([]);
+      setSelected(null);
+      setLoading(false);
+      return;
+    }
+
     load();
-  }, [load]);
+  }, [load, token, user?.id, user?.role]);
 
   const select = (id: string) => {
     const inst = institutes.find((i) => i.id === id);

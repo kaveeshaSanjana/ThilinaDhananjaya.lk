@@ -1,13 +1,11 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import * as XLSX from 'xlsx';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
 /* ─── Types ──────────────────────────────────────────── */
 
 interface ClassItem { id: string; name: string; subject?: string; monthlyFee?: number }
-interface Student { userId: string; fullName: string; instituteId: string; barcodeId?: string | null; phone?: string; status?: string; avatarUrl?: string | null }
+interface Student { userId: string; fullName: string; instituteId: string; barcodeId?: string | null; phone?: string; status?: string }
 interface AttendanceRecord {
   id: string; userId: string; classId: string; date: string;
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
@@ -36,15 +34,12 @@ interface PaymentOverviewStudent {
     status: string;
     type?: string;
     slipUrl?: string;
-    amount?: number | null;
-    paidDate?: string | null;
     adminNote?: string | null;
     createdAt?: string;
   } | null;
 }
 
 interface PaymentOverview {
-  monthlyFee?: number | null;
   summary: { total: number; paid: number; late: number; pending: number; unpaid: number };
   students: PaymentOverviewStudent[];
 }
@@ -65,7 +60,7 @@ const PAY_CFG: Record<string, { label: string; color: string; bg: string }> = {
   UNPAID:  { label: 'Unpaid',  color: 'text-red-600',     bg: 'bg-red-50 border-red-200' },
 };
 
-type TabKey = 'mark' | 'monthly' | 'yearly' | 'payments' | 'monitor';
+type TabKey = 'mark' | 'monthly' | 'yearly' | 'payments';
 type AttendanceFilter = 'all' | 'absent-last-week' | 'absent-last-month' | 'low-attendance' | 'never-attended';
 type MarkFilter = 'all' | 'unmarked' | 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
 
@@ -123,48 +118,6 @@ function useBarcodeScanner(onScan: (code: string) => void) {
   return { videoRef, active, error, startCamera, stopCamera };
 }
 
-/* ─── Export Column Definitions ────────────────────── */
-const TAB_EXPORT_COLS: Record<string, { key: string; label: string }[]> = {
-  mark: [
-    { key: 'name',        label: 'Full Name' },
-    { key: 'instituteId', label: 'Student ID' },
-    { key: 'barcodeId',   label: 'Barcode ID' },
-    { key: 'phone',       label: 'Phone' },
-    { key: 'status',      label: 'Attendance Status' },
-  ],
-  monthly: [
-    { key: 'name',        label: 'Full Name' },
-    { key: 'instituteId', label: 'Student ID' },
-    { key: 'countP',      label: 'Present Days' },
-    { key: 'countA',      label: 'Absent Days' },
-    { key: 'countL',      label: 'Late Days' },
-    { key: 'pct',         label: 'Attendance %' },
-  ],
-  yearly: [
-    { key: 'name',        label: 'Full Name' },
-    { key: 'instituteId', label: 'Student ID' },
-    { key: 'totalP',      label: 'Total Present' },
-    { key: 'totalA',      label: 'Total Absent' },
-    { key: 'totalL',      label: 'Total Late' },
-    { key: 'total',       label: 'Total Days' },
-    { key: 'pct',         label: 'Attendance %' },
-  ],
-  payments: [
-    { key: 'name',        label: 'Full Name' },
-    { key: 'instituteId', label: 'Student ID' },
-    { key: 'email',       label: 'Email' },
-    { key: 'phone',       label: 'Phone' },
-    { key: 'payStatus',   label: 'Payment Status' },
-    { key: 'amount',      label: 'Amount (LKR)' },
-    { key: 'paidDate',    label: 'Paid Date' },
-  ],
-  monitor: [
-    { key: 'name',        label: 'Full Name' },
-    { key: 'instituteId', label: 'Student ID' },
-    { key: 'pct',         label: 'Attendance %' },
-  ],
-};
-
 /* ═══════════════════════════════════════════════════════ */
 /*                    MAIN COMPONENT                      */
 /* ═══════════════════════════════════════════════════════ */
@@ -182,13 +135,6 @@ export default function AdminClassAttendance() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentUpdatingId, setPaymentUpdatingId] = useState('');
 
-  // Monitor tab state
-  const [monitorFrom, setMonitorFrom] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return toDateStr(d); });
-  const [monitorTo, setMonitorTo] = useState(toDateStr(new Date()));
-  const [monitorData, setMonitorData] = useState<{ dates: string[]; students: Array<{ userId: string; fullName: string; instituteId: string; avatarUrl?: string | null; statuses: Record<string, string>; present: number; late: number; absent: number; excused: number; percentage: number }> } | null>(null);
-  const [monitorLoading, setMonitorLoading] = useState(false);
-  const [monitorSearch, setMonitorSearch] = useState('');
-
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
@@ -197,7 +143,6 @@ export default function AdminClassAttendance() {
   const [tab, setTab] = useState<TabKey>('mark');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [marking, setMarking] = useState(false);
   const [scanInput, setScanInput] = useState('');
   const [search, setSearch] = useState('');
   const [attFilter, setAttFilter] = useState<AttendanceFilter>('all');
@@ -206,180 +151,22 @@ export default function AdminClassAttendance() {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [localStatuses, setLocalStatuses] = useState<Record<string, string>>({});
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
-  const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
   const [recentScans, setRecentScans] = useState<Array<{ name: string; time: string; id: string }>>([]);
 
   const scanRef = useRef<HTMLInputElement>(null);
-  const savedStatusesRef = useRef<Record<string, string>>({});
-  // Deduplication: track last scan id + timestamp to reject identical scans within 2 s
-  const lastScanRef = useRef<{ code: string; ts: number }>({ code: '', ts: 0 });
-  const markingRef = useRef(false);
-
-  /* ─── Export ──────────────────────────────────── */
-  const [showExport, setShowExport] = useState(false);
-  const [exportCols, setExportCols] = useState<string[]>([]);
-
-  const openExport = () => {
-    setExportCols((TAB_EXPORT_COLS[tab] || []).map(c => c.key));
-    setShowExport(true);
-  };
-
-  const toggleExportCol = (key: string) =>
-    setExportCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-
-  function handleExport() {
-    if (exportCols.length === 0) return;
-    const cols = exportCols;
-    const defs = TAB_EXPORT_COLS[tab] || [];
-    let headers: string[] = [];
-    let rows: (string | number)[][] = [];
-
-    if (tab === 'mark') {
-      headers = cols.map(k => defs.find(d => d.key === k)?.label || k);
-      rows = filteredStudents.map(s => cols.map(k => {
-        switch (k) {
-          case 'name':        return s.fullName;
-          case 'instituteId': return s.instituteId;
-          case 'barcodeId':   return s.barcodeId || '';
-          case 'phone':       return s.phone || '';
-          case 'status':      return localStatuses[s.userId] || 'Unmarked';
-          default: return '';
-        }
-      }));
-
-    } else if (tab === 'monthly') {
-      const fixedCols   = cols.filter(k => ['name', 'instituteId'].includes(k));
-      const summaryCols = cols.filter(k => ['countP', 'countA', 'countL', 'pct'].includes(k));
-      const dateHdrs = monthDates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }));
-      headers = [
-        ...fixedCols.map(k => defs.find(d => d.key === k)?.label || k),
-        ...dateHdrs,
-        ...summaryCols.map(k => defs.find(d => d.key === k)?.label || k),
-      ];
-      rows = monthlySummary.map(row => [
-        ...fixedCols.map(k => {
-          switch (k) {
-            case 'name':        return row.student?.profile?.fullName || '';
-            case 'instituteId': return row.student?.profile?.instituteId || '';
-            default: return '';
-          }
-        }),
-        ...monthDates.map(d => row.dates[d] || ''),
-        ...summaryCols.map(k => {
-          const total = row.counts.PRESENT + row.counts.ABSENT + row.counts.LATE + row.counts.EXCUSED;
-          switch (k) {
-            case 'countP': return row.counts.PRESENT;
-            case 'countA': return row.counts.ABSENT;
-            case 'countL': return row.counts.LATE;
-            case 'pct':    return total > 0 ? `${Math.round(((row.counts.PRESENT + row.counts.LATE) / total) * 100)}%` : '0%';
-            default: return '';
-          }
-        }),
-      ]);
-
-    } else if (tab === 'yearly') {
-      const fixedCols   = cols.filter(k => ['name', 'instituteId'].includes(k));
-      const summaryCols = cols.filter(k => ['totalP', 'totalA', 'totalL', 'total', 'pct'].includes(k));
-      headers = [
-        ...fixedCols.map(k => defs.find(d => d.key === k)?.label || k),
-        ...yearActiveMonths.map(m => shortMonth(m)),
-        ...summaryCols.map(k => defs.find(d => d.key === k)?.label || k),
-      ];
-      rows = yearlySummary.map(row => [
-        ...fixedCols.map(k => {
-          switch (k) {
-            case 'name':        return row.student?.profile?.fullName || '';
-            case 'instituteId': return row.student?.profile?.instituteId || '';
-            default: return '';
-          }
-        }),
-        ...yearActiveMonths.map(m => {
-          const mc = row.months[m];
-          if (!mc) return '';
-          const p = mc.PRESENT || 0; const l = mc.LATE || 0;
-          const mt = p + (mc.ABSENT || 0) + l + (mc.EXCUSED || 0);
-          return mt > 0 ? `${Math.round(((p + l) / mt) * 100)}%` : '0%';
-        }),
-        ...summaryCols.map(k => {
-          switch (k) {
-            case 'totalP': return row.totalP;
-            case 'totalA': return row.totalA;
-            case 'totalL': return row.totalL;
-            case 'total':  return row.total;
-            case 'pct':    return row.total > 0 ? `${Math.round(((row.totalP + row.totalL) / row.total) * 100)}%` : '0%';
-            default: return '';
-          }
-        }),
-      ]);
-
-    } else if (tab === 'payments') {
-      headers = cols.map(k => defs.find(d => d.key === k)?.label || k);
-      rows = filteredPayStudents.map(s => cols.map(k => {
-        switch (k) {
-          case 'name':        return s.profile?.fullName || '';
-          case 'instituteId': return s.profile?.instituteId || '';
-          case 'email':       return s.email || '';
-          case 'phone':       return s.profile?.phone || '';
-          case 'payStatus':   return s.paymentStatus;
-          case 'amount':      return s.slip?.amount ?? paymentOverview?.monthlyFee ?? '';
-          case 'paidDate':    return s.slip?.paidDate ? new Date(s.slip.paidDate).toLocaleDateString('en-GB') : '';
-          default: return '';
-        }
-      }));
-
-    } else if (tab === 'monitor' && monitorData) {
-      const hasName = cols.includes('name');
-      const hasId   = cols.includes('instituteId');
-      const hasPct  = cols.includes('pct');
-      const filteredM = monitorSearch
-        ? monitorData.students.filter(s =>
-            s.fullName.toLowerCase().includes(monitorSearch.toLowerCase()) ||
-            s.instituteId.toLowerCase().includes(monitorSearch.toLowerCase()))
-        : monitorData.students;
-      headers = [
-        ...(hasName ? ['Full Name'] : []),
-        ...(hasId   ? ['Student ID'] : []),
-        ...monitorData.dates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })),
-        ...(hasPct  ? ['Attendance %'] : []),
-      ];
-      rows = filteredM.map(s => [
-        ...(hasName ? [s.fullName] : []),
-        ...(hasId   ? [s.instituteId] : []),
-        ...monitorData.dates.map(d => s.statuses[d] || ''),
-        ...(hasPct  ? [`${s.percentage}%`] : []),
-      ]);
-    }
-
-    if (headers.length === 0) return;
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = headers.map((h, i) => {
-      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
-      return { wch: Math.min(maxLen + 2, 40) };
-    });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, tab.charAt(0).toUpperCase() + tab.slice(1));
-    const className = (selectedClass?.name || 'class').replace(/\s+/g, '_');
-    XLSX.writeFile(wb, `${className}_${tab}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    setShowExport(false);
-  }
 
   /* ─── Barcode scanner ─────────────────────────── */
 
   const handleBarcodeScan = useCallback((code: string) => {
     if (!selectedClassId) return;
-    // Deduplicate: reject the same code if seen within 2 seconds
-    const now = Date.now();
-    if (code.trim() === lastScanRef.current.code && now - lastScanRef.current.ts < 2000) return;
-    lastScanRef.current = { code: code.trim(), ts: now };
-    api.post('/attendance/class-attendance/mark/by-barcode', {
-      classId: selectedClassId, barcode: code.trim(), date: selectedDate,
-      status: 'PRESENT',
+    api.post('/attendance/class-attendance/mark', {
+      classId: selectedClassId, identifier: code.trim(), date: selectedDate,
+      status: 'PRESENT', method: 'barcode',
     }).then(res => {
       const name = res.data?.user?.profile?.fullName || code;
       setToast({ type: 'success', msg: `✓ ${name} — Present` });
-      setRecentScans(prev => [{ name, time: new Date().toLocaleTimeString(), id: code.trim() }, ...prev.slice(0, 19)]);
+      setRecentScans(prev => [{ name, time: new Date().toLocaleTimeString(), id: code }, ...prev.slice(0, 19)]);
       setLocalStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
-      setSavedStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
     }).catch((err: any) => {
       setToast({ type: 'error', msg: err.response?.data?.message || `Not found: ${code}` });
     });
@@ -481,21 +268,6 @@ export default function AdminClassAttendance() {
       });
   }, [selectedClassId, tab, loadPaymentOverview]);
 
-  /* ─── Load monitor data ─────────────────────── */
-
-  useEffect(() => {
-    if (!selectedClassId || tab !== 'monitor' || !monitorFrom || !monitorTo) return;
-    setMonitorLoading(true);
-    api.get(`/attendance/class-attendance/class/${selectedClassId}/monitor?from=${monitorFrom}&to=${monitorTo}`)
-      .then(r => setMonitorData(r.data || null))
-      .catch(() => setMonitorData(null))
-      .finally(() => setMonitorLoading(false));
-  }, [selectedClassId, tab, monitorFrom, monitorTo]);
-
-  /* ─── Keep savedStatuses ref in sync ──────────── */
-
-  useEffect(() => { savedStatusesRef.current = savedStatuses; }, [savedStatuses]);
-
   /* ─── Toast auto-dismiss ───────────────────────── */
 
   useEffect(() => {
@@ -504,40 +276,16 @@ export default function AdminClassAttendance() {
 
   /* ─── Handlers ─────────────────────────────────── */
 
-  const setStudentStatus = useCallback(async (userId: string, status: string) => {
-    // Optimistic UI update
+  const setStudentStatus = useCallback((userId: string, status: string) => {
     setLocalStatuses(prev => ({ ...prev, [userId]: status }));
-    setSavingStudentId(userId);
-    try {
-      await api.post('/attendance/class-attendance/bulk', {
-        classId: selectedClassId,
-        date: selectedDate,
-        records: [{ userId, status }],
-        method: 'manual',
-      });
-      setSavedStatuses(prev => ({ ...prev, [userId]: status }));
-    } catch (err: any) {
-      // Revert to last saved status on failure
-      const prev = savedStatusesRef.current[userId] || '';
-      setLocalStatuses(p => ({ ...p, [userId]: prev }));
-      setToast({ type: 'error', msg: err.response?.data?.message || 'Failed to save status' });
-    } finally {
-      setSavingStudentId(null);
-    }
-  }, [selectedClassId, selectedDate]);
+  }, []);
 
   const handleScanMark = useCallback(async () => {
     if (!scanInput.trim() || !selectedClassId) return;
-    // Prevent double-submit
-    if (markingRef.current) return;
-    markingRef.current = true;
-    setMarking(true);
-    // Deduplicate: reset last scan so manual entry always goes through
-    lastScanRef.current = { code: '', ts: 0 };
     try {
-      const res = await api.post('/attendance/class-attendance/mark/by-barcode', {
-        classId: selectedClassId, barcode: scanInput.trim(), date: selectedDate,
-        status: 'PRESENT',
+      const res = await api.post('/attendance/class-attendance/mark', {
+        classId: selectedClassId, identifier: scanInput.trim(), date: selectedDate,
+        status: 'PRESENT', method: 'scan',
       });
       const name = res.data?.user?.profile?.fullName || scanInput;
       setToast({ type: 'success', msg: `✓ ${name} — Present` });
@@ -545,12 +293,8 @@ export default function AdminClassAttendance() {
       setScanInput('');
       scanRef.current?.focus();
       setLocalStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
-      setSavedStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
     } catch (err: any) {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Student not found' });
-    } finally {
-      markingRef.current = false;
-      setMarking(false);
     }
   }, [scanInput, selectedClassId, selectedDate]);
 
@@ -721,7 +465,7 @@ export default function AdminClassAttendance() {
       minWidth: 230,
       render: (student) => (
         <div className="flex items-center gap-3 min-w-0">
-          <Initials name={student.fullName} avatarUrl={student.avatarUrl} />
+          <Initials name={student.fullName} />
           <div className="min-w-0">
             <p className="font-semibold text-slate-800 text-sm truncate">{student.fullName}</p>
             <p className="text-[11px] text-slate-400 font-mono">{student.instituteId}</p>
@@ -748,7 +492,6 @@ export default function AdminClassAttendance() {
       align: 'right',
       render: (student) => {
         const currentStatus = localStatuses[student.userId] || '';
-        const isSaving = savingStudentId === student.userId;
         return (
           <div className="flex flex-wrap justify-end gap-1.5">
             {(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as const).map(st => {
@@ -757,21 +500,16 @@ export default function AdminClassAttendance() {
               return (
                 <button
                   key={st}
-                  type="button"
                   onClick={() => setStudentStatus(student.userId, st)}
-                  disabled={isSaving}
                   title={cfg.label}
                   aria-label={`Mark ${student.fullName} as ${cfg.label}`}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
                     isActive
                       ? `${cfg.bg} ${cfg.color}`
                       : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                  } ${isSaving ? 'opacity-60 cursor-wait' : ''}`}
+                  }`}
                 >
-                  {isSaving
-                    ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    : <span>{cfg.icon}</span>
-                  }
+                  <span>{cfg.icon}</span>
                   {cfg.label}
                 </button>
               );
@@ -780,7 +518,7 @@ export default function AdminClassAttendance() {
         );
       },
     },
-  ], [localStatuses, savingStudentId, setStudentStatus]);
+  ], [localStatuses, setStudentStatus]);
 
   const monthlyColumns = useMemo<readonly StickyColumn<any>[]>(() => {
     const dateColumns: StickyColumn<any>[] = monthDates.map(d => ({
@@ -809,7 +547,7 @@ export default function AdminClassAttendance() {
         minWidth: 220,
         render: (row) => (
           <div className="flex items-center gap-2">
-            <Initials name={row.student?.profile?.fullName || '?'} size={7} avatarUrl={row.student?.profile?.avatarUrl} />
+            <Initials name={row.student?.profile?.fullName || '?'} size={7} />
             <div className="min-w-0">
               <p className="font-medium text-xs text-slate-800 truncate max-w-[130px]">{row.student?.profile?.fullName || '-'}</p>
               <p className="text-[10px] text-slate-400 font-mono">{row.student?.profile?.instituteId || '-'}</p>
@@ -867,7 +605,7 @@ export default function AdminClassAttendance() {
         minWidth: 220,
         render: (row) => (
           <div className="flex items-center gap-2">
-            <Initials name={row.student?.profile?.fullName || '?'} size={7} avatarUrl={row.student?.profile?.avatarUrl} />
+            <Initials name={row.student?.profile?.fullName || '?'} size={7} />
             <div className="min-w-0">
               <p className="font-medium text-xs text-slate-800 truncate max-w-[130px]">{row.student?.profile?.fullName || '-'}</p>
               <p className="text-[10px] text-slate-400 font-mono">{row.student?.profile?.instituteId || '-'}</p>
@@ -899,7 +637,7 @@ export default function AdminClassAttendance() {
         minWidth: 240,
         render: (student) => (
           <div className="flex items-center gap-2">
-            <Initials name={student.profile?.fullName || student.email || '?'} size={7} avatarUrl={student.profile?.avatarUrl} />
+            <Initials name={student.profile?.fullName || student.email || '?'} size={7} />
             <div className="min-w-0">
               <p className="font-medium text-xs text-slate-800 truncate max-w-[130px]">{student.profile?.fullName || student.email}</p>
               <div className="flex gap-1.5 items-center">
@@ -918,27 +656,6 @@ export default function AdminClassAttendance() {
         render: (student) => (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${PAY_CFG[student.paymentStatus]?.bg || PAY_CFG.UNPAID.bg} ${PAY_CFG[student.paymentStatus]?.color || PAY_CFG.UNPAID.color}`}>
             {PAY_CFG[student.paymentStatus]?.label || student.paymentStatus}
-          </span>
-        ),
-      },
-      {
-        id: 'amount',
-        label: 'Amount (LKR)',
-        minWidth: 110,
-        align: 'right',
-        render: (student) => {
-          const amt = student.slip?.amount ?? paymentOverview?.monthlyFee;
-          return <span className="text-xs font-mono text-slate-600">{amt != null ? `Rs. ${Number(amt).toLocaleString()}` : '—'}</span>;
-        },
-      },
-      {
-        id: 'paidDate',
-        label: 'Paid Date',
-        minWidth: 110,
-        align: 'center',
-        render: (student) => (
-          <span className="text-xs text-slate-500">
-            {student.slip?.paidDate ? new Date(student.slip.paidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
           </span>
         ),
       },
@@ -993,10 +710,7 @@ export default function AdminClassAttendance() {
   const selectCls = 'px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))]';
   const inputCls = 'px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))]';
 
-  function Initials({ name, size = 9, avatarUrl }: { name: string; size?: number; avatarUrl?: string | null }) {
-    if (avatarUrl) {
-      return <img src={avatarUrl} alt="" className={`w-${size} h-${size} rounded-full object-cover flex-shrink-0`} />;
-    }
+  function Initials({ name, size = 9 }: { name: string; size?: number }) {
     const ini = name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
     return (
       <div className={`w-${size} h-${size} rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0`}>
@@ -1017,18 +731,9 @@ export default function AdminClassAttendance() {
       )}
 
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
-        </div>
-        <button
-          onClick={openExport}
-          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-          Export
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
+        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
       </div>
 
       {/* Class Selector + Date Controls */}
@@ -1056,14 +761,6 @@ export default function AdminClassAttendance() {
             {Array.from({ length: 5 }, (_, i) => { const y = new Date().getFullYear() - 2 + i; return <option key={y} value={y}>{y}</option>; })}
           </select>
         )}
-        {tab === 'monitor' && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">From</label>
-            <input type="date" value={monitorFrom} onChange={e => setMonitorFrom(e.target.value)} className={inputCls} />
-            <label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">To</label>
-            <input type="date" value={monitorTo} onChange={e => setMonitorTo(e.target.value)} className={inputCls} />
-          </div>
-        )}
       </div>
 
       {/* Tabs */}
@@ -1072,8 +769,6 @@ export default function AdminClassAttendance() {
           { key: 'mark' as TabKey, label: 'Mark Attendance' },
           { key: 'monthly' as TabKey, label: 'Monthly' },
           { key: 'yearly' as TabKey, label: 'Yearly' },
-          { key: 'payments' as TabKey, label: 'Payments' },
-          { key: 'monitor' as TabKey, label: 'Monitor' },
         ]).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex-1 px-4 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
@@ -1116,19 +811,14 @@ export default function AdminClassAttendance() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
                 </span>
                 <input ref={scanRef} type="text" value={scanInput} onChange={e => setScanInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !marking && handleScanMark()}
+                  onKeyDown={e => e.key === 'Enter' && handleScanMark()}
                   placeholder="Scan barcode / Institute ID / Barcode ID (e.g. TD-2026-0001)..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)]"
                 />
               </div>
-              <button
-                type="button"
-                onClick={handleScanMark}
-                disabled={!scanInput.trim() || marking}
-                className="px-4 py-2.5 rounded-xl bg-[hsl(var(--primary))] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-all flex items-center gap-2"
-              >
-                {marking && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {marking ? 'Marking...' : 'Mark Present'}
+              <button onClick={handleScanMark} disabled={!scanInput.trim()}
+                className="px-4 py-2.5 rounded-xl bg-[hsl(var(--primary))] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-all">
+                Mark Present
               </button>
               <button onClick={scanner.active ? scanner.stopCamera : scanner.startCamera}
                 className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
@@ -1399,204 +1089,7 @@ export default function AdminClassAttendance() {
             Payment status for {selectedClass?.name} • {selectedClass?.monthlyFee ? `Rs. ${selectedClass.monthlyFee}/month` : 'No fee set'}
           </p>
         </div>
-
-      ) : tab === 'monitor' ? (
-        /* ═══════ MONITOR TAB ═══════ */
-        <div className="space-y-4">
-          {monitorLoading ? (
-            <div className="flex justify-center py-16"><div className="w-8 h-8 border-3 border-[hsl(var(--primary))] border-t-transparent rounded-full animate-spin" /></div>
-          ) : !monitorData || monitorData.dates.length === 0 ? (
-            <div className="text-center py-16 text-[hsl(var(--muted-foreground))]">
-              <div className="text-4xl mb-3">📊</div>
-              <p className="font-medium">No attendance records found in this date range</p>
-              <p className="text-xs mt-1">Try changing the date range above</p>
-            </div>
-          ) : (() => {
-            const filteredMonitor = monitorSearch
-              ? monitorData.students.filter(s =>
-                  s.fullName.toLowerCase().includes(monitorSearch.toLowerCase()) ||
-                  s.instituteId.toLowerCase().includes(monitorSearch.toLowerCase())
-                )
-              : monitorData.students;
-
-            const avgPct = filteredMonitor.length > 0 ? Math.round(filteredMonitor.reduce((s, st) => s + st.percentage, 0) / filteredMonitor.length) : 0;
-
-            return (
-              <>
-                {/* Summary bar */}
-                <div className={`${cardCls} p-4`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{selectedClass?.name}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{monitorData.dates.length} class day{monitorData.dates.length !== 1 ? 's' : ''} • {monitorData.students.length} student{monitorData.students.length !== 1 ? 's' : ''} • Avg: {avgPct}%</p>
-                    </div>
-                    <input type="text" value={monitorSearch} onChange={e => setMonitorSearch(e.target.value)} placeholder="Search student..."
-                      className={`${inputCls} w-full sm:w-60`} />
-                  </div>
-                </div>
-
-                {/* Grid */}
-                <div className={`${cardCls} overflow-auto`} style={{ maxHeight: 'calc(100vh - 320px)' }}>
-                  <table className="text-xs border-collapse w-full">
-                    <thead>
-                      <tr className="bg-[hsl(var(--muted)/0.35)]">
-                        <th className="sticky left-0 z-20 bg-[hsl(var(--muted)/0.35)] px-3 py-2.5 text-left font-semibold text-[hsl(var(--foreground))] border-b border-r border-[hsl(var(--border))] min-w-[180px]">Student</th>
-                        {monitorData.dates.map(d => {
-                          const dt = new Date(d + 'T00:00:00');
-                          return (
-                            <th key={d} className="px-1.5 py-2.5 text-center font-medium text-[hsl(var(--muted-foreground))] border-b border-[hsl(var(--border))] min-w-[44px]">
-                              <div className="leading-tight">{dt.toLocaleDateString('en-GB', { day: '2-digit' })}</div>
-                              <div className="text-[9px] opacity-70">{dt.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
-                            </th>
-                          );
-                        })}
-                        <th className="sticky right-0 z-20 bg-[hsl(var(--muted)/0.35)] px-3 py-2.5 text-center font-semibold text-[hsl(var(--foreground))] border-b border-l border-[hsl(var(--border))] min-w-[56px]">%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredMonitor.map((st, idx) => (
-                        <tr key={st.userId} className={idx % 2 === 0 ? '' : 'bg-[hsl(var(--muted)/0.15)]'}>
-                          <td className="sticky left-0 z-10 bg-[hsl(var(--card))] px-3 py-2 border-b border-r border-[hsl(var(--border))] whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <Initials name={st.fullName} size={7} avatarUrl={st.avatarUrl} />
-                              <div>
-                                <div className="font-medium text-[hsl(var(--foreground))]">{st.fullName}</div>
-                                <div className="text-[10px] text-[hsl(var(--muted-foreground))]">{st.instituteId}</div>
-                              </div>
-                            </div>
-                          </td>
-                          {monitorData.dates.map(d => {
-                            const s = st.statuses[d];
-                            let cell = '—';
-                            let cls = 'text-slate-300';
-                            if (s === 'PRESENT') { cell = '✓'; cls = 'text-emerald-600 bg-emerald-50/60 font-bold'; }
-                            else if (s === 'LATE') { cell = 'L'; cls = 'text-amber-600 bg-amber-50/60 font-bold'; }
-                            else if (s === 'ABSENT') { cell = '✕'; cls = 'text-red-500 bg-red-50/60 font-bold'; }
-                            else if (s === 'EXCUSED') { cell = 'E'; cls = 'text-blue-500 bg-blue-50/60 font-bold'; }
-                            return <td key={d} className={`px-1.5 py-2 text-center border-b border-[hsl(var(--border))] ${cls}`}>{cell}</td>;
-                          })}
-                          <td className={`sticky right-0 z-10 bg-[hsl(var(--card))] px-3 py-2 text-center font-bold border-b border-l border-[hsl(var(--border))] ${
-                            st.percentage >= 80 ? 'text-emerald-600' : st.percentage >= 50 ? 'text-amber-600' : 'text-red-600'
-                          }`}>{st.percentage}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap gap-4 justify-center text-[11px] text-[hsl(var(--muted-foreground))]">
-                  <span className="flex items-center gap-1"><span className="text-emerald-600 font-bold">✓</span> Present</span>
-                  <span className="flex items-center gap-1"><span className="text-amber-600 font-bold">L</span> Late</span>
-                  <span className="flex items-center gap-1"><span className="text-red-500 font-bold">✕</span> Absent</span>
-                  <span className="flex items-center gap-1"><span className="text-blue-500 font-bold">E</span> Excused</span>
-                  <span className="flex items-center gap-1"><span className="text-slate-300">—</span> No record</span>
-                </div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] text-center">
-                  Attendance monitor • {fmtDate(monitorFrom)} to {fmtDate(monitorTo)} • % = (Present + Late) / Total class days
-                </p>
-              </>
-            );
-          })()}
-        </div>
       ) : null}
-
-      {/* Export Modal */}
-      {showExport && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowExport(false)}>
-          <div className="min-h-full flex items-center justify-center p-4">
-            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
-                <div>
-                  <h2 className="font-bold text-[hsl(var(--foreground))]">Export {tab.charAt(0).toUpperCase() + tab.slice(1)} Attendance</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Select columns to include in the Excel file</p>
-                </div>
-                <button onClick={() => setShowExport(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
-                {/* Select all / none + row count */}
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setExportCols((TAB_EXPORT_COLS[tab] || []).map(c => c.key))}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
-                  >Select all</button>
-                  <span className="text-slate-300">·</span>
-                  <button
-                    onClick={() => setExportCols([])}
-                    className="text-xs font-semibold text-slate-400 hover:text-red-500 transition"
-                  >Clear</button>
-                  <span className="ml-auto text-xs text-slate-400">
-                    {exportCols.length} selected · {
-                      tab === 'mark'     ? filteredStudents.length :
-                      tab === 'monthly'  ? monthlySummary.length :
-                      tab === 'yearly'   ? yearlySummary.length :
-                      tab === 'payments' ? filteredPayStudents.length :
-                      (monitorData?.students.length || 0)
-                    } rows
-                  </span>
-                </div>
-
-                {/* Dynamic-columns note */}
-                {(tab === 'monthly' || tab === 'yearly' || tab === 'monitor') && (
-                  <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-                    {tab === 'monthly' ? `${monthDates.length} date column${monthDates.length !== 1 ? 's' : ''} are automatically included.` :
-                     tab === 'yearly'  ? `${yearActiveMonths.length} month column${yearActiveMonths.length !== 1 ? 's' : ''} are automatically included.` :
-                     `${monitorData?.dates.length || 0} per-date columns are automatically included.`}
-                  </p>
-                )}
-
-                {/* Column checkboxes */}
-                <div className="grid grid-cols-2 gap-2">
-                  {(TAB_EXPORT_COLS[tab] || []).map(col => (
-                    <label
-                      key={col.key}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition select-none ${
-                        exportCols.includes(col.key)
-                          ? 'bg-blue-50 border-blue-300'
-                          : 'border-[hsl(var(--border))] hover:border-blue-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${
-                        exportCols.includes(col.key) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
-                      }`}>
-                        {exportCols.includes(col.key) && (
-                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className={`text-xs font-medium ${
-                        exportCols.includes(col.key) ? 'text-blue-700' : 'text-slate-600'
-                      }`}>{col.label}</span>
-                      <input type="checkbox" className="sr-only" checked={exportCols.includes(col.key)} onChange={() => toggleExportCol(col.key)} />
-                    </label>
-                  ))}
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setShowExport(false)}
-                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleExport}
-                    disabled={exportCols.length === 0}
-                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    Export Excel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      , document.body)}
     </div>
   );
 }

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
+import { getInstitutePath } from '../lib/instituteRoutes';
 import teacherImg from '../assets/teacher.png';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { selected } = useInstitute();
+  const { instituteId: routeInstituteId } = useParams();
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,6 +20,7 @@ export default function DashboardPage() {
   const name = user?.profile?.fullName?.split(' ')[0] || 'Student';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+  const currentInstituteId = routeInstituteId || selected?.id || null;
 
 
 
@@ -45,12 +50,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: 'MY CLASSES', desc: 'View enrolled', to: '/classes', gradient: 'from-amber-500 to-orange-600', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-          { label: 'UPLOAD SLIP', desc: 'Submit receipt', to: '/payments/submit', gradient: 'from-rose-500 to-pink-600', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12' },
-          { label: 'PAYMENTS', desc: 'Track history', to: '/payments/my', gradient: 'from-blue-500 to-indigo-600', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
-          { label: 'STUDENT ID', desc: user?.profile?.instituteId || 'Not assigned', to: '/dashboard', gradient: 'from-emerald-500 to-teal-600', icon: 'M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2' },
+          { label: 'MY CLASSES', desc: 'View enrolled', to: getInstitutePath(currentInstituteId, '/classes'), gradient: 'from-amber-500 to-orange-600', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+          { label: 'UPLOAD SLIP', desc: 'Submit receipt', to: getInstitutePath(currentInstituteId, '/payments/submit'), gradient: 'from-rose-500 to-pink-600', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12' },
+          { label: 'PAYMENTS', desc: 'Track history', to: getInstitutePath(currentInstituteId, '/payments/my'), gradient: 'from-blue-500 to-indigo-600', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
+          { label: 'MY ATTENDANCE', desc: 'View presence', to: getInstitutePath(currentInstituteId, '/my-class-attendance'), gradient: 'from-emerald-500 to-teal-600', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+          { label: 'WATCH HISTORY', desc: 'Recording sessions', to: getInstitutePath(currentInstituteId, '/watch-history'), gradient: 'from-purple-500 to-violet-600', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+          { label: 'STUDENT ID', desc: user?.profile?.instituteId || 'Not assigned', to: getInstitutePath(currentInstituteId, '/dashboard'), gradient: 'from-slate-500 to-slate-600', icon: 'M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2' },
         ].map(({ label, desc, to, gradient, icon }) => (
           <Link key={label} to={to}
             className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 sm:p-5 flex flex-col items-center text-center card-hover group shadow-sm transition-colors duration-300">
@@ -67,7 +74,7 @@ export default function DashboardPage() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Available Classes</h2>
-          <Link to="/classes" className="text-sm text-[hsl(var(--primary))] font-semibold hover:text-[hsl(var(--primary-glow))] transition flex items-center gap-1">
+          <Link to={getInstitutePath(currentInstituteId, '/classes')} className="text-sm text-[hsl(var(--primary))] font-semibold hover:text-[hsl(var(--primary-glow))] transition flex items-center gap-1">
             View all
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
           </Link>
@@ -88,7 +95,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {classes.map((cls: any) => (
-              <Link key={cls.id} to={`/classes/${cls.id}`}
+              <Link key={cls.id} to={getInstitutePath(currentInstituteId || cls.instituteId || cls.institute?.id || null, `/classes/${cls.id}`)}
                 className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-5 card-hover group shadow-sm transition-colors duration-300">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--primary-glow))] flex items-center justify-center flex-shrink-0 shadow-lg shadow-[hsl(var(--primary)/0.2)]">

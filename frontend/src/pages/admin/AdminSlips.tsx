@@ -34,15 +34,12 @@ interface PaymentOverviewStudent {
     status: string;
     type?: string;
     slipUrl?: string;
-    amount?: number | null;
-    paidDate?: string | null;
     adminNote?: string | null;
     createdAt?: string;
   } | null;
 }
 
 interface PaymentOverview {
-  monthlyFee?: number | null;
   summary: {
     total: number;
     paid: number;
@@ -69,11 +66,6 @@ export default function AdminSlips() {
   const [filter, setFilter] = useState('PENDING');
   const [preview, setPreview] = useState<any>(null);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [verifyModal, setVerifyModal] = useState<{ slip: any } | null>(null);
-  const [rejectModal, setRejectModal] = useState<{ slip: any } | null>(null);
-  const [verifyForm, setVerifyForm] = useState({ transactionId: '', adminNote: '', paidDate: new Date().toISOString().split('T')[0] });
-  const [rejectForm, setRejectForm] = useState({ rejectReason: '', adminNote: '' });
-  const [actionError, setActionError] = useState('');
 
   // Physical class payments
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -90,91 +82,31 @@ export default function AdminSlips() {
     userId: string;
     studentName: string;
     status: 'PAID' | 'LATE' | 'UNPAID';
-    adminNote: string;
-    paidDate: string;
   } | null>(null);
 
   const currentClassId = useRef('');
-  const overviewCache = useRef<Record<string, PaymentOverview>>({});
 
-  const load = () => {
-    setLoading(true);
-    api.get('/payments/all', { params: { limit: 200 } }).then(r => {
-      const res = r.data;
-      setPayments(res?.data ? res.data : Array.isArray(res) ? res : []);
-    }).catch(() => {}).finally(() => setLoading(false));
-  };
+  const load = () => { setLoading(true); api.get('/payments/all').then(r => setPayments(r.data)).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => {
     load();
     api.get('/classes').then(r => setClasses(r.data || [])).catch(() => {});
   }, []);
 
-  const openVerifyModal = (slip: any) => {
-    setVerifyForm({ transactionId: '', adminNote: '', paidDate: new Date().toISOString().split('T')[0] });
-    setActionError('');
-    setVerifyModal({ slip });
-  };
-
-  const openRejectModal = (slip: any) => {
-    setRejectForm({ rejectReason: '', adminNote: '' });
-    setActionError('');
-    setRejectModal({ slip });
-  };
-
-  const doVerify = async () => {
-    if (!verifyModal) return;
-    if (!verifyForm.transactionId.trim()) { setActionError('Transaction ID is required'); return; }
-    setActingId(verifyModal.slip.id);
-    setActionError('');
-    try {
-      await api.patch(`/payments/${verifyModal.slip.id}/verify`, {
-        transactionId: verifyForm.transactionId.trim(),
-        adminNote: verifyForm.adminNote || undefined,
-        paidDate: verifyForm.paidDate || undefined,
-      });
-      setVerifyModal(null);
-      load();
-    } catch (err: any) {
-      setActionError(err.response?.data?.message || 'Failed to verify slip');
-    } finally {
-      setActingId(null);
-    }
-  };
-
-  const doReject = async () => {
-    if (!rejectModal) return;
-    if (!rejectForm.rejectReason.trim()) { setActionError('Rejection reason is required'); return; }
-    setActingId(rejectModal.slip.id);
-    setActionError('');
-    try {
-      await api.patch(`/payments/${rejectModal.slip.id}/reject`, {
-        rejectReason: rejectForm.rejectReason.trim(),
-        adminNote: rejectForm.adminNote || undefined,
-      });
-      setRejectModal(null);
-      load();
-    } catch (err: any) {
-      setActionError(err.response?.data?.message || 'Failed to reject slip');
-    } finally {
-      setActingId(null);
-    }
+  const act = async (id: string, status: 'VERIFIED' | 'REJECTED') => {
+    setActingId(id);
+    if (status === 'VERIFIED') await api.patch(`/payments/${id}/verify`, {}).catch(() => {});
+    else await api.patch(`/payments/${id}/reject`, {}).catch(() => {});
+    setActingId(null); load();
   };
 
   const filtered = payments.filter(p => filter === 'ALL' || p.status === filter);
   const counts = { PENDING: payments.filter(p => p.status === 'PENDING').length, VERIFIED: payments.filter(p => p.status === 'VERIFIED').length, REJECTED: payments.filter(p => p.status === 'REJECTED').length };
 
-  const fetchOverview = async (classId: string, monthId: string, forceRefresh = false) => {
-    const cacheKey = `${classId}:${monthId}`;
-    if (!forceRefresh && overviewCache.current[cacheKey]) {
-      setPaymentOverview(overviewCache.current[cacheKey]);
-      setPaymentLoading(false);
-      return;
-    }
+  const fetchOverview = async (classId: string, monthId: string) => {
     setPaymentLoading(true);
     setPaymentError('');
     try {
       const { data } = await api.get(`/payments/class/${classId}/month/${monthId}`);
-      overviewCache.current[cacheKey] = data || null;
       setPaymentOverview(data || null);
     } catch (err: any) {
       setPaymentOverview(null);
@@ -213,17 +145,13 @@ export default function AdminSlips() {
       });
   }, [selectedClassId, tab]);
 
-  const setStudentPaymentStatus = async (userId: string, status: 'PAID' | 'LATE' | 'UNPAID', adminNote = '', paidDate = '') => {
+  const setStudentPaymentStatus = async (userId: string, status: 'PAID' | 'LATE' | 'UNPAID') => {
     if (!paymentMonthId) return;
     setPaymentUpdatingId(`${userId}:${status}`);
     try {
-      await api.patch(`/payments/student/${userId}/month/${paymentMonthId}/status`, {
-        status,
-        adminNote,
-        ...(paidDate ? { paidDate } : {}),
-      });
-      // Force refresh from API and update cache
-      await fetchOverview(currentClassId.current, paymentMonthId, true);
+      await api.patch(`/payments/student/${userId}/month/${paymentMonthId}/status`, { status, adminNote: '' });
+      const { data } = await api.get(`/payments/class/${selectedClassId}/month/${paymentMonthId}`);
+      setPaymentOverview(data || null);
     } catch {
       setPaymentError('Failed to update payment status');
     } finally {
@@ -265,19 +193,10 @@ export default function AdminSlips() {
       label: 'Student',
       minWidth: 200,
       render: (p) => (
-        <div className="flex items-center gap-2.5">
-          {p.user?.profile?.avatarUrl ? (
-            <img src={p.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-[11px]">{(p.user?.profile?.fullName || p.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
-            </div>
-          )}
-          <div>
-            <p className="font-semibold text-slate-800 text-sm">{p.user?.profile?.fullName || '-'}</p>
-            <p className="text-xs text-slate-400">{p.user?.email}</p>
-          </div>
-        </div>
+        <>
+          <p className="font-semibold text-slate-800 text-sm">{p.user?.profile?.fullName || '-'}</p>
+          <p className="text-xs text-slate-400">{p.user?.email}</p>
+        </>
       ),
     },
     { id: 'class', label: 'Class', minWidth: 160, render: (p) => <span className="text-slate-600 text-sm">{p.month?.class?.name || '-'}</span> },
@@ -308,21 +227,15 @@ export default function AdminSlips() {
           </button>}
           {p.status === 'PENDING' && (
             <>
-              <button onClick={() => openVerifyModal(p)} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition disabled:opacity-50">
+              <button onClick={() => act(p.id, 'VERIFIED')} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition disabled:opacity-50">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                 Verify
               </button>
-              <button onClick={() => openRejectModal(p)} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition disabled:opacity-50">
+              <button onClick={() => act(p.id, 'REJECTED')} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition disabled:opacity-50">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 Reject
               </button>
             </>
-          )}
-          {p.status === 'REJECTED' && p.rejectReason && (
-            <span className="text-xs text-red-500 italic max-w-[150px] truncate" title={p.rejectReason}>Reason: {p.rejectReason}</span>
-          )}
-          {p.status === 'VERIFIED' && p.transactionId && (
-            <span className="text-xs text-emerald-600 font-mono" title={`Transaction: ${p.transactionId}`}>#{p.transactionId}</span>
           )}
         </div>
       ),
@@ -331,46 +244,24 @@ export default function AdminSlips() {
 
   const physicalColumns: readonly StickyColumn<PaymentOverviewStudent>[] = [
     {
-      id: 'fullName',
-      label: 'Full Name',
-      minWidth: 160,
+      id: 'student',
+      label: 'Student',
+      minWidth: 240,
       render: (student) => (
         <div className="flex items-center gap-2">
-          {student.profile?.avatarUrl ? (
-            <img src={student.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-[9px]">
-                {(student.profile?.fullName || student.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
-              </span>
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-[9px]">
+              {(student.profile?.fullName || student.email || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium text-xs text-slate-800 truncate max-w-[130px]">{student.profile?.fullName || student.email}</p>
+            <div className="flex gap-1.5 items-center">
+              <span className="text-[10px] text-slate-400 font-mono">{student.profile?.instituteId || '—'}</span>
+              {student.profile?.phone && <span className="text-[10px] text-slate-400">• {student.profile.phone}</span>}
             </div>
-          )}
-          <span className="font-medium text-xs text-slate-800 truncate">{student.profile?.fullName || '—'}</span>
+          </div>
         </div>
-      ),
-    },
-    {
-      id: 'instituteId',
-      label: 'Institute ID',
-      minWidth: 120,
-      render: (student) => (
-        <span className="text-xs font-mono text-slate-500">{student.profile?.instituteId || '—'}</span>
-      ),
-    },
-    {
-      id: 'phone',
-      label: 'Phone',
-      minWidth: 130,
-      render: (student) => (
-        <span className="text-xs text-slate-500">{student.profile?.phone || '—'}</span>
-      ),
-    },
-    {
-      id: 'email',
-      label: 'Email',
-      minWidth: 180,
-      render: (student) => (
-        <span className="text-xs text-slate-500">{student.email || '—'}</span>
       ),
     },
     {
@@ -385,25 +276,13 @@ export default function AdminSlips() {
       ),
     },
     {
-      id: 'amount',
-      label: 'Amount (LKR)',
-      minWidth: 110,
-      align: 'right',
-      render: (student) => {
-        const amt = student.slip?.amount ?? paymentOverview?.monthlyFee;
-        return <span className="text-xs font-mono text-slate-600">{amt != null ? `Rs. ${Number(amt).toLocaleString()}` : '—'}</span>;
-      },
-    },
-    {
-      id: 'paidDate',
-      label: 'Paid Date',
+      id: 'slip',
+      label: 'Slip',
       minWidth: 110,
       align: 'center',
-      render: (student) => (
-        <span className="text-xs text-slate-500">
-          {student.slip?.paidDate ? new Date(student.slip.paidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-        </span>
-      ),
+      render: (student) => student.slip?.slipUrl ? (
+        <a href={student.slip.slipUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600 hover:text-blue-700">View Slip</a>
+      ) : <span className="text-xs text-slate-400">No slip</span>,
     },
     {
       id: 'actions',
@@ -417,9 +296,7 @@ export default function AdminSlips() {
               onClick={() => setPhysicalVerifyModal({
                 userId: student.userId,
                 studentName: student.profile?.fullName || student.email,
-                status: 'PAID',
-                adminNote: '',
-                paidDate: new Date().toISOString().split('T')[0],
+                status: student.paymentStatus,
               })}
               disabled={!!paymentUpdatingId}
               className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
@@ -437,11 +314,11 @@ export default function AdminSlips() {
   return (
     <div className="space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Payment Slips</h1>
-        <p className="text-[hsl(var(--muted-foreground))] text-sm mt-0.5">Review online payment slips and manage physical class payments</p>
+        <h1 className="text-xl font-bold text-slate-800">Payment Slips</h1>
+        <p className="text-slate-500 text-sm mt-0.5">Review online payment slips and manage physical class payments</p>
       </div>
 
-      <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
         {([
           { key: 'online' as const, label: 'Online' },
           { key: 'physical' as const, label: 'Physical' },
@@ -449,7 +326,7 @@ export default function AdminSlips() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${tab === t.key ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}
+            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${tab === t.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             {t.label}
           </button>
@@ -472,10 +349,10 @@ export default function AdminSlips() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
         {(['PENDING', 'VERIFIED', 'REJECTED', 'ALL'] as const).map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${filter === s ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}>
+            className={`flex-1 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${filter === s ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {s}
           </button>
         ))}
@@ -484,11 +361,11 @@ export default function AdminSlips() {
       {/* Slip preview modal */}
       {preview && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div>
-                <p className="font-bold text-[hsl(var(--foreground))]">{preview.user?.profile?.fullName || preview.user?.email}</p>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{preview.month?.class?.name} — {preview.month?.name}</p>
+                <p className="font-bold text-slate-800">{preview.user?.profile?.fullName || preview.user?.email}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{preview.month?.class?.name} � {preview.month?.name}</p>
               </div>
               <button onClick={() => setPreview(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -497,9 +374,9 @@ export default function AdminSlips() {
             <div className="p-4 bg-slate-50"><img src={preview.slipUrl} alt="slip" className="w-full object-contain max-h-80 rounded-xl" /></div>
             {preview.status === 'PENDING' && (
               <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
-                <button onClick={() => { openVerifyModal(preview); setPreview(null); }}
+                <button onClick={() => { act(preview.id, 'VERIFIED'); setPreview(null); }}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-green-700 transition shadow-lg shadow-emerald-500/25">Verify</button>
-                <button onClick={() => { openRejectModal(preview); setPreview(null); }}
+                <button onClick={() => { act(preview.id, 'REJECTED'); setPreview(null); }}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold hover:from-red-600 hover:to-red-700 transition shadow-lg shadow-red-500/25">Reject</button>
               </div>
             )}
@@ -507,104 +384,10 @@ export default function AdminSlips() {
         </div>
       , document.body)}
 
-      {/* Verify Modal */}
-      {verifyModal && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setVerifyModal(null)}>
-          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
-              <div>
-                <p className="font-bold text-[hsl(var(--foreground))]">Verify Payment Slip</p>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{verifyModal.slip.user?.profile?.fullName || verifyModal.slip.user?.email} — {verifyModal.slip.month?.class?.name} · {verifyModal.slip.month?.name}</p>
-              </div>
-              <button onClick={() => setVerifyModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-5 space-y-3">
-              {actionError && (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
-                  <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                  <p className="text-sm text-red-600">{actionError}</p>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Transaction / Reference ID <span className="text-red-500">*</span></label>
-                <input type="text" value={verifyForm.transactionId} onChange={e => setVerifyForm(f => ({ ...f, transactionId: e.target.value }))}
-                  placeholder="e.g. TXN-2026-04-0012"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" autoFocus />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Date</label>
-                <input type="date" value={verifyForm.paidDate} onChange={e => setVerifyForm(f => ({ ...f, paidDate: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="font-normal text-slate-400">(optional)</span></label>
-                <input type="text" value={verifyForm.adminNote} onChange={e => setVerifyForm(f => ({ ...f, adminNote: e.target.value }))}
-                  placeholder="Optional note"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-              </div>
-            </div>
-            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
-              <button onClick={() => setVerifyModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-              <button onClick={doVerify} disabled={!!actingId}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-green-700 transition shadow-lg shadow-emerald-500/25 disabled:opacity-50">
-                {actingId ? 'Verifying...' : 'Verify Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
-
-      {/* Reject Modal */}
-      {rejectModal && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRejectModal(null)}>
-          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
-              <div>
-                <p className="font-bold text-[hsl(var(--foreground))]">Reject Payment Slip</p>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{rejectModal.slip.user?.profile?.fullName || rejectModal.slip.user?.email} — {rejectModal.slip.month?.class?.name} · {rejectModal.slip.month?.name}</p>
-              </div>
-              <button onClick={() => setRejectModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-5 space-y-3">
-              {actionError && (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
-                  <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                  <p className="text-sm text-red-600">{actionError}</p>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Rejection Reason <span className="text-red-500">*</span></label>
-                <textarea value={rejectForm.rejectReason} onChange={e => setRejectForm(f => ({ ...f, rejectReason: e.target.value }))}
-                  placeholder="e.g. Blurry image, wrong amount, fake slip..."
-                  rows={3}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300 resize-none focus:outline-none focus:ring-2 focus:ring-red-500/30" autoFocus />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="font-normal text-slate-400">(optional)</span></label>
-                <input type="text" value={rejectForm.adminNote} onChange={e => setRejectForm(f => ({ ...f, adminNote: e.target.value }))}
-                  placeholder="Internal note (not shown to student)"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-red-500/30" />
-              </div>
-            </div>
-            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
-              <button onClick={() => setRejectModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-              <button onClick={doReject} disabled={!!actingId}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold hover:from-red-600 hover:to-red-700 transition shadow-lg shadow-red-500/25 disabled:opacity-50">
-                {actingId ? 'Rejecting...' : 'Reject Slip'}
-              </button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
-
       {/* Table */}
-      <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-[hsl(var(--muted))] animate-pulse" />)}</div>
+          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />)}</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
@@ -625,7 +408,7 @@ export default function AdminSlips() {
         </>
       ) : (
         <>
-          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-4 space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
             <div className="flex flex-wrap gap-3 items-center">
               <select
                 value={selectedClassId}
@@ -674,7 +457,7 @@ export default function AdminSlips() {
               </span>
             </div>
 
-            <div className="flex gap-1 bg-[hsl(var(--muted))] rounded-xl p-1 border border-[hsl(var(--border))] w-full overflow-x-auto">
+            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full overflow-x-auto">
               {([
                 { key: 'all' as const, label: 'All', count: physicalCounts.all },
                 { key: 'PAID' as const, label: 'Paid', count: physicalCounts.PAID },
@@ -686,12 +469,12 @@ export default function AdminSlips() {
                   key={item.key}
                   onClick={() => setPayFilter(item.key)}
                   className={`flex-1 min-w-[96px] px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-                    payFilter === item.key ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                    payFilter === item.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
                   <span>{item.label}</span>
                   <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                    payFilter === item.key ? 'bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]' : 'bg-[hsl(var(--card))]/70 text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]'
+                    payFilter === item.key ? 'bg-slate-100 text-slate-700' : 'bg-white/70 text-slate-500 border border-slate-200'
                   }`}>
                     {item.count}
                   </span>
@@ -711,7 +494,7 @@ export default function AdminSlips() {
           ) : !paymentOverview ? (
             <div className="text-center py-12 text-slate-500"><p className="font-medium">No payment data found</p></div>
           ) : (
-            <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               {filteredPhysicalStudents.length === 0 ? (
                 <div className="text-center py-12 text-slate-500"><p className="font-medium">No students found</p></div>
               ) : (
@@ -726,15 +509,15 @@ export default function AdminSlips() {
           )}
 
           <p className="text-xs text-slate-500 text-center">
-            Payment status for {selectedClass?.name || 'selected class'} • {paymentOverview?.monthlyFee != null ? `Rs. ${Number(paymentOverview.monthlyFee).toLocaleString()}/month` : selectedClass?.monthlyFee ? `Rs. ${selectedClass.monthlyFee}/month` : 'No fee set'}
+            Payment status for {selectedClass?.name || 'selected class'} • {selectedClass?.monthlyFee ? `Rs. ${selectedClass.monthlyFee}/month` : 'No fee set'}
           </p>
 
           {physicalVerifyModal && createPortal(
             <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPhysicalVerifyModal(null)}>
-              <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                   <div>
-                    <p className="font-bold text-[hsl(var(--foreground))]">Update Payment Status</p>
+                    <p className="font-bold text-slate-800">Update Payment Status</p>
                     <p className="text-xs text-slate-400 mt-0.5">{physicalVerifyModal.studentName}</p>
                   </div>
                   <button onClick={() => setPhysicalVerifyModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
@@ -743,37 +526,16 @@ export default function AdminSlips() {
                 </div>
 
                 <div className="p-5 space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Select Status</label>
-                    <select
-                      value={physicalVerifyModal.status}
-                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, status: e.target.value as 'PAID' | 'LATE' | 'UNPAID' } : prev)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"
-                    >
-                      <option value="PAID">Paid</option>
-                      <option value="LATE">Late</option>
-                      <option value="UNPAID">Unpaid</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Date</label>
-                    <input
-                      type="date"
-                      value={physicalVerifyModal.paidDate}
-                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, paidDate: e.target.value } : prev)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="font-normal text-slate-400">(optional)</span></label>
-                    <input
-                      type="text"
-                      value={physicalVerifyModal.adminNote}
-                      onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, adminNote: e.target.value } : prev)}
-                      placeholder="e.g. Cash paid in person"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-300"
-                    />
-                  </div>
+                  <label className="block text-xs font-semibold text-slate-600">Select Status</label>
+                  <select
+                    value={physicalVerifyModal.status}
+                    onChange={(e) => setPhysicalVerifyModal(prev => prev ? { ...prev, status: e.target.value as 'PAID' | 'LATE' | 'UNPAID' } : prev)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"
+                  >
+                    <option value="PAID">Paid</option>
+                    <option value="LATE">Late</option>
+                    <option value="UNPAID">Unpaid</option>
+                  </select>
                 </div>
 
                 <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
@@ -787,7 +549,7 @@ export default function AdminSlips() {
                     onClick={async () => {
                       const current = physicalVerifyModal;
                       if (!current) return;
-                      await setStudentPaymentStatus(current.userId, current.status, current.adminNote, current.paidDate);
+                      await setStudentPaymentStatus(current.userId, current.status);
                       setPhysicalVerifyModal(null);
                     }}
                     disabled={!!paymentUpdatingId}

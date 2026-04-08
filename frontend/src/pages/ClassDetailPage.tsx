@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { getInstitutePath } from '../lib/instituteRoutes';
 
 /* ─── Helpers ────────────────────────────────────────── */
 
@@ -210,7 +211,7 @@ function LiveLectureCard({ rec, onJoin, onWatch }: { rec: any; onJoin: (rec: any
 /* ═══════════════════════════════════════════════════════ */
 
 export default function ClassDetailPage() {
-  const { id } = useParams();
+  const { id, instituteId } = useParams();
   const navigate = useNavigate();
   const { user, token } = useAuth();
   const [classData, setClassData] = useState<any>(null);
@@ -276,7 +277,7 @@ export default function ClassDetailPage() {
   };
 
   const toggleMonth = (monthId: string) => {
-    navigate(`/classes/${id}/months/${monthId}`);
+    navigate(getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${id}/months/${monthId}`));
   };
 
   /** Handle join for live lectures */

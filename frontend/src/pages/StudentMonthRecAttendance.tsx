@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
+import { getInstitutePath } from '../lib/instituteRoutes';
 
 /* ─── Types ─────────────────────────────────────────── */
 
@@ -260,7 +261,7 @@ function RecordingCard({ rec }: { rec: RecordingRow }) {
 /* ─── Main Page ──────────────────────────────────────── */
 
 export default function StudentMonthRecAttendance() {
-  const { classId, monthId } = useParams<{ classId: string; monthId: string }>();
+  const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
   const [data, setData] = useState<MonthAttendanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -287,7 +288,7 @@ export default function StudentMonthRecAttendance() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
       </svg>
       <p className="text-sm font-medium text-red-600">{error}</p>
-      <Link to={`/classes/${classId}/months/${monthId}`} className="text-xs text-[hsl(var(--primary))] hover:underline">← Back to Recordings</Link>
+      <Link to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)} className="text-xs text-[hsl(var(--primary))] hover:underline">← Back to Recordings</Link>
     </div>
   );
 
@@ -301,7 +302,7 @@ export default function StudentMonthRecAttendance() {
       {/* Header */}
       <div>
         <Link
-          to={`/classes/${classId}/months/${monthId}`}
+          to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)}
           className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] flex items-center gap-1 transition mb-1.5"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

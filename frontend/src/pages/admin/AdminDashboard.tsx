@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../lib/api';
+import { useInstitute } from '../../context/InstituteContext';
+import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
 const QUICK_LINKS = [
   { to: '/admin/students', label: 'Students', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z', gradient: 'from-blue-500 to-blue-600' },
@@ -18,11 +20,21 @@ const STAT_CARDS = [
 ];
 
 export default function AdminDashboard() {
+  const { selected } = useInstitute();
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [classList, setClassList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const quickLinks = QUICK_LINKS.map((item) => ({ ...item, to: getInstituteAdminPath(selected?.id, item.to.replace('/admin', '')) }));
 
   useEffect(() => {
+    if (!selected?.id) {
+      setCounts({ students: 0, classes: 0, payments: 0, recordings: 0 });
+      setClassList([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     Promise.all([
       api.get('/stats/dashboard').then(r => r.data).catch(() => ({ students: 0, classes: 0, pendingPayments: 0, recordings: 0 })),
       api.get('/classes').then(r => r.data || []).catch(() => []),
@@ -30,7 +42,7 @@ export default function AdminDashboard() {
       setClassList(classes);
       setCounts({ students: stats.students, classes: stats.classes, payments: stats.pendingPayments, recordings: stats.recordings });
     }).finally(() => setLoading(false));
-  }, []);
+  }, [selected?.id]);
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -41,7 +53,8 @@ export default function AdminDashboard() {
         <div className="relative z-10">
           <p className="text-blue-300 text-xs font-semibold uppercase tracking-widest mb-1">Admin Panel</p>
           <h1 className="text-2xl md:text-3xl font-bold text-white">LMS Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1.5 max-w-md">Monitor your platform — students, classes, payments, and recordings at a glance.</p>
+          <p className="text-slate-400 text-sm mt-1.5 max-w-md">Monitor your selected institute — students, classes, payments, and recordings at a glance.</p>
+          {selected?.name && <p className="text-white/70 text-sm mt-2 font-semibold">{selected.name}</p>}
         </div>
       </div>
 
@@ -49,7 +62,7 @@ export default function AdminDashboard() {
       <div>
         <h2 className="text-sm font-bold text-[hsl(var(--foreground))] mb-3 uppercase tracking-wide">Quick Access</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {QUICK_LINKS.map(({ to, label, icon, gradient }) => (
+          {quickLinks.map(({ to, label, icon, gradient }) => (
             <Link key={to} to={to}
               className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 flex flex-col items-center text-center shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
               <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-2.5 shadow-md group-hover:scale-110 transition-transform`}>
@@ -82,7 +95,7 @@ export default function AdminDashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-[hsl(var(--foreground))] uppercase tracking-wide">Available Classes</h2>
-          <Link to="/admin/classes" className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">View all</Link>
+          <Link to={getInstituteAdminPath(selected?.id, '/classes')} className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">View all</Link>
         </div>
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -97,7 +110,7 @@ export default function AdminDashboard() {
             {classList.slice(0, 6).map((cls: any) => (
               <Link
                 key={cls.id}
-                to={`/admin/classes/${cls.id}`}
+                to={getInstituteAdminPath(selected?.id, `/classes/${cls.id}`)}
                 className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group"
               >
                 <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate group-hover:text-blue-600 transition">{cls.name}</p>

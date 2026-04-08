@@ -6,6 +6,7 @@ import api from '../lib/api';
 interface AttendanceRecord {
   id: string;
   date: string;
+  time?: string | null;
   status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED';
   method: string | null;
   note: string | null;
@@ -49,6 +50,23 @@ function fmtDate(iso: string) {
   });
 }
 
+function fmtMonth(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+function fmtTime(timeStr: string) {
+  // Accepts HH:MM:SS or HH:MM
+  const [h, m] = timeStr.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function getMonthKey(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 /* ─── Summary ring ───────────────────────────────────────── */
 
 function PercentRing({ pct }: { pct: number }) {
@@ -77,6 +95,36 @@ function PercentRing({ pct }: { pct: number }) {
 function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
   const [expanded, setExpanded] = useState(true);
   const { summary, records, class: cls } = entry;
+
+  const monthGroups = records.reduce<Record<string, { monthLabel: string; records: AttendanceRecord[]; summary: ClassAttendanceSummary }>>((acc, rec) => {
+    const key = getMonthKey(rec.date);
+    if (!acc[key]) {
+      acc[key] = {
+        monthLabel: fmtMonth(rec.date),
+        records: [],
+        summary: { total: 0, present: 0, late: 0, absent: 0, excused: 0, attendancePercentage: 0 },
+      };
+    }
+
+    const group = acc[key];
+    group.records.push(rec);
+    group.summary.total += 1;
+    if (rec.status === 'PRESENT') group.summary.present += 1;
+    else if (rec.status === 'LATE') group.summary.late += 1;
+    else if (rec.status === 'ABSENT') group.summary.absent += 1;
+    else if (rec.status === 'EXCUSED') group.summary.excused += 1;
+
+    return acc;
+  }, {});
+
+  const monthItems = Object.entries(monthGroups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([, group]) => {
+      group.summary.attendancePercentage = group.summary.total > 0
+        ? Math.round(((group.summary.present + group.summary.late) / group.summary.total) * 100)
+        : 0;
+      return group;
+    });
 
   return (
     <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm overflow-hidden">
@@ -111,40 +159,68 @@ function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
           {records.length === 0 ? (
             <p className="px-5 py-8 text-sm text-center text-[hsl(var(--muted-foreground))]">No attendance records yet.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[hsl(var(--muted)/0.5)]">
-                    <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Class</th>
-                    <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Date</th>
-                    <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Status</th>
-                    <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Method</th>
-                    <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Note</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[hsl(var(--border))]">
-                  {records.map(rec => {
-                    const cfg = STATUS_CFG[rec.status] ?? { label: rec.status, cls: 'bg-slate-100 text-slate-600 border-slate-200' };
+            <div className="space-y-4 p-4">
+              {monthItems.map((group) => (
+                <div key={`${cls.id}-${group.monthLabel}`} className="rounded-xl border border-[hsl(var(--border))] overflow-hidden">
+                  <div className="px-4 py-3 bg-[hsl(var(--muted)/0.4)] border-b border-[hsl(var(--border))]">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <p className="text-sm font-bold text-[hsl(var(--foreground))]">{group.monthLabel}</p>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Stat label="Present" value={group.summary.present} color="text-emerald-600" />
+                        <Stat label="Late" value={group.summary.late} color="text-amber-600" />
+                        <Stat label="Absent" value={group.summary.absent} color="text-red-600" />
+                        {group.summary.excused > 0 && <Stat label="Excused" value={group.summary.excused} color="text-slate-500" />}
+                        <span className="text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">{group.summary.attendancePercentage}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const hasTime = group.records.some(r => r.time);
                     return (
-                      <tr key={rec.id} className="hover:bg-[hsl(var(--muted)/0.3)] transition">
-                        <td className="px-5 py-3 text-xs font-semibold text-[hsl(var(--foreground))] whitespace-nowrap">{cls.name}</td>
-                        <td className="px-5 py-3 text-sm font-medium text-[hsl(var(--foreground))] whitespace-nowrap">{fmtDate(rec.date)}</td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${cfg.cls}`}>
-                            {cfg.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-xs text-[hsl(var(--muted-foreground))] capitalize">
-                          {rec.method ? rec.method.replace(/_/g, ' ') : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-                          {rec.note || '—'}
-                        </td>
-                      </tr>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-[hsl(var(--muted)/0.25)]">
+                              <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Date</th>
+                              {hasTime && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Time</th>}
+                              <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Status</th>
+                              <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Method</th>
+                              <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Note</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[hsl(var(--border))]">
+                            {group.records.map(rec => {
+                              const cfg = STATUS_CFG[rec.status] ?? { label: rec.status, cls: 'bg-slate-100 text-slate-600 border-slate-200' };
+                              return (
+                                <tr key={rec.id} className="hover:bg-[hsl(var(--muted)/0.3)] transition">
+                                  <td className="px-5 py-3 text-sm font-medium text-[hsl(var(--foreground))] whitespace-nowrap">{fmtDate(rec.date)}</td>
+                                  {hasTime && (
+                                    <td className="px-5 py-3 text-sm font-semibold text-[hsl(var(--foreground))] whitespace-nowrap">
+                                      {rec.time ? fmtTime(rec.time) : '—'}
+                                    </td>
+                                  )}
+                                  <td className="px-5 py-3">
+                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${cfg.cls}`}>
+                                      {cfg.label}
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-3 text-xs text-[hsl(var(--muted-foreground))] capitalize">
+                                    {rec.method ? rec.method.replace(/_/g, ' ') : '—'}
+                                  </td>
+                                  <td className="px-5 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+                                    {rec.note || '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     );
-                  })}
-                </tbody>
-              </table>
+                  })()}
+                </div>
+              ))}
             </div>
           )}
         </div>

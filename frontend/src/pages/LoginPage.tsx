@@ -20,10 +20,15 @@ export default function LoginPage() {
     try {
       const u = await login(identifier, password);
       const redirect = searchParams.get('redirect');
-      if (redirect && redirect.startsWith('/')) {
+      if (u?.role === 'ADMIN') {
+        const target = redirect && redirect.startsWith('/')
+          ? `/admin/select-institute?redirect=${encodeURIComponent(redirect)}`
+          : '/admin/select-institute';
+        navigate(target);
+      } else if (redirect && redirect.startsWith('/')) {
         navigate(redirect);
       } else {
-        navigate(u?.role === 'ADMIN' ? '/admin' : '/dashboard');
+        navigate('/dashboard');
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials. Please try again.');

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
+import { getInstitutePath } from '../lib/instituteRoutes';
 
 const statusConfig: Record<string, { label: string; class: string }> = {
   PUBLIC: { label: 'Public', class: 'badge-public' },
@@ -22,6 +24,8 @@ const gradients = [
 
 export default function ClassesPage() {
   const { user } = useAuth();
+  const { selected } = useInstitute();
+  const { instituteId: routeInstituteId } = useParams();
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -44,6 +48,7 @@ export default function ClassesPage() {
   });
 
   const statuses = ['ALL', ...new Set(classes.map(c => c.status).filter(Boolean))];
+  const getClassLink = (cls: any) => getInstitutePath(routeInstituteId || selected?.id || cls.instituteId || cls.institute?.id || null, `/classes/${cls.id}`);
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -141,7 +146,7 @@ export default function ClassesPage() {
 
                 <div className="p-4 pt-0 mt-auto">
                   <Link
-                    to={`/classes/${cls.id}`}
+                    to={getClassLink(cls)}
                     className="block w-full select-none rounded-lg bg-blue-500 py-2.5 px-4 text-center align-middle text-[11px] font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/35 focus:opacity-[0.85] focus:shadow-none active:opacity-[0.85] active:shadow-none"
                   >
                     Select Class

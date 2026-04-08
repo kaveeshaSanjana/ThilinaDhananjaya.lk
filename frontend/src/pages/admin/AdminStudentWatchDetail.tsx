@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../lib/api';
+import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ function calcRealDuration(session: any): number {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminStudentWatchDetail() {
-  const { recordingId, userId } = useParams<{ recordingId: string; userId: string }>();
+  const { recordingId, userId, instituteId } = useParams<{ recordingId: string; userId: string; instituteId: string }>();
   const navigate = useNavigate();
 
   const [data, setData] = useState<any>(null);
@@ -141,7 +142,7 @@ export default function AdminStudentWatchDetail() {
           Back
         </button>
         <span>/</span>
-        <Link to="/admin/recordings" className="hover:text-indigo-600 transition">Recordings</Link>
+        <Link to={getInstituteAdminPath(instituteId, '/recordings')} className="hover:text-indigo-600 transition">Recordings</Link>
         <span>/</span>
         <span className="text-slate-600 font-medium truncate max-w-[200px]">{recording.title}</span>
         <span>/</span>

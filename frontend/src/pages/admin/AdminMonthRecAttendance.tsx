@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import api from '../../lib/api';
 import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
+import { getInstitutePath } from '../../lib/instituteRoutes';
 
 /*  Types  */
 
@@ -227,7 +228,7 @@ const EXPORT_COL_DEFS: Record<string, { key: string; label: string }[]> = {
 /*  Main Component  */
 
 export default function AdminMonthRecAttendance() {
-  const { classId, monthId } = useParams<{ classId: string; monthId: string }>();
+  const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
 
   const [classData, setClassData]         = useState<any>(null);
   const [monthData, setMonthData]         = useState<any>(null);
@@ -416,7 +417,7 @@ export default function AdminMonthRecAttendance() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <Link
-            to={`/classes/${classId}/months/${monthId}`}
+            to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)}
             className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] flex items-center gap-1 transition mb-1"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

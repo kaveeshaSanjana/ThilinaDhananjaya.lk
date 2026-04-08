@@ -58,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await api.post('/auth/login', { email, password });
     sessionStorage.setItem('accessToken', res.data.accessToken);
+    localStorage.removeItem('selectedInstituteId');
     setToken(res.data.accessToken);
     setUser(res.data.user);
     return res.data.user;
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore errors on logout
     }
     sessionStorage.removeItem('accessToken');
+    localStorage.removeItem('selectedInstituteId');
     setToken(null);
     setUser(null);
   };

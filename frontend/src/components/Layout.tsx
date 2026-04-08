@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
+import { getInstituteAdminPath, getInstitutePath, replaceInstituteAdminPath } from '../lib/instituteRoutes';
 
 /* -------- Sidebar Nav Item -------- */
 function NavItem({ to, icon, label, badge, onClick, exact }: { to: string; icon: React.ReactNode; label: string; badge?: number; onClick?: () => void; exact?: boolean }) {
@@ -59,7 +60,8 @@ const icons = {
 export default function Layout() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { institutes, selected, select } = useInstitute();
+  const { institutes, selected, select, loading: instituteLoading } = useInstitute();
+  const { instituteId: routeInstituteId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -74,6 +76,18 @@ export default function Layout() {
 
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
+  useEffect(() => {
+    if (user?.role === 'ADMIN' && routeInstituteId && selected?.id !== routeInstituteId) {
+      select(routeInstituteId);
+    }
+  }, [routeInstituteId, selected?.id, select, user?.role]);
+
+  useEffect(() => {
+    if (routeInstituteId && localStorage.getItem('selectedInstituteId') !== routeInstituteId) {
+      localStorage.setItem('selectedInstituteId', routeInstituteId);
+    }
+  }, [routeInstituteId]);
+
   const handleLogout = async () => { await logout(); navigate('/login'); };
 
   const initials = user?.profile?.fullName
@@ -83,14 +97,20 @@ export default function Layout() {
   const hour = time.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  // Detect class+month detail: /classes/:classId/months/:monthId[/...]
-  const classMonthMatch = location.pathname.match(/^\/classes\/([^/]+)\/months\/([^/]+)/);
+  const scopedPathname = location.pathname.replace(/^\/institute\/[^/]+/, '');
+
+  // Detect class+month detail: [/institute/:instituteId]/classes/:classId/months/:monthId[/...]
+  const classMonthMatch = scopedPathname.match(/^\/classes\/([^/]+)\/months\/([^/]+)/);
   const isMonthDetail = !!classMonthMatch;
   const monthDetailClassId = classMonthMatch?.[1] ?? null;
   const monthDetailMonthId = classMonthMatch?.[2] ?? null;
+  const isInstituteSelectPage = location.pathname === '/admin/select-institute';
+  const adminInstituteId = routeInstituteId || selected?.id || null;
+  const adminBasePath = getInstituteAdminPath(adminInstituteId);
+  const scopedInstituteId = routeInstituteId || selected?.id || null;
 
-  const isClassDetail = !isMonthDetail && (/^\/classes\/[^/]+(\/class-recordings)?$/.test(location.pathname) && location.pathname.startsWith('/classes/'));
-  const classId = isClassDetail ? location.pathname.split('/')[2] : (isMonthDetail ? monthDetailClassId : null);
+  const isClassDetail = !isMonthDetail && /^\/classes\/[^/]+(\/class-recordings)?$/.test(scopedPathname);
+  const classId = isClassDetail ? scopedPathname.split('/')[2] : (isMonthDetail ? monthDetailClassId : null);
 
   useEffect(() => {
     if (!classId) { setSelectedClassName(''); return; }
@@ -150,12 +170,30 @@ export default function Layout() {
     );
   }
 
+  if (user.role === 'ADMIN' && instituteLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[hsl(var(--background))]">
+        <div className="w-8 h-8 rounded-full border-[3px] border-[hsl(var(--primary))] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (
+    user.role === 'ADMIN' &&
+    institutes.length > 0 &&
+    !selected &&
+    location.pathname !== '/admin/select-institute'
+  ) {
+    const redirect = `${location.pathname}${location.search}`;
+    return <Navigate to={`/admin/select-institute?redirect=${encodeURIComponent(redirect)}`} replace />;
+  }
+
   // ---------- AUTHENTICATED LAYOUT (with sidebar) ----------
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Sidebar Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[hsl(var(--border))]">
-        <Link to="/" className="flex items-center gap-2.5">
+        <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-md shadow-[hsl(var(--primary)/0.2)]">
             <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
@@ -172,6 +210,12 @@ export default function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 pb-3 overflow-y-auto sidebar-scroll">
+        {isInstituteSelectPage ? (
+          <SideSection label="Setup">
+            <NavItem to="/admin/select-institute" icon={icons.admin} label="Select Institute" exact />
+          </SideSection>
+        ) : (
+          <>
         {/* Institute switcher — admin only, shown when in main nav */}
         {user?.role === 'ADMIN' && institutes.length > 0 && !isClassDetail && !isMonthDetail && (
           <div className="mt-3 mb-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] overflow-hidden">
@@ -190,7 +234,11 @@ export default function Layout() {
             ) : (
               <div className="px-2 py-2">
                 <p className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5 px-1">Institute</p>
-                <select value={selected?.id || ''} onChange={e => select(e.target.value)}
+                <select value={selected?.id || ''} onChange={e => {
+                  const nextInstituteId = e.target.value;
+                  select(nextInstituteId);
+                  navigate(adminInstituteId ? replaceInstituteAdminPath(location.pathname, nextInstituteId) : getInstituteAdminPath(nextInstituteId));
+                }}
                   className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 outline-none">
                   {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
@@ -207,7 +255,7 @@ export default function Layout() {
               <div className="flex items-center gap-2">
                 <span className="w-[16px] h-[16px] text-[hsl(var(--primary))] flex-shrink-0">{icons.classes}</span>
                 <p className="text-[13px] font-semibold text-[hsl(var(--foreground))] truncate flex-1">{selectedClassName || 'Loading...'}</p>
-                <Link to="/classes" className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
+                <Link to={getInstitutePath(scopedInstituteId, '/classes')} className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
                 </Link>
               </div>
@@ -217,7 +265,7 @@ export default function Layout() {
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   </span>
                   <p className="text-[12px] font-medium text-[hsl(var(--muted-foreground))] truncate flex-1">{selectedMonthName || 'Loading...'}</p>
-                  <Link to={`/classes/${monthDetailClassId}`} className="text-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--primary))] transition" aria-label="Back to months">
+                  <Link to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}`)} className="text-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--primary))] transition" aria-label="Back to months">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
                   </Link>
                 </div>
@@ -228,9 +276,9 @@ export default function Layout() {
 
         {isMonthDetail ? (
           <SideSection label="Month">
-            <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}`} icon={icons.recordings} label="Recordings" exact />
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}`)} icon={icons.recordings} label="Recordings" exact />
             <NavItem
-              to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/live-lessons`}
+              to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/live-lessons`)}
               icon={
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -240,51 +288,53 @@ export default function Layout() {
               exact
             />
             {user?.role === 'ADMIN' && (
-              <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`} icon={icons.attend} label="Month Rec Attendance" exact />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Month Rec Attendance" exact />
             )}
             {user?.role === 'STUDENT' && (
-              <NavItem to={`/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`} icon={icons.attend} label="Rec Attendance" exact />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`)} icon={icons.attend} label="Rec Attendance" exact />
             )}
           </SideSection>
         ) : isClassDetail ? (
           <SideSection label="Classes">
-            <NavItem to={`/classes/${classId}`} icon={icons.classes} label="Months" exact />
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}`)} icon={icons.classes} label="Months" exact />
           </SideSection>
         ) : (
           <>
             <SideSection label="Main">
-              <NavItem to={user.role === 'ADMIN' ? '/admin' : '/dashboard'} icon={icons.home} label="Dashboard" />
+              <NavItem to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} icon={icons.home} label="Dashboard" exact={user.role === 'ADMIN'} />
             </SideSection>
 
             <SideSection label="Classes">
-              <NavItem to="/classes" icon={icons.classes} label="All Classes" />
+              <NavItem to={getInstitutePath(scopedInstituteId, '/classes')} icon={icons.classes} label="All Classes" />
             </SideSection>
 
             {user.role === 'STUDENT' && (
               <>
                 <SideSection label="Payments">
-                  <NavItem to="/payments/submit" icon={icons.upload} label="Upload Slip" />
-                  <NavItem to="/payments/my" icon={icons.pay} label="My Payments" />
+                  <NavItem to={getInstitutePath(scopedInstituteId, '/payments/submit')} icon={icons.upload} label="Upload Slip" />
+                  <NavItem to={getInstitutePath(scopedInstituteId, '/payments/my')} icon={icons.pay} label="My Payments" />
                 </SideSection>
                 <SideSection label="Activity">
-                  <NavItem to="/watch-history" icon={icons.recordings} label="Watch History" />
-                  <NavItem to="/my-class-attendance" icon={icons.attend} label="My Attendance" />
+                  <NavItem to={getInstitutePath(scopedInstituteId, '/watch-history')} icon={icons.recordings} label="Watch History" />
+                  <NavItem to={getInstitutePath(scopedInstituteId, '/my-class-attendance')} icon={icons.attend} label="My Attendance" />
                 </SideSection>
               </>
             )}
 
             {user.role === 'ADMIN' && (
               <SideSection label="Administration">
-                <NavItem to="/admin/students" icon={icons.students} label="Students" />
-                <NavItem to="/admin/classes" icon={icons.classes} label="Manage Classes" />
-                <NavItem to="/admin/slips" icon={icons.slips} label="Payment" />
-                <NavItem to="/admin/attendance" icon={icons.attend} label="Recording Attendance" />
-                <NavItem to="/admin/class-attendance" icon={icons.attend} label="Class Attendance" />
-                <NavItem to="/admin/recordings" icon={icons.recordings} label="Recordings" />
-                <NavItem to="/admin/id-cards" icon={icons.students} label="ID Cards" />
-                <NavItem to="/admin/institute" icon={icons.admin} label="Institute Settings" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/students')} icon={icons.students} label="Students" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/classes')} icon={icons.classes} label="Manage Classes" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/slips')} icon={icons.slips} label="Payment" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/attendance')} icon={icons.attend} label="Recording Attendance" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/class-attendance')} icon={icons.attend} label="Class Attendance" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/recordings')} icon={icons.recordings} label="Recordings" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/id-cards')} icon={icons.students} label="ID Cards" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/institute')} icon={icons.admin} label="Institute Settings" />
               </SideSection>
             )}
+          </>
+        )}
           </>
         )}
       </nav>
