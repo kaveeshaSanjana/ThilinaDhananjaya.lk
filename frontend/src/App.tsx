@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { InstituteProvider, useInstitute } from './context/InstituteContext';
 
 // Pages
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -101,6 +102,9 @@ function AppRoutes() {
 
       {/* Live lecture join — outside Layout */}
       <Route path="live/:token" element={<LiveJoinPage />} />
+
+      {/* Public landing page for non-logged-in users */}
+      {!user && <Route path="/" element={<LandingPage />} />}
 
       <Route path="/" element={<Layout />}>
         <Route index element={<ClassesPage />} />

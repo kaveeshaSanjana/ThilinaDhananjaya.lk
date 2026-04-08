@@ -257,6 +257,7 @@ model Lecture {
   meetingId       String?
   meetingPassword String?
   maxParticipants Int?
+  welcomeMessage  String?       @db.Text  // Rich text HTML with variable placeholders e.g. {{studentName}}
   status          LectureStatus @default(STUDENTS_ONLY)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

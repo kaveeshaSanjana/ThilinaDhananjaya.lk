@@ -7,27 +7,75 @@ function ago(minutes: number): Date {
   return new Date(Date.now() - minutes * 60000);
 }
 
+function fromNow(minutes: number): Date {
+  return new Date(Date.now() + minutes * 60000);
+}
+
 async function main() {
   console.log('Seeding database...');
+
+  // ─── Institutes ────────────────────────────────────────
+  const institute1 = await (prisma as any).institute.upsert({
+    where: { slug: 'thilina-dhananjaya' },
+    update: {},
+    create: {
+      id: 'inst-td-001',
+      name: 'Thilina Dhananjaya Academy',
+      slug: 'thilina-dhananjaya',
+      address: 'No. 45, Galle Road, Colombo 03',
+      phone: '0112345678',
+      description: 'Premier A/L Science & Mathematics Institute in Sri Lanka',
+      themeColor: '#6d28d9',
+    },
+  });
+
+  const institute2 = await (prisma as any).institute.upsert({
+    where: { slug: 'td-science-hub' },
+    update: {},
+    create: {
+      id: 'inst-td-002',
+      name: 'TD Science Hub',
+      slug: 'td-science-hub',
+      address: 'No. 12, Kandy Road, Kurunegala',
+      phone: '0372100200',
+      description: 'Science and Technology focused learning centre',
+      themeColor: '#0891b2',
+    },
+  });
+  console.log(`Institutes: ${institute1.name}, ${institute2.name}`);
 
   // ─── Admin ─────────────────────────────────────────────
   const adminPassword = await bcrypt.hash('admin123', 12);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@thilinadhananjaya.lk' },
-    update: {},
+    update: { orgId: institute1.id },
     create: {
       email: 'admin@thilinadhananjaya.lk',
       password: adminPassword,
       role: 'ADMIN',
+      orgId: institute1.id,
       profile: {
         create: {
           instituteId: 'TD-ADMIN-0001',
-          fullName: 'System Administrator',
+          fullName: 'Thilina Dhananjaya',
           status: 'ACTIVE',
         },
       },
     },
   });
+
+  // Link admin to both institutes
+  await (prisma as any).adminInstitute.upsert({
+    where: { adminId_instituteId: { adminId: admin.id, instituteId: institute1.id } },
+    update: {},
+    create: { adminId: admin.id, instituteId: institute1.id, isOwner: true },
+  });
+  await (prisma as any).adminInstitute.upsert({
+    where: { adminId_instituteId: { adminId: admin.id, instituteId: institute2.id } },
+    update: {},
+    create: { adminId: admin.id, instituteId: institute2.id, isOwner: false },
+  });
+  console.log(`Admin user: ${admin.email} linked to both institutes`);
   console.log(`Admin user created: ${admin.email}`);
 
   // ─── Cleanup old test student that may conflict ────────
@@ -37,14 +85,31 @@ async function main() {
     console.log('Removed old student@test.com');
   }
 
-  // ─── Sample Class ──────────────────────────────────────
+  // ─── Sample Class (linked to institute1) ──────────────
   const sampleClass = await prisma.class.upsert({
     where: { id: 'sample-class-1' },
-    update: {},
+    update: { orgId: institute1.id },
     create: {
       id: 'sample-class-1',
       name: 'Combined Mathematics',
       description: 'A/L Combined Mathematics - 2026 batch',
+      subject: 'Combined Mathematics',
+      monthlyFee: 3000,
+      orgId: institute1.id,
+    },
+  });
+
+  // ─── Science Class (linked to institute2) ─────────────
+  const scienceClass = await prisma.class.upsert({
+    where: { id: 'sample-class-2' },
+    update: { orgId: institute2.id },
+    create: {
+      id: 'sample-class-2',
+      name: 'Physics',
+      description: 'A/L Physics - 2026 batch',
+      subject: 'Physics',
+      monthlyFee: 2500,
+      orgId: institute2.id,
     },
   });
 
@@ -108,16 +173,16 @@ async function main() {
   // ─── 10 Mock Students ─────────────────────────────────
   const studentPassword = await bcrypt.hash('student123', 12);
   const studentsData = [
-    { email: 'kavindu@gmail.com',  iid: 'TD-2026-0001', name: 'Kavindu Perera',           phone: '0771234567', school: 'Royal College' },
-    { email: 'nethmi@gmail.com',   iid: 'TD-2026-0002', name: 'Nethmi Fernando',           phone: '0712345678', school: 'Visakha Vidyalaya' },
-    { email: 'tharushi@gmail.com', iid: 'TD-2026-0003', name: 'Tharushi Silva',            phone: '0761122334', school: 'Devi Balika' },
-    { email: 'dilshan@gmail.com',  iid: 'TD-2026-0004', name: 'Dilshan Jayawardena',       phone: '0777654321', school: 'Ananda College' },
-    { email: 'sanduni@gmail.com',  iid: 'TD-2026-0005', name: 'Sanduni Rathnayake',        phone: '0723344556', school: 'Musaeus College' },
-    { email: 'hasitha@gmail.com',  iid: 'TD-2026-0006', name: 'Hasitha Bandara',           phone: '0789988776', school: 'Dharmaraja College' },
-    { email: 'nimesh@gmail.com',   iid: 'TD-2026-0007', name: 'Nimesh Wickramasinghe',     phone: '0754433221', school: 'Nalanda College' },
-    { email: 'ishara@gmail.com',   iid: 'TD-2026-0008', name: 'Ishara De Silva',           phone: '0764455667', school: 'S. Thomas College' },
-    { email: 'malini@gmail.com',   iid: 'TD-2026-0009', name: 'Malini Gunasekara',         phone: '0711223344', school: 'Ladies College' },
-    { email: 'chaminda@gmail.com', iid: 'TD-2026-0010', name: 'Chaminda Vaas',             phone: '0755566778', school: 'Richmond College' },
+    { email: 'kavindu@gmail.com',  iid: 'TD-2026-0001', name: 'Kavindu Perera',           phone: '0771234567', school: 'Royal College',        orgId: institute1.id },
+    { email: 'nethmi@gmail.com',   iid: 'TD-2026-0002', name: 'Nethmi Fernando',           phone: '0712345678', school: 'Visakha Vidyalaya',    orgId: institute1.id },
+    { email: 'tharushi@gmail.com', iid: 'TD-2026-0003', name: 'Tharushi Silva',            phone: '0761122334', school: 'Devi Balika',          orgId: institute1.id },
+    { email: 'dilshan@gmail.com',  iid: 'TD-2026-0004', name: 'Dilshan Jayawardena',       phone: '0777654321', school: 'Ananda College',       orgId: institute1.id },
+    { email: 'sanduni@gmail.com',  iid: 'TD-2026-0005', name: 'Sanduni Rathnayake',        phone: '0723344556', school: 'Musaeus College',      orgId: institute1.id },
+    { email: 'hasitha@gmail.com',  iid: 'TD-2026-0006', name: 'Hasitha Bandara',           phone: '0789988776', school: 'Dharmaraja College',   orgId: institute2.id },
+    { email: 'nimesh@gmail.com',   iid: 'TD-2026-0007', name: 'Nimesh Wickramasinghe',     phone: '0754433221', school: 'Nalanda College',      orgId: institute2.id },
+    { email: 'ishara@gmail.com',   iid: 'TD-2026-0008', name: 'Ishara De Silva',           phone: '0764455667', school: 'S. Thomas College',    orgId: institute2.id },
+    { email: 'malini@gmail.com',   iid: 'TD-2026-0009', name: 'Malini Gunasekara',         phone: '0711223344', school: 'Ladies College',       orgId: institute1.id },
+    { email: 'chaminda@gmail.com', iid: 'TD-2026-0010', name: 'Chaminda Vaas',             phone: '0755566778', school: 'Richmond College',     orgId: institute1.id },
   ];
 
   const users: { id: string; email: string }[] = [];
@@ -138,6 +203,7 @@ async function main() {
         email: s.email,
         password: studentPassword,
         role: 'STUDENT',
+        orgId: s.orgId,
         profile: {
           create: {
             instituteId: s.iid,
@@ -501,7 +567,164 @@ async function main() {
   }
   console.log(`Created ${sessionsToCreate.length} watch sessions`);
 
+  // ─── Science Class: Months & Recordings ──────────────
+  const scienceApril = await prisma.month.upsert({
+    where: { classId_year_month: { classId: scienceClass.id, year: 2026, month: 4 } },
+    update: {},
+    create: {
+      classId: scienceClass.id,
+      name: 'April 2026',
+      year: 2026,
+      month: 4,
+      status: 'STUDENTS_ONLY',
+    },
+  });
+  await prisma.recording.upsert({
+    where: { id: 'physics-recording-1' },
+    update: {},
+    create: {
+      id: 'physics-recording-1',
+      monthId: scienceApril.id,
+      title: 'Newton\'s Laws of Motion',
+      description: 'Exploring all three laws with experiments',
+      videoUrl: 'https://example.com/physics-01.mp4',
+      videoType: 'DRIVE',
+      duration: 4200,
+      status: 'STUDENTS_ONLY',
+      order: 1,
+      welcomeMessage: '<p>Hey <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! Welcome to <strong>April 2026</strong> — today we cover Newton\'s Laws. 🔬</p>',
+    },
+  });
+
+  // Enroll students 6-8 in science class
+  for (let i = 5; i < 8; i++) {
+    await prisma.enrollment.upsert({
+      where: { userId_classId: { userId: users[i].id, classId: scienceClass.id } },
+      update: {},
+      create: { userId: users[i].id, classId: scienceClass.id },
+    });
+  }
+  console.log('Science class seeded');
+
+  // ─── Sample Lectures (for both classes) ───────────────
+  const db = prisma as any;
+
+  // Delete existing sample lectures to avoid duplicates
+  await db.lecture.deleteMany({
+    where: { id: { in: ['lec-live-now', 'lec-upcoming-1', 'lec-upcoming-2', 'lec-ended-1', 'lec-ended-2', 'lec-physics-1'] } },
+  });
+
+  // 1) Currently LIVE — started 30 min ago, ends in 30 min
+  await db.lecture.create({
+    data: {
+      id: 'lec-live-now',
+      monthId: aprilMonth.id,
+      title: 'Differentiation — Live Q&A Session',
+      description: 'Live doubt-clearing session for Chapter 4. All students welcome.',
+      mode: 'ONLINE',
+      platform: 'Zoom',
+      startTime: ago(30),
+      endTime: fromNow(30),
+      sessionLink: 'https://zoom.us/j/12345678901',
+      meetingId: '123 456 7890',
+      meetingPassword: 'maths2026',
+      maxParticipants: 150,
+      status: 'STUDENTS_ONLY',
+      welcomeMessage: '<p>🎉 Welcome, <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! This session is happening <strong>right now</strong> for <span contenteditable="false" data-variable="{{month}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-purple-100 text-purple-700 border-purple-200" style="user-select:all;cursor:default">📅 Month</span>. Join quickly! 🚀</p>',
+    },
+  });
+
+  // 2) Upcoming tomorrow morning
+  await db.lecture.create({
+    data: {
+      id: 'lec-upcoming-1',
+      monthId: aprilMonth.id,
+      title: 'Integration — Definite Integrals',
+      description: 'Chapter 5 coverage: area under curves, definite integrals and applications.',
+      mode: 'ONLINE',
+      platform: 'Google Meet',
+      startTime: fromNow(60 * 20),        // 20 hours from now
+      endTime: fromNow(60 * 22),          // 22 hours from now
+      sessionLink: 'https://meet.google.com/abc-defg-hij',
+      maxParticipants: 200,
+      status: 'STUDENTS_ONLY',
+      welcomeMessage: '<p>Hello <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span> 👋</p><p>Your next lecture is scheduled for <span contenteditable="false" data-variable="{{date}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-green-100 text-green-700 border-green-200" style="user-select:all;cursor:default">🗓️ Date</span>. Please revise Chapter 4 before joining. 📚</p>',
+    },
+  });
+
+  // 3) Upcoming this weekend — OFFLINE
+  await db.lecture.create({
+    data: {
+      id: 'lec-upcoming-2',
+      monthId: aprilMonth.id,
+      title: 'Mock Exam — Paper I',
+      description: 'Full 3-hour mock paper under exam conditions.',
+      mode: 'OFFLINE',
+      startTime: fromNow(60 * 48),       // 2 days from now
+      endTime: fromNow(60 * 51),
+      maxParticipants: 80,
+      status: 'PAID_ONLY',
+      welcomeMessage: '<p>Dear <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>,</p><p>Please arrive <strong>15 minutes early</strong> for the mock exam. Bring your student ID and stationery. Good luck! 🍀</p>',
+    },
+  });
+
+  // 4) Ended last week
+  await db.lecture.create({
+    data: {
+      id: 'lec-ended-1',
+      monthId: aprilMonth.id,
+      title: 'Binomial Theorem & Permutations',
+      description: 'Completed session on binomial expansion and combinatorics.',
+      mode: 'ONLINE',
+      platform: 'Zoom',
+      startTime: ago(60 * 3 * 24),       // 3 days ago
+      endTime: ago(60 * 3 * 24 - 120),
+      sessionLink: 'https://zoom.us/j/99887766',
+      meetingId: '998 877 6655',
+      meetingPassword: 'binom26',
+      status: 'STUDENTS_ONLY',
+    },
+  });
+
+  // 5) Ended two weeks ago
+  await db.lecture.create({
+    data: {
+      id: 'lec-ended-2',
+      monthId: aprilMonth.id,
+      title: 'Vectors & 3D Geometry — Introduction',
+      description: 'First lecture on 3D vectors, dot product, cross product.',
+      mode: 'OFFLINE',
+      startTime: ago(60 * 7 * 24),       // 7 days ago
+      endTime: ago(60 * 7 * 24 - 180),
+      maxParticipants: 100,
+      status: 'ANYONE',
+    },
+  });
+
+  // 6) Physics class — upcoming
+  await db.lecture.create({
+    data: {
+      id: 'lec-physics-1',
+      monthId: scienceApril.id,
+      title: 'Circular Motion & Centripetal Force',
+      description: 'Live derivation and problem solving for circular motion.',
+      mode: 'ONLINE',
+      platform: 'Zoom',
+      startTime: fromNow(60 * 3),        // 3 hours from now
+      endTime: fromNow(60 * 5),
+      sessionLink: 'https://zoom.us/j/55544433322',
+      meetingId: '555 444 3332',
+      meetingPassword: 'phys2026',
+      maxParticipants: 100,
+      status: 'STUDENTS_ONLY',
+      welcomeMessage: '<p>Hi <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! Today we\'re covering <strong>Circular Motion</strong> in <span contenteditable="false" data-variable="{{className}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-amber-100 text-amber-700 border-amber-200" style="user-select:all;cursor:default">📚 Class Name</span>. See you at the session! ⚛️</p>',
+    },
+  });
+
+  console.log('Sample lectures created (1 live, 3 upcoming, 2 ended, 1 physics)');
+
   console.log('\n--- Seed Complete ---');
+  console.log('Institutes: Thilina Dhananjaya Academy, TD Science Hub');
   console.log('Admin login: admin@thilinadhananjaya.lk / admin123');
   console.log('Student login (any): student123');
   console.log(`Mock recording: "${mockRecording.title}" in April 2026`);

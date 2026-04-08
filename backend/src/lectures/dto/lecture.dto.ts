@@ -59,6 +59,10 @@ export class CreateLectureDto {
   @IsOptional()
   @IsEnum(LectureStatusDto)
   status?: LectureStatusDto;
+
+  @IsOptional()
+  @IsString()
+  welcomeMessage?: string;
 }
 
 export class UpdateLectureDto {

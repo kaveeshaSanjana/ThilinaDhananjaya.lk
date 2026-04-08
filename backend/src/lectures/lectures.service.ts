@@ -23,6 +23,7 @@ export class LecturesService {
     meetingId?: string;
     meetingPassword?: string;
     maxParticipants?: number;
+    welcomeMessage?: string;
     status?: LectureStatus;
   }) {
     const month = await this.prisma.month.findUnique({
@@ -44,6 +45,7 @@ export class LecturesService {
         meetingId: data.meetingId,
         meetingPassword: data.meetingPassword,
         maxParticipants: data.maxParticipants,
+        welcomeMessage: data.welcomeMessage,
         status: data.status ?? 'STUDENTS_ONLY',
       },
       include: {
@@ -109,6 +111,7 @@ export class LecturesService {
     meetingId?: string;
     meetingPassword?: string;
     maxParticipants?: number;
+    welcomeMessage?: string;
     status?: LectureStatus;
   }) {
     await this.findOne(id);

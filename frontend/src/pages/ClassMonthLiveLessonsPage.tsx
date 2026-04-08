@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { getInstitutePath } from '../lib/instituteRoutes';
+import WelcomeMessageEditor, { resolveWelcomeMessage } from '../components/WelcomeMessageEditor';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -36,6 +37,7 @@ interface Lecture {
   meetingId?: string | null;
   meetingPassword?: string | null;
   maxParticipants?: number | null;
+  welcomeMessage?: string | null;
   status: string;
   createdAt: string;
 }
@@ -54,11 +56,13 @@ function lectureTiming(lec: Lecture): 'upcoming' | 'ongoing' | 'ended' {
 function LectureLessonCard({
   lec,
   isAdmin,
+  welcomeVars,
   onEdit,
   onDelete,
 }: {
   lec: Lecture;
   isAdmin?: boolean;
+  welcomeVars?: Record<string, string>;
   onEdit?: (lec: Lecture) => void;
   onDelete?: (lec: Lecture) => void;
 }) {
@@ -163,6 +167,32 @@ function LectureLessonCard({
         </h3>
         {lec.description && (
           <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3 leading-relaxed">{lec.description}</p>
+        )}
+
+        {/* Welcome message (resolved for current user) */}
+        {lec.welcomeMessage && welcomeVars && (() => {
+          const resolved = resolveWelcomeMessage(lec.welcomeMessage, welcomeVars);
+          return (
+            <div
+              className={`mt-2 mb-2 rounded-xl border px-4 py-3 text-sm leading-relaxed ${
+                timing === 'ongoing'
+                  ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200 text-red-900'
+                  : timing === 'upcoming'
+                  ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-900'
+                  : 'bg-[hsl(var(--muted))] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'
+              }`}
+              dangerouslySetInnerHTML={{ __html: resolved }}
+            />
+          );
+        })()}
+        {/* Admin preview: show indicator if welcome message is set but no vars */}
+        {lec.welcomeMessage && !welcomeVars && isAdmin && (
+          <div className="mt-2 mb-2 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-600">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            Welcome message set ✓
+          </div>
         )}
 
         {/* Divider */}
@@ -340,6 +370,7 @@ const EMPTY_FORM = {
   meetingId: '',
   meetingPassword: '',
   maxParticipants: '',
+  welcomeMessage: '',
   status: 'STUDENTS_ONLY',
 };
 
@@ -378,6 +409,7 @@ function CreateLectureModal({
       if (form.meetingId.trim())  body.meetingId   = form.meetingId.trim();
       if (form.meetingPassword.trim()) body.meetingPassword = form.meetingPassword.trim();
       if (form.maxParticipants)   body.maxParticipants = Number(form.maxParticipants);
+      if (form.welcomeMessage.trim()) body.welcomeMessage = form.welcomeMessage.trim();
       const res = await api.post(`/lectures/month/${monthId}`, body);
       onCreated(res.data?.lecture ?? res.data);
     } catch (e: any) {
@@ -483,6 +515,9 @@ function CreateLectureModal({
             </div>
           </div>
 
+          {/* Welcome Message */}
+          <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+
           {/* Footer */}
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
@@ -528,6 +563,7 @@ function EditLectureModal({
     meetingId: lec.meetingId ?? '',
     meetingPassword: lec.meetingPassword ?? '',
     maxParticipants: lec.maxParticipants ? String(lec.maxParticipants) : '',
+    welcomeMessage: lec.welcomeMessage ?? '',
     status: lec.status,
   });
   const [saving, setSaving] = useState(false);
@@ -554,6 +590,7 @@ function EditLectureModal({
         meetingId: form.meetingId.trim() || null,
         meetingPassword: form.meetingPassword.trim() || null,
         maxParticipants: form.maxParticipants ? Number(form.maxParticipants) : null,
+        welcomeMessage: form.welcomeMessage.trim() || null,
       };
       const res = await api.patch(`/lectures/${lec.id}`, body);
       onUpdated(res.data?.lecture ?? res.data);
@@ -642,6 +679,7 @@ function EditLectureModal({
               </select>
             </div>
           </div>
+          <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
               Cancel
@@ -729,6 +767,15 @@ export default function ClassMonthLiveLessonsPage() {
   const [showCreate, setShowCreate]   = useState(false);
   const [editingLec, setEditingLec]     = useState<Lecture | null>(null);
   const [deletingLec, setDeletingLec]   = useState<Lecture | null>(null);
+
+  const welcomeVars = useMemo(() => ({
+    '{{studentName}}': (user as any)?.profile?.fullName || user?.email?.split('@')[0] || 'Student',
+    '{{month}}': monthName,
+    '{{date}}': new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    '{{className}}': className,
+    '{{teacherName}}': 'Sir',
+    '{{recordingTitle}}': '',
+  }), [user, monthName, className]);
 
   useEffect(() => {
     if (!classId || !monthId) return;
@@ -843,7 +890,7 @@ export default function ClassMonthLiveLessonsPage() {
                 Live Now
               </h2>
               <div className="grid gap-4">
-                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
               </div>
             </div>
           )}
@@ -852,7 +899,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-blue-600 uppercase tracking-widest">Upcoming</h2>
               <div className="grid gap-4">
-                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
               </div>
             </div>
           )}
@@ -861,7 +908,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Past</h2>
               <div className="grid gap-4">
-                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
               </div>
             </div>
           )}
