@@ -4,13 +4,14 @@ import api from "../../lib/api";
 import { useInstitute, type Institute } from "../../context/InstituteContext";
 import CropImageInput from "../../components/CropImageInput";
 import { uploadImage } from "../../lib/imageUpload";
+import { getInstituteAdminPath } from "../../lib/instituteRoutes";
 
 const inputCls =
   "w-full px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 outline-none transition";
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function CreateInstituteForm({ onCreated }: { onCreated: () => void }) {
+function CreateInstituteForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [form, setForm] = useState({ name: "", phone: "", address: "", description: "", themeColor: "#4f46e5" });
   const [logoUrl, setLogoUrl] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
@@ -28,8 +29,8 @@ function CreateInstituteForm({ onCreated }: { onCreated: () => void }) {
     if (!form.name.trim()) return setError("Institute name is required");
     setSaving(true); setError("");
     try {
-      await api.post("/institutes", { ...form, logoUrl: logoUrl || undefined });
-      onCreated();
+      const result = await api.post("/institutes", { ...form, logoUrl: logoUrl || undefined });
+      onCreated(result.data.id);
     } catch (e: any) {
       setError(e.response?.data?.message || "Failed to create institute");
     } finally { setSaving(false); }
@@ -198,7 +199,11 @@ export default function AdminInstitute() {
 
   if (ctxLoading) return <div className="flex justify-center items-center h-60"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  if (!selected) return <CreateInstituteForm onCreated={async () => { await refresh(); navigate("/admin/select-institute"); }} />;
+  if (!selected) return <CreateInstituteForm onCreated={async (newId: string) => {
+    localStorage.setItem('selectedInstituteId', newId);
+    await refresh();
+    navigate(getInstituteAdminPath(newId));
+  }} />;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">

@@ -98,7 +98,7 @@ export class PaymentsService {
   }
 
   /** Admin: verify a slip — if MONTHLY, this unlocks the month for the student */
-  async verifySlip(slipId: string, transactionId: string, adminNote?: string, paidDate?: string) {
+  async verifySlip(slipId: string, transactionId?: string, adminNote?: string, paidDate?: string) {
     const slip = await this.prisma.paymentSlip.findUnique({
       where: { id: slipId },
       include: {
@@ -108,17 +108,19 @@ export class PaymentsService {
     });
     if (!slip) throw new NotFoundException('Payment slip not found');
 
-    // Check for duplicate transactionId
-    const existing = await this.prisma.paymentSlip.findFirst({
-      where: { transactionId, NOT: { id: slipId } },
-      include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
-    });
-    if (existing) {
-      const name = existing.user?.profile?.fullName || existing.user?.email || 'Unknown';
-      const iid = existing.user?.profile?.instituteId || '';
-      throw new ConflictException(
-        `This transaction ID has already been used for ${name}${iid ? ` (${iid})` : ''}`,
-      );
+    // Check for duplicate transactionId (only if one was provided)
+    if (transactionId) {
+      const existing = await this.prisma.paymentSlip.findFirst({
+        where: { transactionId, NOT: { id: slipId } },
+        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
+      });
+      if (existing) {
+        const name = existing.user?.profile?.fullName || existing.user?.email || 'Unknown';
+        const iid = existing.user?.profile?.instituteId || '';
+        throw new ConflictException(
+          `This transaction ID has already been used for ${name}${iid ? ` (${iid})` : ''}`,
+        );
+      }
     }
 
     // Use existing amount if already set, otherwise pull from class.monthlyFee
@@ -133,10 +135,10 @@ export class PaymentsService {
   }
 
   /** Admin: reject a slip */
-  async rejectSlip(slipId: string, rejectReason: string, adminNote?: string) {
+  async rejectSlip(slipId: string, rejectReason?: string, adminNote?: string) {
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: { status: 'REJECTED', rejectReason, adminNote },
+      data: { status: 'REJECTED', rejectReason: rejectReason || 'Rejected by admin', adminNote },
       include: { month: { include: { class: true } } },
     });
   }

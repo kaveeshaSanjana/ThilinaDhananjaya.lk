@@ -40,9 +40,9 @@ export class AdminNoteDto {
 }
 
 export class VerifySlipDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  transactionId: string;
+  transactionId?: string;
 
   @IsOptional()
   @IsString()
@@ -54,9 +54,9 @@ export class VerifySlipDto {
 }
 
 export class RejectSlipDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  rejectReason: string;
+  rejectReason?: string;
 
   @IsOptional()
   @IsString()

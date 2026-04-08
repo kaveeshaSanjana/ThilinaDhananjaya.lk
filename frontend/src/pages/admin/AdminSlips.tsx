@@ -84,19 +84,56 @@ export default function AdminSlips() {
     status: 'PAID' | 'LATE' | 'UNPAID';
   } | null>(null);
 
+  // Verify / Reject modals for online slips
+  const [verifyModal, setVerifyModal] = useState<{ id: string; studentName: string } | null>(null);
+  const [verifyForm, setVerifyForm] = useState({ transactionId: '', adminNote: '' });
+  const [rejectModal, setRejectModal] = useState<{ id: string; studentName: string } | null>(null);
+  const [rejectForm, setRejectForm] = useState({ rejectReason: '', adminNote: '' });
+  const [actionError, setActionError] = useState('');
+
   const currentClassId = useRef('');
 
-  const load = () => { setLoading(true); api.get('/payments/all').then(r => setPayments(r.data)).catch(() => {}).finally(() => setLoading(false)); };
+  const load = () => { setLoading(true); api.get('/payments/all').then(r => { const res = r.data; setPayments(Array.isArray(res) ? res : (res?.data || [])); }).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => {
     load();
     api.get('/classes').then(r => setClasses(r.data || [])).catch(() => {});
   }, []);
 
-  const act = async (id: string, status: 'VERIFIED' | 'REJECTED') => {
-    setActingId(id);
-    if (status === 'VERIFIED') await api.patch(`/payments/${id}/verify`, {}).catch(() => {});
-    else await api.patch(`/payments/${id}/reject`, {}).catch(() => {});
-    setActingId(null); load();
+  const openVerify = (p: any) => {
+    setVerifyModal({ id: p.id, studentName: p.user?.profile?.fullName || p.user?.email || 'Student' });
+    setVerifyForm({ transactionId: '', adminNote: '' });
+    setActionError('');
+    setPreview(null);
+  };
+  const openReject = (p: any) => {
+    setRejectModal({ id: p.id, studentName: p.user?.profile?.fullName || p.user?.email || 'Student' });
+    setRejectForm({ rejectReason: '', adminNote: '' });
+    setActionError('');
+    setPreview(null);
+  };
+  const submitVerify = async () => {
+    if (!verifyModal) return;
+    setActingId(verifyModal.id); setActionError('');
+    try {
+      await api.patch(`/payments/${verifyModal.id}/verify`, {
+        transactionId: verifyForm.transactionId.trim() || undefined,
+        adminNote: verifyForm.adminNote.trim() || undefined,
+      });
+      setVerifyModal(null); load();
+    } catch (e: any) { setActionError(e.response?.data?.message || 'Failed to verify slip'); }
+    finally { setActingId(null); }
+  };
+  const submitReject = async () => {
+    if (!rejectModal) return;
+    setActingId(rejectModal.id); setActionError('');
+    try {
+      await api.patch(`/payments/${rejectModal.id}/reject`, {
+        rejectReason: rejectForm.rejectReason.trim() || undefined,
+        adminNote: rejectForm.adminNote.trim() || undefined,
+      });
+      setRejectModal(null); load();
+    } catch (e: any) { setActionError(e.response?.data?.message || 'Failed to reject slip'); }
+    finally { setActingId(null); }
   };
 
   const filtered = payments.filter(p => filter === 'ALL' || p.status === filter);
@@ -227,11 +264,11 @@ export default function AdminSlips() {
           </button>}
           {p.status === 'PENDING' && (
             <>
-              <button onClick={() => act(p.id, 'VERIFIED')} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition disabled:opacity-50">
+              <button onClick={() => openVerify(p)} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition disabled:opacity-50">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                 Verify
               </button>
-              <button onClick={() => act(p.id, 'REJECTED')} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition disabled:opacity-50">
+              <button onClick={() => openReject(p)} disabled={actingId === p.id} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition disabled:opacity-50">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 Reject
               </button>
@@ -296,7 +333,7 @@ export default function AdminSlips() {
               onClick={() => setPhysicalVerifyModal({
                 userId: student.userId,
                 studentName: student.profile?.fullName || student.email,
-                status: student.paymentStatus,
+                status: student.paymentStatus as 'PAID' | 'LATE' | 'UNPAID',
               })}
               disabled={!!paymentUpdatingId}
               className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
@@ -374,9 +411,9 @@ export default function AdminSlips() {
             <div className="p-4 bg-slate-50"><img src={preview.slipUrl} alt="slip" className="w-full object-contain max-h-80 rounded-xl" /></div>
             {preview.status === 'PENDING' && (
               <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
-                <button onClick={() => { act(preview.id, 'VERIFIED'); setPreview(null); }}
+                <button onClick={() => openVerify(preview)}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-green-700 transition shadow-lg shadow-emerald-500/25">Verify</button>
-                <button onClick={() => { act(preview.id, 'REJECTED'); setPreview(null); }}
+                <button onClick={() => openReject(preview)}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold hover:from-red-600 hover:to-red-700 transition shadow-lg shadow-red-500/25">Reject</button>
               </div>
             )}
@@ -563,8 +600,74 @@ export default function AdminSlips() {
           , document.body)}
         </>
       )}
+
+      {/* Verify Modal */}
+      {verifyModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setVerifyModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <p className="font-bold text-slate-800">Verify Payment</p>
+                <p className="text-xs text-slate-400 mt-0.5">{verifyModal.studentName}</p>
+              </div>
+              <button onClick={() => setVerifyModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              {actionError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Transaction ID <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input value={verifyForm.transactionId} onChange={e => setVerifyForm(p => ({ ...p, transactionId: e.target.value }))} placeholder="e.g. TXN123456" className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input value={verifyForm.adminNote} onChange={e => setVerifyForm(p => ({ ...p, adminNote: e.target.value }))} placeholder="Internal note…" className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+              <button onClick={() => setVerifyModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={submitVerify} disabled={!!actingId} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold hover:from-emerald-600 hover:to-green-700 transition disabled:opacity-50">
+                {actingId ? 'Verifying…' : 'Verify'}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* Reject Modal */}
+      {rejectModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRejectModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <p className="font-bold text-slate-800">Reject Payment</p>
+                <p className="text-xs text-slate-400 mt-0.5">{rejectModal.studentName}</p>
+              </div>
+              <button onClick={() => setRejectModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              {actionError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Reject Reason <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input value={rejectForm.rejectReason} onChange={e => setRejectForm(p => ({ ...p, rejectReason: e.target.value }))} placeholder="e.g. Invalid slip, amount mismatch…" className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Admin Note <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input value={rejectForm.adminNote} onChange={e => setRejectForm(p => ({ ...p, adminNote: e.target.value }))} placeholder="Internal note…" className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500/30" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+              <button onClick={() => setRejectModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={submitReject} disabled={!!actingId} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-semibold hover:from-red-600 hover:to-red-700 transition disabled:opacity-50">
+                {actingId ? 'Rejecting…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
-
-
