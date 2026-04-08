@@ -462,24 +462,24 @@ function CreateLectureModal({
     }
   };
 
-  const inputCls = 'w-full px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
-  const labelCls = 'block text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1';
+  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-base text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
+  const labelCls = 'block text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-lg bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">
-          <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Create Live Lesson</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        <div className="flex items-center justify-between px-7 py-5 border-b border-[hsl(var(--border))] shrink-0">
+          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Create Live Lesson</h2>
+          <button onClick={onClose} className="p-2 rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-7 py-6 space-y-5">
+          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{err}</p>}
 
           {/* Title */}
           <div>
@@ -490,11 +490,11 @@ function CreateLectureModal({
           {/* Description */}
           <div>
             <label className={labelCls}>Description</label>
-            <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
+            <textarea className={`${inputCls} resize-none`} rows={3} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
           </div>
 
           {/* Mode + Platform */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Mode <span className="text-red-500">*</span></label>
               <select className={inputCls} value={form.mode} onChange={e => set('mode', e.target.value)}>
@@ -509,7 +509,7 @@ function CreateLectureModal({
           </div>
 
           {/* Start + End time */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Start Time <span className="text-red-500">*</span></label>
               <input type="datetime-local" className={inputCls} value={form.startTime} onChange={e => set('startTime', e.target.value)} />
@@ -528,7 +528,7 @@ function CreateLectureModal({
 
           {/* Meeting ID + Password */}
           {form.mode === 'ONLINE' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Meeting ID</label>
                 <input className={inputCls} placeholder="123 456 7890" value={form.meetingId} onChange={e => set('meetingId', e.target.value)} />
@@ -541,7 +541,7 @@ function CreateLectureModal({
           )}
 
           {/* Max Participants + Status */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Max Participants</label>
               <input type="number" min={1} className={inputCls} placeholder="e.g. 100" value={form.maxParticipants} onChange={e => set('maxParticipants', e.target.value)} />
@@ -562,12 +562,12 @@ function CreateLectureModal({
           <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
+            <button type="button" onClick={onClose} className="px-6 py-3 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition flex items-center gap-2">
-              {saving && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
+            <button type="submit" disabled={saving} className="px-7 py-3 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition flex items-center gap-2 shadow-lg shadow-violet-500/20">
+              {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
               {saving ? 'Creating...' : 'Create Lesson'}
             </button>
           </div>
@@ -644,30 +644,30 @@ function EditLectureModal({
     }
   };
 
-  const inputCls = 'w-full px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
-  const labelCls = 'block text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1';
+  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-base text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
+  const labelCls = 'block text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-lg bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">
-          <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Edit Live Lesson</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      <div className="relative w-full max-w-2xl bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-[hsl(var(--border))] shrink-0">
+          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Edit Live Lesson</h2>
+          <button onClick={onClose} className="p-2 rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-7 py-6 space-y-5">
+          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{err}</p>}
           <div>
             <label className={labelCls}>Title <span className="text-red-500">*</span></label>
             <input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} />
           </div>
           <div>
             <label className={labelCls}>Description</label>
-            <textarea className={`${inputCls} resize-none`} rows={2} value={form.description} onChange={e => set('description', e.target.value)} />
+            <textarea className={`${inputCls} resize-none`} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Mode <span className="text-red-500">*</span></label>
               <select className={inputCls} value={form.mode} onChange={e => set('mode', e.target.value)}>
@@ -680,7 +680,7 @@ function EditLectureModal({
               <input className={inputCls} value={form.platform} onChange={e => set('platform', e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Start Time <span className="text-red-500">*</span></label>
               <input type="datetime-local" className={inputCls} value={form.startTime} onChange={e => set('startTime', e.target.value)} />
@@ -695,7 +695,7 @@ function EditLectureModal({
             <input className={inputCls} value={form.sessionLink} onChange={e => set('sessionLink', e.target.value)} />
           </div>
           {form.mode === 'ONLINE' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Meeting ID</label>
                 <input className={inputCls} value={form.meetingId} onChange={e => set('meetingId', e.target.value)} />
@@ -706,7 +706,7 @@ function EditLectureModal({
               </div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Max Participants</label>
               <input type="number" min={1} className={inputCls} value={form.maxParticipants} onChange={e => set('maxParticipants', e.target.value)} />
@@ -723,12 +723,12 @@ function EditLectureModal({
             </div>
           </div>
           <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
+            <button type="button" onClick={onClose} className="px-6 py-3 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition flex items-center gap-2">
-              {saving && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
+            <button type="submit" disabled={saving} className="px-7 py-3 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition flex items-center gap-2 shadow-lg shadow-violet-500/20">
+              {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>

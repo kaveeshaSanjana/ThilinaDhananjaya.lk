@@ -154,138 +154,169 @@ export default function LectureLiveJoinPage() {
   if (!lecture) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-violet-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-violet-50 to-slate-100 flex items-center justify-center p-4 lg:p-8">
+      {/* Desktop: two-column card. Mobile: single column */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden lg:grid lg:grid-cols-[1fr_1fr]">
 
-        {/* Top accent bar */}
-        <div className={`h-1.5 w-full ${
-          lectureState === 'live'     ? 'bg-gradient-to-r from-red-400 to-red-600' :
-          lectureState === 'upcoming' ? 'bg-gradient-to-r from-violet-400 to-violet-600' :
-          'bg-gradient-to-r from-slate-300 to-slate-400'
-        }`} />
+        {/* ── Left panel: Lecture info (desktop) / header (mobile) ── */}
+        <div className={`relative flex flex-col justify-between p-8 lg:p-10 ${
+          lectureState === 'live'     ? 'bg-gradient-to-br from-red-500 via-red-600 to-orange-600' :
+          lectureState === 'upcoming' ? 'bg-gradient-to-br from-violet-600 via-violet-700 to-purple-800' :
+          'bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800'
+        }`}>
+          {/* decorative blobs */}
+          <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
-        <div className="p-8">
-
-          {/* Status badge */}
-          <div className="flex items-center justify-center mb-6">
-            {lectureState === 'live' && (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-200">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+          <div className="relative z-10">
+            {/* Status badge */}
+            <div className="mb-6">
+              {lectureState === 'live' && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/30 text-white text-sm font-bold backdrop-blur-sm">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+                  </span>
+                  LIVE NOW
                 </span>
-                <span className="text-sm font-bold text-red-600">LIVE NOW</span>
-              </span>
-            )}
-            {lectureState === 'upcoming' && (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50 border border-amber-200">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                <span className="text-sm font-semibold text-amber-600">Upcoming</span>
-              </span>
-            )}
-            {lectureState === 'ended' && (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-100 border border-slate-200">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-                <span className="text-sm font-semibold text-slate-500">Session Ended</span>
-              </span>
-            )}
-          </div>
+              )}
+              {lectureState === 'upcoming' && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/30 text-white text-sm font-semibold backdrop-blur-sm">
+                  <span className="w-2 h-2 rounded-full bg-amber-300" />
+                  Upcoming
+                </span>
+              )}
+              {lectureState === 'ended' && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/30 text-white text-sm font-semibold backdrop-blur-sm">
+                  <span className="w-2 h-2 rounded-full bg-slate-300" />
+                  Session Ended
+                </span>
+              )}
+            </div>
 
-          {/* Lecture info */}
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-slate-800 mb-1">{lecture.title}</h1>
+            {/* Title */}
+            <h1 className="text-2xl lg:text-3xl font-bold text-white leading-tight mb-3">{lecture.title}</h1>
+
+            {/* Class + month */}
             {(classNameStr || monthNameStr) && (
-              <p className="text-slate-500 text-sm">{classNameStr}{monthNameStr ? ` Â· ${monthNameStr}` : ''}</p>
+              <p className="text-white/75 text-sm mb-4">{classNameStr}{monthNameStr ? ` · ${monthNameStr}` : ''}</p>
             )}
-            <p className="text-slate-400 text-xs mt-1.5">{formatTime(lecture.startTime)}</p>
-          </div>
 
-          {/* Platform / mode badge */}
-          <div className="flex justify-center mb-6">
+            {/* Platform badge */}
             {lecture.mode === 'OFFLINE' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-orange-50 text-orange-600 border-orange-200">
-                ðŸ« Physical Class
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 text-white border border-white/20">
+                🏫 Physical Class
               </span>
             ) : lecture.platform ? (
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                lecture.platform.toLowerCase().includes('zoom') ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                lecture.platform.toLowerCase().includes('meet') ? 'bg-green-50 text-green-600 border-green-200' :
-                'bg-slate-50 text-slate-600 border-slate-200'
-              }`}>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 text-white border border-white/20">
                 {lecture.platform}
               </span>
             ) : null}
           </div>
 
-          {/* â”€â”€â”€ Processing: sign-in â†’ joining step indicator â”€â”€â”€ */}
+          {/* Time info at bottom */}
+          <div className="relative z-10 mt-8">
+            <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-sm">
+              <svg className="w-5 h-5 text-white/70 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-0.5">Scheduled Time</p>
+                <p className="text-white text-sm font-semibold">{formatTime(lecture.startTime)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right panel: action area ── */}
+        <div className="p-8 lg:p-10 flex flex-col justify-center">
+
+          {/* ─── Processing step indicator ─── */}
           {isProcessing && (
-            <div className="flex flex-col items-center py-2 gap-5">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col items-center py-6 gap-6">
+              <div className="flex flex-col items-center gap-3 w-full max-w-xs mx-auto">
                 {/* Step 1 */}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                  step === 'signing-in'
-                    ? 'bg-violet-50 text-violet-600 border-violet-300'
-                    : 'bg-green-50 text-green-600 border-green-200'
+                <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                  step === 'signing-in' ? 'bg-violet-50 border-violet-300' : 'bg-green-50 border-green-200'
                 }`}>
-                  {step === 'signing-in' ? (
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  )}
-                  {step === 'signing-in' ? 'Signing inâ€¦' : 'Signed in âœ“'}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    step === 'signing-in' ? 'bg-violet-100' : 'bg-green-100'
+                  }`}>
+                    {step === 'signing-in' ? (
+                      <svg className="w-4 h-4 text-violet-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-violet-700' : 'text-green-700'}`}>
+                      {step === 'signing-in' ? 'Signing in…' : 'Signed in ✓'}
+                    </p>
+                    {step === 'signing-in' && <p className="text-xs text-violet-500">Verifying your credentials</p>}
+                  </div>
                 </div>
 
-                <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                {/* Connector */}
+                <div className="w-0.5 h-4 bg-slate-200 rounded-full" />
 
                 {/* Step 2 */}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                  step === 'joining'
-                    ? 'bg-violet-50 text-violet-600 border-violet-300'
-                    : 'bg-slate-50 text-slate-400 border-slate-200'
+                <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                  step === 'joining' ? 'bg-violet-50 border-violet-300' : 'bg-slate-50 border-slate-200'
                 }`}>
-                  {step === 'joining' && (
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  )}
-                  Marking attendance
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    step === 'joining' ? 'bg-violet-100' : 'bg-slate-100'
+                  }`}>
+                    {step === 'joining' ? (
+                      <svg className="w-4 h-4 text-violet-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${step === 'joining' ? 'text-violet-700' : 'text-slate-400'}`}>
+                      Recording attendance
+                    </p>
+                    {step === 'joining' && <p className="text-xs text-violet-500">Marking you as present</p>}
+                  </div>
                 </div>
 
-                <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                {/* Connector */}
+                <div className="w-0.5 h-4 bg-slate-200 rounded-full" />
 
                 {/* Step 3 */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-slate-50 text-slate-400 border-slate-200">
-                  Open meeting
+                <div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border bg-slate-50 border-slate-200">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-400">Open meeting</p>
                 </div>
               </div>
-
-              <p className="text-sm text-slate-500 text-center">
-                {step === 'signing-in' ? 'Verifying your credentialsâ€¦' : 'Recording your attendanceâ€¦'}
-              </p>
             </div>
           )}
 
-          {/* â”€â”€â”€ Done: attendance marked + open meeting â”€â”€â”€ */}
+          {/* ─── Done ─── */}
           {step === 'done' && joinResult && (
-            <div className="text-center">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
-                <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <div className="text-center py-4">
+              <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-lg font-bold text-slate-800 mb-1">Attendance Marked!</h2>
-              <p className="text-slate-500 text-sm mb-5">
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Attendance Marked!</h2>
+              <p className="text-slate-500 mb-6">
                 {joinResult.sessionLink
-                  ? 'The meeting is opening now. Tap below if it didn\'t open automatically.'
-                  : 'Your attendance has been recorded.'}
+                  ? 'The meeting is opening now. Tap the button below if it didn\'t open.'
+                  : 'Your attendance has been recorded successfully.'}
               </p>
 
               {joinResult.sessionLink && (
@@ -293,9 +324,9 @@ export default function LectureLiveJoinPage() {
                   href={joinResult.sessionLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 text-white font-semibold text-sm hover:from-violet-600 hover:to-violet-700 transition shadow-lg shadow-violet-500/20"
+                  className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                   Open Meeting
@@ -303,30 +334,42 @@ export default function LectureLiveJoinPage() {
               )}
 
               {(joinResult.meetingId || joinResult.meetingPassword) && (
-                <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-100 text-left text-sm text-slate-700 space-y-1">
+                <div className="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-2">
                   {joinResult.meetingId && (
-                    <p><span className="font-semibold">Meeting ID:</span> <span className="font-mono">{joinResult.meetingId}</span></p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500 font-medium">Meeting ID</span>
+                      <span className="text-sm font-mono font-bold text-slate-800">{joinResult.meetingId}</span>
+                    </div>
                   )}
                   {joinResult.meetingPassword && (
-                    <p><span className="font-semibold">Password:</span> <span className="font-mono">{joinResult.meetingPassword}</span></p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500 font-medium">Password</span>
+                      <span className="text-sm font-mono font-bold text-slate-800">{joinResult.meetingPassword}</span>
+                    </div>
                   )}
                 </div>
               )}
             </div>
           )}
 
-          {/* â”€â”€â”€ Idle + logged in: user card + join button â”€â”€â”€ */}
+          {/* ─── Idle: logged in ─── */}
           {step === 'idle' && user && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Ready to join?</h2>
+                <p className="text-slate-500 text-sm">Your attendance will be marked when you click join.</p>
+              </div>
+
+              {/* User card */}
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                   {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 truncate">
+                  <p className="font-semibold text-slate-800 truncate">
                     {(user as any).profile?.fullName || (user as any).email}
                   </p>
-                  <p className="text-xs text-slate-400">Logged in</p>
+                  <p className="text-sm text-slate-400">Signed in</p>
                 </div>
               </div>
 
@@ -336,7 +379,7 @@ export default function LectureLiveJoinPage() {
 
               <button
                 onClick={doJoin}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 text-white text-sm font-bold hover:from-violet-600 hover:to-violet-700 transition shadow-lg shadow-violet-500/25 flex items-center justify-center gap-2"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25 flex items-center justify-center gap-2.5"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -346,15 +389,16 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* â”€â”€â”€ Idle + not logged in: inline login form â”€â”€â”€ */}
+          {/* ─── Idle: not logged in → login form ─── */}
           {step === 'idle' && !user && (
-            <div>
-              <p className="text-sm text-slate-500 text-center mb-5">
-                Sign in to join this lecture and mark your attendance.
-              </p>
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Sign in to join</h2>
+                <p className="text-slate-500 text-sm">Your attendance will be marked automatically after login.</p>
+              </div>
 
               {stepError && (
-                <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 flex items-center gap-2">
+                <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 flex items-center gap-2">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -364,7 +408,7 @@ export default function LectureLiveJoinPage() {
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email or Phone</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email or Phone</label>
                   <input
                     type="text"
                     value={identifier}
@@ -372,11 +416,11 @@ export default function LectureLiveJoinPage() {
                     required
                     autoComplete="username"
                     placeholder="you@example.com"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
                   <div className="relative">
                     <input
                       type={showPw ? 'text' : 'password'}
@@ -384,20 +428,20 @@ export default function LectureLiveJoinPage() {
                       onChange={e => setPassword(e.target.value)}
                       required
                       autoComplete="current-password"
-                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                      className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition"
+                      placeholder="••••••••"
+                      className="w-full px-4 py-3.5 pr-12 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:bg-white transition"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPw(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
                     >
                       {showPw ? (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                         </svg>
                       ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
@@ -407,18 +451,18 @@ export default function LectureLiveJoinPage() {
                 </div>
 
                 {/* Flow hint */}
-                <div className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-100 text-[11px] text-violet-600 font-medium">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 border border-violet-100 text-xs text-violet-600 font-medium">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Sign in â†’ Attendance marked automatically â†’ Meeting opens
+                  Sign in → Attendance marked automatically → Meeting opens
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 text-white text-sm font-bold hover:from-violet-600 hover:to-violet-700 transition shadow-lg shadow-violet-500/25 flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25 flex items-center justify-center gap-2.5"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                   Sign in & Join Lecture
