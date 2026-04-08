@@ -38,6 +38,7 @@ interface Lecture {
   meetingPassword?: string | null;
   maxParticipants?: number | null;
   welcomeMessage?: string | null;
+  liveToken?: string | null;
   status: string;
   createdAt: string;
 }
@@ -67,6 +68,8 @@ function LectureLessonCard({
   onDelete?: (lec: Lecture) => void;
 }) {
   const [copied, setCopied] = useState('');
+  const [localToken, setLocalToken] = useState<string | null>(lec.liveToken ?? null);
+  const [generatingToken, setGeneratingToken] = useState(false);
   const timing = lectureTiming(lec);
 
   const copyText = (text: string, key: string) => {
@@ -74,6 +77,24 @@ function LectureLessonCard({
       setCopied(key);
       setTimeout(() => setCopied(''), 1500);
     });
+  };
+
+  const handleShareLink = async () => {
+    if (localToken) {
+      copyText(`${window.location.origin}/lecture-live/${localToken}`, 'share');
+      return;
+    }
+    setGeneratingToken(true);
+    try {
+      const res = await api.post(`/lectures/${lec.id}/generate-token`);
+      const token = res.data.liveToken as string;
+      setLocalToken(token);
+      copyText(`${window.location.origin}/lecture-live/${token}`, 'share');
+    } catch {
+      // silently fail
+    } finally {
+      setGeneratingToken(false);
+    }
   };
 
   const timingCfg = {
@@ -320,6 +341,28 @@ function LectureLessonCard({
           )}
           {isAdmin && (
             <div className="ml-auto flex items-center gap-1.5">
+              {/* Share / Generate live link */}
+              <button
+                onClick={handleShareLink}
+                disabled={generatingToken}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition border ${
+                  localToken
+                    ? copied === 'share'
+                      ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                      : 'text-violet-600 bg-violet-50 hover:bg-violet-100 border-violet-200'
+                    : 'text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200'
+                }`}
+                title={localToken ? 'Copy shareable join link' : 'Generate shareable join link'}
+              >
+                {generatingToken ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                ) : copied === 'share' ? (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                )}
+                {generatingToken ? 'Generating…' : copied === 'share' ? 'Copied!' : localToken ? 'Copy Link' : 'Get Link'}
+              </button>
               <button
                 onClick={() => onEdit?.(lec)}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-violet-600 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition"

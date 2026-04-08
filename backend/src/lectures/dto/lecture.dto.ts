@@ -111,4 +111,8 @@ export class UpdateLectureDto {
   @IsOptional()
   @IsEnum(LectureStatusDto)
   status?: LectureStatusDto;
+
+  @IsOptional()
+  @IsString()
+  welcomeMessage?: string;
 }

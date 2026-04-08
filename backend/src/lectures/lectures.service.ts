@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { randomBytes } from 'crypto';
 
 type LectureStatus = 'ANYONE' | 'STUDENTS_ONLY' | 'PAID_ONLY' | 'PRIVATE' | 'INACTIVE';
 type LectureMode = 'ONLINE' | 'OFFLINE';
@@ -167,5 +168,75 @@ export class LecturesService {
     ]);
 
     return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
+  }
+
+  /** Admin: generate (or regenerate) a shareable live token for a lecture */
+  async generateLiveToken(lectureId: string) {
+    await this.findOne(lectureId);
+    const token = randomBytes(12).toString('hex'); // 24 hex chars
+    return this.db.lecture.update({
+      where: { id: lectureId },
+      data: { liveToken: token },
+      select: { id: true, title: true, liveToken: true },
+    });
+  }
+
+  /** Public: resolve live token → lecture info (hides sessionLink) */
+  async findByLiveToken(token: string) {
+    const lecture = await this.db.lecture.findUnique({
+      where: { liveToken: token },
+      include: {
+        month: {
+          select: {
+            id: true, name: true, year: true, month: true,
+            class: { select: { id: true, name: true, subject: true } },
+          },
+        },
+      },
+    });
+    if (!lecture) throw new NotFoundException('Invalid or expired live link.');
+
+    // Strip sessionLink / meetingPassword from public response
+    const { sessionLink: _s, meetingPassword: _p, ...safe } = lecture;
+    return safe;
+  }
+
+  /** Authenticated: mark attendance and return sessionLink */
+  async joinByLiveToken(token: string, userId: string) {
+    const lecture = await this.db.lecture.findUnique({
+      where: { liveToken: token },
+      include: {
+        month: {
+          select: {
+            id: true, name: true,
+            class: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!lecture) throw new NotFoundException('Invalid or expired live link.');
+
+    const classId = lecture.month?.class?.id;
+    if (classId) {
+      // Upsert ClassAttendance for today (date-only, UTC midnight)
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      await this.db.classAttendance.upsert({
+        where: { userId_classId_date: { userId, classId, date: today } },
+        create: { userId, classId, date: today, status: 'PRESENT', method: 'live_lecture_link' },
+        update: { status: 'PRESENT', method: 'live_lecture_link' },
+      });
+    }
+
+    return {
+      lectureId: lecture.id,
+      title: lecture.title,
+      sessionLink: lecture.sessionLink,
+      meetingId: lecture.meetingId,
+      meetingPassword: lecture.meetingPassword,
+      startTime: lecture.startTime,
+      endTime: lecture.endTime,
+      platform: lecture.platform,
+    };
   }
 }

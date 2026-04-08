@@ -258,6 +258,7 @@ model Lecture {
   meetingPassword String?
   maxParticipants Int?
   welcomeMessage  String?       @db.Text  // Rich text HTML with variable placeholders e.g. {{studentName}}
+  liveToken       String?       @unique   // Shareable join token e.g. /lecture-live/{token}
   status          LectureStatus @default(STUDENTS_ONLY)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

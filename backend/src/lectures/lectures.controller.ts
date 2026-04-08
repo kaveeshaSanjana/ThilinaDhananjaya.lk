@@ -63,6 +63,28 @@ export class LecturesController {
 
   // ─── All users: read ───────────────────────────────────
 
+  /** Public: resolve live token → lecture info (sessionLink hidden) */
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('live/:token')
+  findByLiveToken(@Param('token') token: string) {
+    return this.lecturesService.findByLiveToken(token);
+  }
+
+  /** Authenticated: join via live token → mark attendance, return sessionLink */
+  @UseGuards(JwtAuthGuard)
+  @Post('live/:token/join')
+  joinByLiveToken(@Param('token') token: string, @Request() req: any) {
+    return this.lecturesService.joinByLiveToken(token, req.user.id);
+  }
+
+  /** Admin: generate or regenerate the shareable liveToken for a lecture */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/generate-token')
+  generateLiveToken(@Param('id') id: string) {
+    return this.lecturesService.generateLiveToken(id);
+  }
+
   /** All users: get lectures for a class month (visibility-filtered) */
   @UseGuards(OptionalJwtAuthGuard)
   @Get('month/:monthId')

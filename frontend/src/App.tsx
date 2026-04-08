@@ -15,6 +15,7 @@ import PaymentSubmitPage from './pages/PaymentSubmitPage';
 import MyPaymentsPage from './pages/MyPaymentsPage';
 import WatchHistoryPage from './pages/WatchHistoryPage';
 import LiveJoinPage from './pages/LiveJoinPage';
+import LectureLiveJoinPage from './pages/LectureLiveJoinPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -102,6 +103,7 @@ function AppRoutes() {
 
       {/* Live lecture join — outside Layout */}
       <Route path="live/:token" element={<LiveJoinPage />} />
+      <Route path="lecture-live/:token" element={<LectureLiveJoinPage />} />
 
       {/* Public landing page for non-logged-in users */}
       {!user && <Route path="/" element={<LandingPage />} />}
