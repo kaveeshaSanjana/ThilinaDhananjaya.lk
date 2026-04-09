@@ -218,7 +218,7 @@ export default function Layout() {
           <div className="mt-3 mb-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] overflow-hidden">
             {institutes.length === 1 ? (
               <div className="flex items-center gap-2.5 px-3 py-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <div className="w-7 h-7 rounded-lg bg-[hsl(var(--primary))] flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {selected?.logoUrl
                     ? <img src={selected.logoUrl} alt="" className="w-7 h-7 object-cover" />
                     : <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>}
@@ -236,7 +236,7 @@ export default function Layout() {
                   select(nextInstituteId);
                   navigate(adminInstituteId ? replaceInstituteAdminPath(location.pathname, nextInstituteId) : getInstituteAdminPath(nextInstituteId));
                 }}
-                  className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 outline-none">
+                  className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] outline-none">
                   {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
               </div>

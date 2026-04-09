@@ -98,9 +98,9 @@ function AdminCard({ admin, isOwner, onRemove }: { admin: any; isOwner: boolean;
   const avatar = admin.admin?.profile?.avatarUrl;
   const initials = name.split(" ").map((p: string) => p[0]).slice(0, 2).join("").toUpperCase();
   return (
-    <div className="flex items-center justify-between p-3 rounded-xl bg-[hsl(var(--muted)/0.4)] border border-[hsl(var(--border)/0.5)]">
+    <div className="flex items-center justify-between p-3 rounded-xl bg-[hsl(var(--muted))]/50 border border-[hsl(var(--border))]">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden ring-2 ring-[hsl(var(--card))]">
           {avatar ? <img src={avatar} alt="" className="w-9 h-9 object-cover" /> : initials}
         </div>
         <div>
@@ -109,11 +109,11 @@ function AdminCard({ admin, isOwner, onRemove }: { admin: any; isOwner: boolean;
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${admin.isOwner ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"}`}>
+        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${admin.isOwner ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"}`}>
           {admin.isOwner ? "Owner" : "Admin"}
         </span>
         {isOwner && !admin.isOwner && onRemove && (
-          <button onClick={onRemove} className="w-6 h-6 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition">
+          <button onClick={onRemove} className="w-6 h-6 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-500/10 hover:text-red-500 transition">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         )}
@@ -206,29 +206,33 @@ export default function AdminInstitute() {
   }} />;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="w-full space-y-6 animate-fade-in">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0 overflow-hidden">
-            {selected.logoUrl
-              ? <img src={selected.logoUrl} alt="" className="w-10 h-10 object-cover" />
-              : <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>}
+      {/* ── Hero Banner ── */}
+      <div className="relative bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-2xl p-6 md:p-8 overflow-hidden">
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-indigo-500/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/30 to-blue-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-white/10">
+              {selected.logoUrl
+                ? <img src={selected.logoUrl} alt="" className="w-12 h-12 object-cover" />
+                : <svg className="w-6 h-6 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>}
+            </div>
+            <div>
+              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-0.5">Institute Settings</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">{selected.name}</h1>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">{selected.name}</h1>
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Institute Settings</p>
-          </div>
-        </div>
-        <div className="flex gap-3 text-center">
-          <div className="px-4 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))]">
-            <p className="text-lg font-bold text-[hsl(var(--foreground))]">{detail?._count?.users ?? "—"}</p>
-            <p className="text-[11px] text-[hsl(var(--muted-foreground))]">Students</p>
-          </div>
-          <div className="px-4 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))]">
-            <p className="text-lg font-bold text-[hsl(var(--foreground))]">{detail?._count?.classes ?? "—"}</p>
-            <p className="text-[11px] text-[hsl(var(--muted-foreground))]">Classes</p>
+          <div className="flex gap-3 text-center">
+            <div className="px-5 py-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+              <p className="text-xl font-bold text-white">{detail?._count?.users ?? "—"}</p>
+              <p className="text-[11px] text-slate-400">Students</p>
+            </div>
+            <div className="px-5 py-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+              <p className="text-xl font-bold text-white">{detail?._count?.classes ?? "—"}</p>
+              <p className="text-[11px] text-slate-400">Classes</p>
+            </div>
           </div>
         </div>
       </div>
@@ -243,8 +247,8 @@ export default function AdminInstitute() {
               <p className="text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Institute Details</p>
             </div>
             <div className="p-5 space-y-5">
-              {error && <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
-              {success && <p className="text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl">{success}</p>}
+              {error && <p className="text-sm text-red-500 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">{error}</p>}
+              {success && <p className="text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl">{success}</p>}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
@@ -260,7 +264,7 @@ export default function AdminInstitute() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-[11px] font-bold text-[hsl(var(--muted-foreground))] mb-1.5 uppercase tracking-wider">Logo</label>
-                  {logoUrl && <img src={logoUrl} alt="" className="w-12 h-12 rounded-xl object-cover mb-2 border border-[hsl(var(--border))]" />}
+                  {logoUrl && <img src={logoUrl} alt="" className="w-12 h-12 rounded-xl object-cover mb-2 ring-1 ring-[hsl(var(--border))]" />}
                   <CropImageInput onFile={handleLogoFile} loading={logoUploading} label="Upload Logo" aspectRatio={1} />
                 </div>
                 <div>
@@ -287,7 +291,7 @@ export default function AdminInstitute() {
 
               <div className="flex justify-end">
                 <button onClick={handleSave} disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold text-sm hover:from-indigo-700 hover:to-blue-700 disabled:opacity-50 shadow-lg shadow-indigo-500/20 transition-all">
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 text-white font-semibold text-sm hover:from-indigo-600 hover:to-blue-700 disabled:opacity-50 shadow-lg shadow-indigo-500/25 transition-all">
                   {saving ? "Saving…" : "Save Changes"}
                 </button>
               </div>
@@ -309,7 +313,7 @@ export default function AdminInstitute() {
                 </div>
                 <div className="pt-2">
                   <label className="block text-[11px] font-bold text-[hsl(var(--muted-foreground))] mb-1.5 uppercase tracking-wider">Add Admin by Email</label>
-                  {addError && <p className="text-xs text-red-500 mb-2">{addError}</p>}
+                  {addError && <p className="text-xs text-red-500 dark:text-red-400 mb-2">{addError}</p>}
                   <div className="flex gap-2">
                     <input type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && handleAddAdmin()}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
@@ -11,18 +12,31 @@ const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', '
 const VIDEO_TYPES = ['DRIVE', 'YOUTUBE', 'ZOOM', 'OTHER'];
 const statusBadge = (s: string) => {
   const map: Record<string, string> = {
-    ANYONE: 'bg-green-100 text-green-700',
-    STUDENTS_ONLY: 'bg-blue-100 text-blue-700',
-    PAID_ONLY: 'bg-amber-100 text-amber-700',
-    PRIVATE: 'bg-purple-100 text-purple-700',
-    INACTIVE: 'bg-slate-100 text-slate-500',
+    ANYONE: 'bg-green-500/15 text-green-600 dark:text-green-400',
+    STUDENTS_ONLY: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+    PAID_ONLY: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    PRIVATE: 'bg-purple-500/15 text-purple-600 dark:text-purple-400',
+    INACTIVE: 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]',
   };
   return map[s] || map.ANYONE;
 };
 
+/* shared input class */
+const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] transition';
+
 const emptyForm = { classId: '', monthId: '', title: '', description: '', videoUrl: '', videoType: '', thumbnail: '', topic: '', icon: '', materials: '', status: 'PAID_ONLY', welcomeMessage: '', isLive: false, liveUrl: '' };
 
+const getClassInstituteId = (cls: any): string =>
+  cls?.instituteId || cls?.institute?.id || cls?.institute?.instituteId || '';
+
+const getRecordingClassId = (rec: any): string =>
+  rec?.classId || rec?.month?.classId || rec?.month?.class?.id || '';
+
+const getRecordingInstituteId = (rec: any): string =>
+  rec?.instituteId || rec?.month?.instituteId || rec?.month?.class?.instituteId || rec?.month?.class?.institute?.id || '';
+
 export default function AdminRecordingHistory() {
+  const { instituteId } = useParams<{ instituteId: string }>();
   const [recordings, setRecordings] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [months, setMonths] = useState<any[]>([]);
@@ -47,14 +61,64 @@ export default function AdminRecordingHistory() {
   const [watchSearch, setWatchSearch] = useState('');
   const [studentPopup, setStudentPopup] = useState<{ recordingId: string; userId: string } | null>(null);
 
-  const load = () => { setLoading(true); Promise.all([
-    api.get('/recordings', { params: { limit: 200 } }).then(r => {
-      const res = r.data;
-      setRecordings(res?.data ? res.data : Array.isArray(res) ? res : []);
-    }).catch(() => {}),
-    api.get('/classes').then(r => setClasses(r.data)).catch(() => {}),
-  ]).finally(() => setLoading(false)); };
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    Promise.all([
+      api.get('/recordings', { params: { limit: 200, ...(instituteId ? { instituteId } : {}) } }),
+      api.get('/classes', { params: instituteId ? { instituteId } : undefined }),
+    ])
+      .then(([recordingsRes, classesRes]) => {
+        const rawRecordings = recordingsRes.data?.data
+          ? recordingsRes.data.data
+          : Array.isArray(recordingsRes.data)
+            ? recordingsRes.data
+            : [];
+        const rawClasses = Array.isArray(classesRes.data) ? classesRes.data : [];
+
+        const hasClassInstituteMetadata = rawClasses.some((c: any) => Boolean(getClassInstituteId(c)));
+        const scopedClasses = instituteId
+          ? (hasClassInstituteMetadata
+            ? rawClasses.filter((c: any) => getClassInstituteId(c) === instituteId)
+            : rawClasses)
+          : rawClasses;
+
+        const allowedClassIds = new Set(scopedClasses.map((c: any) => c.id));
+        const hasRecordingInstituteMetadata = rawRecordings.some(
+          (r: any) => Boolean(getRecordingInstituteId(r)) || Boolean(getClassInstituteId(r?.month?.class)),
+        );
+
+        const scopedRecordings = instituteId
+          ? rawRecordings.filter((r: any) => {
+              const recInstituteId = getRecordingInstituteId(r);
+              if (recInstituteId) return recInstituteId === instituteId;
+
+              const recClassInstituteId = getClassInstituteId(r?.month?.class);
+              if (recClassInstituteId) return recClassInstituteId === instituteId;
+
+              const recClassId = getRecordingClassId(r);
+              if (allowedClassIds.size > 0 && recClassId) return allowedClassIds.has(recClassId);
+
+              return !hasRecordingInstituteMetadata;
+            })
+          : rawRecordings;
+
+        setClasses(scopedClasses);
+        setRecordings(scopedRecordings);
+      })
+      .catch(() => {
+        setClasses([]);
+        setRecordings([]);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [instituteId]);
+
+  useEffect(() => {
+    if (filterClass && !classes.some((c: any) => c.id === filterClass)) {
+      setFilterClass('');
+    }
+  }, [classes, filterClass]);
 
   const update = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
 
@@ -187,6 +251,9 @@ export default function AdminRecordingHistory() {
     );
   }
 
+  /* ── live count badge ── */
+  const liveCount = recordings.filter(r => r.isLive).length;
+
   const recordingColumns: readonly StickyColumn<any>[] = [
     {
       id: 'recording',
@@ -195,39 +262,39 @@ export default function AdminRecordingHistory() {
       render: (rec) => (
         <div className="flex items-center gap-3">
           {rec.thumbnail ? (
-            <img src={rec.thumbnail} alt="" className="w-16 h-10 rounded-xl object-cover flex-shrink-0" />
+            <img src={rec.thumbnail} alt="" className="w-16 h-10 rounded-xl object-cover flex-shrink-0 ring-1 ring-[hsl(var(--border))]" />
           ) : (
-            <div className="w-16 h-10 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            <div className="w-16 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex items-center justify-center flex-shrink-0 ring-1 ring-[hsl(var(--border))]">
+              <svg className="w-5 h-5 text-[hsl(var(--muted-foreground))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             </div>
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="font-semibold text-slate-800 truncate text-sm">{rec.title}</p>
+              <p className="font-semibold text-[hsl(var(--foreground))] truncate text-sm">{rec.title}</p>
               {rec.isLive && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold flex-shrink-0">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-500 dark:text-red-400 text-[10px] font-bold flex-shrink-0">
                   <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" /></span>
                   LIVE
                 </span>
               )}
             </div>
-            {rec.topic && <p className="text-xs text-slate-400 truncate">{rec.topic}</p>}
+            {rec.topic && <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">{rec.topic}</p>}
           </div>
         </div>
       ),
     },
-    { id: 'class', label: 'Class', minWidth: 150, render: (rec) => <span className="text-slate-600 text-sm">{rec.month?.class?.name || '-'}</span> },
-    { id: 'month', label: 'Month', minWidth: 130, render: (rec) => <span className="text-slate-500 text-sm">{rec.month?.name || '-'}</span> },
+    { id: 'class', label: 'Class', minWidth: 150, render: (rec) => <span className="text-[hsl(var(--foreground))]/80 text-sm">{rec.month?.class?.name || '-'}</span> },
+    { id: 'month', label: 'Month', minWidth: 130, render: (rec) => <span className="text-[hsl(var(--muted-foreground))] text-sm">{rec.month?.name || '-'}</span> },
     {
       id: 'type',
       label: 'Type',
       minWidth: 90,
       render: (rec) => {
         if (rec.videoType) {
-          const colors: Record<string, string> = { DRIVE: 'bg-green-50 text-green-600', YOUTUBE: 'bg-red-50 text-red-600', ZOOM: 'bg-blue-50 text-blue-600', OTHER: 'bg-slate-50 text-slate-600' };
+          const colors: Record<string, string> = { DRIVE: 'bg-green-500/15 text-green-600 dark:text-green-400', YOUTUBE: 'bg-red-500/15 text-red-600 dark:text-red-400', ZOOM: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', OTHER: 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]' };
           return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${colors[rec.videoType] || colors.OTHER}`}>{rec.videoType}</span>;
         }
-        return <span className="text-slate-300 text-xs">—</span>;
+        return <span className="text-[hsl(var(--muted-foreground))]/50 text-xs">—</span>;
       },
     },
     {
@@ -241,7 +308,7 @@ export default function AdminRecordingHistory() {
         </span>
       ),
     },
-    { id: 'date', label: 'Date', minWidth: 100, render: (rec) => <span className="text-slate-400 text-xs">{rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span> },
+    { id: 'date', label: 'Date', minWidth: 100, render: (rec) => <span className="text-[hsl(var(--muted-foreground))] text-xs">{rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span> },
     {
       id: 'actions',
       label: 'Actions',
@@ -249,43 +316,42 @@ export default function AdminRecordingHistory() {
       align: 'right',
       render: (rec) => (
         <div className="flex items-center justify-end gap-1 flex-wrap">
-          <button onClick={() => openEdit(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition">
+          <button onClick={() => openEdit(rec)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-500/20 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
             Edit
           </button>
-          {rec.videoUrl && <a href={rec.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-semibold hover:bg-emerald-100 transition">
+          {rec.videoUrl && <a href={rec.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             View
           </a>}
-          {/* Live controls */}
           {rec.liveToken && !rec.isLive && (
-            <button onClick={() => handleGoLive(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition">
+            <button onClick={() => handleGoLive(rec)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-500/20 transition">
               <span className="w-2 h-2 rounded-full bg-red-500" />Go Live
             </button>
           )}
           {rec.isLive && (
-            <button onClick={() => handleEndLive(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-50 text-amber-600 text-xs font-semibold hover:bg-amber-100 transition">
+            <button onClick={() => handleEndLive(rec)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" /></svg>
               End
             </button>
           )}
           {rec.liveToken && (
-            <button onClick={() => handleCopyLiveLink(rec)} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition ${copied === rec.id ? 'bg-green-100 text-green-700' : 'bg-violet-50 text-violet-600 hover:bg-violet-100'}`}>
+            <button onClick={() => handleCopyLiveLink(rec)} className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${copied === rec.id ? 'bg-green-500/15 text-green-600 dark:text-green-400' : 'bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20'}`}>
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
               {copied === rec.id ? 'Copied!' : 'Link'}
             </button>
           )}
           {rec.liveToken && (
-            <button onClick={() => handleViewLiveAttendance(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-cyan-50 text-cyan-600 text-xs font-semibold hover:bg-cyan-100 transition">
+            <button onClick={() => handleViewLiveAttendance(rec)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs font-semibold hover:bg-cyan-500/20 transition">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               Live Att.
             </button>
           )}
-          <button onClick={() => handleViewWatchHistory(rec)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold hover:bg-indigo-100 transition">
+          <button onClick={() => handleViewWatchHistory(rec)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-500/20 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             Watch History
           </button>
-          <button onClick={() => handleDelete(rec.id)} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition">
+          <button onClick={() => handleDelete(rec.id)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-500 dark:text-red-400 text-xs font-semibold hover:bg-red-500/20 transition">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             Del
           </button>
@@ -295,71 +361,80 @@ export default function AdminRecordingHistory() {
   ];
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Recordings</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{recordings.length} total recordings</p>
+    <div className="space-y-6 animate-fade-in">
+      {/* ── Hero Banner ── */}
+      <div className="relative bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-2xl p-6 md:p-8 overflow-hidden">
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-purple-500/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-purple-300 text-xs font-semibold uppercase tracking-widest mb-1">Video Management</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">Recordings</h1>
+            <p className="text-slate-400 text-sm mt-1.5 max-w-md">
+              {recordings.length} total recording{recordings.length !== 1 ? 's' : ''}
+              {liveCount > 0 && <span className="ml-2 inline-flex items-center gap-1 text-red-400 font-semibold"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" /></span>{liveCount} live now</span>}
+            </p>
+          </div>
+          <button onClick={openNew}
+            className="px-5 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 flex items-center gap-2 self-start sm:self-auto">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Add Recording
+          </button>
         </div>
-        <button onClick={openNew}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 flex items-center gap-1.5">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          Add Recording
-        </button>
       </div>
 
-      {/* Modal */}
+      {/* ── Add/Edit Modal ── */}
       {showForm && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setShowForm(false)}>
           <div className="min-h-full flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 rounded-t-2xl">
+          <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-2xl ring-1 ring-[hsl(var(--border))]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))] rounded-t-2xl">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">{editingRec ? 'Edit Recording' : 'Add Recording'}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{editingRec ? 'Update recording details' : 'Add a new video recording'}</p>
+                <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">{editingRec ? 'Edit Recording' : 'Add Recording'}</h2>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{editingRec ? 'Update recording details' : 'Add a new video recording'}</p>
               </div>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <form onSubmit={handleSave} className="overflow-y-auto max-h-[80vh]">
             <div className="p-6 space-y-5">
               {error && (
-                <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
+                <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
                   <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                  <p className="text-sm text-red-600">{error}</p>
+                  <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
                 </div>
               )}
 
               {/* Classification */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Classification</p>
+              <div className="bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50">
+                <p className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Classification</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Class</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Class</label>
                     <select value={form.classId} onChange={e => { update('classId', e.target.value); update('monthId', ''); }} required
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      className={inputCls}>
                       <option value="">Select class</option>
                       {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Month</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Month</label>
                     <select value={form.monthId} onChange={e => update('monthId', e.target.value)} required disabled={!form.classId}
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50">
+                      className={`${inputCls} disabled:opacity-50`}>
                       <option value="">{form.classId ? 'Select month' : 'Select class first'}</option>
                       {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Title</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Title</label>
                     <input type="text" value={form.title} onChange={e => update('title', e.target.value)} placeholder="e.g. Lesson 01" required
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                      className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Visibility</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Visibility</label>
                     <select value={form.status} onChange={e => update('status', e.target.value)}
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      className={inputCls}>
                       {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
                     </select>
                   </div>
@@ -367,90 +442,90 @@ export default function AdminRecordingHistory() {
               </div>
 
               {/* Video */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Video</p>
+              <div className="bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50">
+                <p className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Video</p>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Video URL</label>
+                  <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Video URL</label>
                   <input type="text" value={form.videoUrl} onChange={e => update('videoUrl', e.target.value)} placeholder="https://..."
-                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    className={inputCls} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Video Type</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Video Type</label>
                     <select value={form.videoType} onChange={e => update('videoType', e.target.value)}
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      className={inputCls}>
                       <option value="">None</option>
                       {VIDEO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div className="flex items-end">
-                    <label className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-white cursor-pointer w-full hover:border-blue-300 transition">
+                    <label className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] cursor-pointer w-full hover:border-[hsl(var(--ring))] transition">
                       <input type="checkbox" checked={form.isLive} onChange={e => update('isLive', e.target.checked)}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500/30" />
-                      <span className="text-sm text-slate-700 font-medium">Live Lecture</span>
+                        className="w-4 h-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--ring))]/30" />
+                      <span className="text-sm text-[hsl(var(--foreground))] font-medium">Live Lecture</span>
                       {form.isLive && <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
                     </label>
                   </div>
                 </div>
                 {form.isLive && (
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Live Meeting URL (Zoom/Meet/etc)</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Live Meeting URL (Zoom/Meet/etc)</label>
                     <input type="text" value={form.liveUrl} onChange={e => update('liveUrl', e.target.value)} placeholder="https://zoom.us/j/123..."
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                      className={inputCls} />
                   </div>
                 )}
               </div>
 
               {/* Media */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Media</p>
+              <div className="bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50">
+                <p className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Media</p>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Thumbnail URL</label>
+                  <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Thumbnail URL</label>
                   <div className="space-y-2">
                     <input type="text" value={form.thumbnail} onChange={e => update('thumbnail', e.target.value)} placeholder="https://..."
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                      className={inputCls} />
                     <div className="flex flex-wrap items-center gap-2">
                       <CropImageInput onFile={handleThumbnailFileChange} aspectRatio={16 / 9} loading={uploadingThumbnail} label="Upload Thumbnail" cropTitle="Crop Thumbnail" />
-                      <span className="text-[11px] text-slate-400">JPEG/PNG/WebP/GIF up to 5MB</span>
+                      <span className="text-[11px] text-[hsl(var(--muted-foreground))]">JPEG/PNG/WebP/GIF up to 5MB</span>
                     </div>
-                    {form.thumbnail && <img src={form.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-slate-200" />}
+                    {form.thumbnail && <img src={form.thumbnail} alt="Recording thumbnail preview" className="w-full max-h-28 object-cover rounded-xl ring-1 ring-[hsl(var(--border))]" />}
                   </div>
                 </div>
               </div>
 
               {/* Details */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Details</p>
+              <div className="bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50">
+                <p className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Details</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Topic</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Topic</label>
                     <input type="text" value={form.topic} onChange={e => update('topic', e.target.value)} placeholder="Topic name"
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                      className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Icon</label>
+                    <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Icon</label>
                     <input type="text" value={form.icon} onChange={e => update('icon', e.target.value)} placeholder="Icon name/URL"
-                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                      className={inputCls} />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Description</label>
+                  <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Description</label>
                   <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Optional notes..." rows={3}
-                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                    className={`${inputCls} resize-none`} />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Materials (JSON or links)</label>
+                  <label className="block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5">Materials (JSON or links)</label>
                   <textarea value={form.materials} onChange={e => update('materials', e.target.value)} placeholder='e.g. ["https://file1.pdf"]' rows={3}
-                    className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
+                    className={`${inputCls} resize-none`} />
                 </div>
                 <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => update('welcomeMessage', v)} />
               </div>
 
-              <div className="flex gap-2 pt-2 pb-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition">Cancel</button>
-                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition shadow-lg shadow-blue-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+              <div className="flex gap-3 pt-2 pb-2">
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
+                <button type="submit" disabled={saving || uploadingThumbnail} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                  {saving ? 'Saving...' : editingRec ? 'Save' : 'Add'}
+                  {saving ? 'Saving...' : editingRec ? 'Save Changes' : 'Add Recording'}
                 </button>
               </div>
             </div>
@@ -460,54 +535,54 @@ export default function AdminRecordingHistory() {
         </div>
       , document.body)}
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+      {/* ── Filters ── */}
+      <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
           <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
               type="text"
               placeholder="Search by title, topic, class or month..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 focus:bg-white transition"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] focus:bg-[hsl(var(--card))] transition"
             />
           </div>
 
           {/* Class dropdown */}
           <div className="relative sm:w-52">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
             <select
               value={filterClass}
               onChange={e => setFilterClass(e.target.value)}
-              className="w-full appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 focus:bg-white transition"
+              className="w-full appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] focus:bg-[hsl(var(--card))] transition"
             >
               <option value="">All Classes</option>
               {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
           </div>
 
           {/* Status dropdown */}
           <div className="relative sm:w-44">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
-              className="w-full appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 focus:bg-white transition"
+              className="w-full appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] focus:bg-[hsl(var(--card))] transition"
             >
               <option value="">All Statuses</option>
               {VISIBILITY_OPTIONS.map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
             </select>
-            <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
           </div>
 
-          {/* Clear filters — only show when any filter is active */}
+          {/* Clear filters */}
           {(filterClass || filterStatus || search) && (
             <button
               onClick={() => { setFilterClass(''); setFilterStatus(''); setSearch(''); }}
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-500 hover:bg-slate-50 hover:text-red-500 hover:border-red-200 transition whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition whitespace-nowrap"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               Clear
@@ -517,84 +592,84 @@ export default function AdminRecordingHistory() {
 
         {/* Active filter summary */}
         {(filterClass || filterStatus) && (
-          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-            <span className="text-[11px] text-slate-400 font-medium">Filtered:</span>
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[hsl(var(--border))]">
+            <span className="text-[11px] text-[hsl(var(--muted-foreground))] font-medium">Filtered:</span>
             {filterClass && (
-              <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700">
+              <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-semibold text-blue-600 dark:text-blue-400">
                 {classes.find(c => c.id === filterClass)?.name || filterClass}
-                <button onClick={() => setFilterClass('')} className="w-3.5 h-3.5 rounded-full hover:bg-blue-200 flex items-center justify-center transition">
+                <button onClick={() => setFilterClass('')} className="w-3.5 h-3.5 rounded-full hover:bg-blue-500/20 flex items-center justify-center transition">
                   <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </span>
             )}
             {filterStatus && (
-              <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-amber-50 border border-amber-100 text-xs font-semibold text-amber-700">
+              <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-600 dark:text-amber-400">
                 {filterStatus.replace(/_/g, ' ')}
-                <button onClick={() => setFilterStatus('')} className="w-3.5 h-3.5 rounded-full hover:bg-amber-200 flex items-center justify-center transition">
+                <button onClick={() => setFilterStatus('')} className="w-3.5 h-3.5 rounded-full hover:bg-amber-500/20 flex items-center justify-center transition">
                   <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </span>
             )}
-            <span className="text-[11px] text-slate-400">— {filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="text-[11px] text-[hsl(var(--muted-foreground))]">— {filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
           </div>
         )}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* ── Table ── */}
+      <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-slate-100 animate-pulse" />)}</div>
+          <div className="p-6 space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-[hsl(var(--muted))] animate-pulse" />)}</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-              <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-7 h-7 text-purple-500/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             </div>
-            <p className="text-sm font-medium text-slate-500">No recordings found</p>
-            <p className="text-xs text-slate-400 mt-1">Add a recording using the button above</p>
+            <p className="text-sm font-semibold text-[hsl(var(--foreground))]">No recordings found</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Add a recording using the button above</p>
           </div>
         ) : (
           <StickyDataTable
             columns={recordingColumns}
             rows={filtered}
             getRowId={(row) => row.id}
-            tableHeight="calc(100vh - 380px)"
+            tableHeight="calc(100vh - 420px)"
           />
         )}
       </div>
 
-      {/* Live Attendance Modal */}
+      {/* ── Live Attendance Modal ── */}
       {showLiveAttendance && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setShowLiveAttendance(null)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setShowLiveAttendance(null)}>
           <div className="min-h-full flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md ring-1 ring-[hsl(var(--border))]" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
                 <div>
-                  <h2 className="font-bold text-slate-800">Live Attendance</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{showLiveAttendance.title} — {liveAttendance.length} joined</p>
+                  <h2 className="font-bold text-[hsl(var(--foreground))]">Live Attendance</h2>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{showLiveAttendance.title} — {liveAttendance.length} joined</p>
                 </div>
-                <button onClick={() => setShowLiveAttendance(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <button onClick={() => setShowLiveAttendance(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
               <div className="p-5 max-h-96 overflow-y-auto">
                 {liveAttendance.length === 0 ? (
-                  <p className="text-center text-sm text-slate-400 py-8">No students have joined yet</p>
+                  <p className="text-center text-sm text-[hsl(var(--muted-foreground))] py-8">No students have joined yet</p>
                 ) : (
                   <div className="space-y-2">
                     {liveAttendance.map((att: any) => (
-                      <div key={att.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <div key={att.id} className="flex items-center gap-3 p-3 rounded-xl bg-[hsl(var(--muted))]/50 border border-[hsl(var(--border))]">
                         {att.user?.profile?.avatarUrl ? (
-                          <img src={att.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          <img src={att.user.profile.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-[hsl(var(--border))]" />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
                             {(att.user?.profile?.fullName || att.user?.email || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{att.user?.profile?.fullName || att.user?.email || 'Unknown'}</p>
-                          <p className="text-xs text-slate-400">{att.user?.profile?.instituteId || '—'}</p>
+                          <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">{att.user?.profile?.fullName || att.user?.email || 'Unknown'}</p>
+                          <p className="text-xs text-[hsl(var(--muted-foreground))]">{att.user?.profile?.instituteId || '—'}</p>
                         </div>
-                        <span className="text-xs text-slate-400 flex-shrink-0">
+                        <span className="text-xs text-[hsl(var(--muted-foreground))] flex-shrink-0">
                           {att.createdAt ? new Date(att.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
@@ -607,21 +682,21 @@ export default function AdminRecordingHistory() {
         </div>
       , document.body)}
 
-      {/* Watch History Modal */}
+      {/* ── Watch History Modal ── */}
       {watchHistoryRec && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setWatchHistoryRec(null)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setWatchHistoryRec(null)}>
           <div className="min-h-full flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col ring-1 ring-[hsl(var(--border))]" onClick={e => e.stopPropagation()}>
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--border))] flex-shrink-0">
                 <div>
-                  <h2 className="font-bold text-slate-800 text-lg">Watch History</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h2 className="font-bold text-[hsl(var(--foreground))] text-lg">Watch History</h2>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
                     {watchHistoryRec.title}
                     {watchHistoryData && ` — ${watchHistoryData.students?.length || 0} students`}
                   </p>
                 </div>
-                <button onClick={() => setWatchHistoryRec(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <button onClick={() => setWatchHistoryRec(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -629,25 +704,24 @@ export default function AdminRecordingHistory() {
               {watchHistoryLoading ? (
                 <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
               ) : !watchHistoryData ? (
-                <div className="text-center py-16 text-slate-400">Failed to load watch history</div>
+                <div className="text-center py-16 text-[hsl(var(--muted-foreground))]">Failed to load watch history</div>
               ) : (
-                /* ── Student List View ── */
                 <div className="flex-1 overflow-y-auto">
                   {/* Summary stats */}
                   {watchHistoryData.totals && (
-                    <div className="flex flex-wrap gap-3 px-6 py-3 bg-slate-50 border-b border-slate-100">
+                    <div className="flex flex-wrap gap-3 px-6 py-3 bg-[hsl(var(--muted))]/50 border-b border-[hsl(var(--border))]">
                       {[
-                        { label: 'Enrolled', value: watchHistoryData.totals.enrolled, color: 'text-blue-600 bg-blue-50 border-blue-200' },
-                        { label: 'Completed', value: watchHistoryData.totals.completed, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-                        { label: 'Incomplete', value: watchHistoryData.totals.incomplete, color: 'text-amber-600 bg-amber-50 border-amber-200' },
-                        { label: 'Not Viewed', value: watchHistoryData.totals.notViewed, color: 'text-slate-500 bg-slate-100 border-slate-200' },
+                        { label: 'Enrolled', value: watchHistoryData.totals.enrolled, color: 'text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20' },
+                        { label: 'Completed', value: watchHistoryData.totals.completed, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+                        { label: 'Incomplete', value: watchHistoryData.totals.incomplete, color: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                        { label: 'Not Viewed', value: watchHistoryData.totals.notViewed, color: 'text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] border-[hsl(var(--border))]' },
                       ].map(s => (
                         <span key={s.label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${s.color}`}>
                           <span className="font-bold">{s.value}</span> {s.label}
                         </span>
                       ))}
                       {watchHistoryData.recording?.duration && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border text-indigo-600 bg-indigo-50 border-indigo-200">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border-indigo-500/20">
                           Duration: {fmtDuration(watchHistoryData.recording.duration)}
                         </span>
                       )}
@@ -655,13 +729,13 @@ export default function AdminRecordingHistory() {
                   )}
 
                   {/* Search */}
-                  <div className="px-6 py-3 border-b border-slate-100">
+                  <div className="px-6 py-3 border-b border-[hsl(var(--border))]">
                     <input
                       type="text"
                       value={watchSearch}
                       onChange={e => setWatchSearch(e.target.value)}
                       placeholder="Search students..."
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 focus:bg-white transition"
+                      className="w-full px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-[hsl(var(--card))] transition"
                     />
                   </div>
 
@@ -680,30 +754,30 @@ export default function AdminRecordingHistory() {
                       .sort((a: any, b: any) => (b.totalWatchedSec || 0) - (a.totalWatchedSec || 0))
                       .map((student: any) => {
                         const attColor =
-                          student.attendanceStatus === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                          student.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-100 text-amber-700' :
-                          student.attendanceStatus === 'MANUAL' ? 'bg-blue-100 text-blue-700' :
-                          'bg-slate-100 text-slate-500';
+                          student.attendanceStatus === 'COMPLETED' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                          student.attendanceStatus === 'INCOMPLETE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                          student.attendanceStatus === 'MANUAL' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' :
+                          'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]';
                         const profileStatus = student.user?.profile?.status;
                         const profileColor =
-                          profileStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 border-green-200' :
-                          profileStatus === 'INACTIVE' ? 'bg-red-100 text-red-600 border-red-200' :
-                          profileStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                          profileStatus === 'OLD' ? 'bg-slate-100 text-slate-500 border-slate-200' : '';
+                          profileStatus === 'ACTIVE' ? 'bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/20' :
+                          profileStatus === 'INACTIVE' ? 'bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/20' :
+                          profileStatus === 'PENDING' ? 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/20' :
+                          profileStatus === 'OLD' ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))]' : '';
                         const payColor =
-                          student.paymentStatus === 'VERIFIED' ? 'text-emerald-600' :
-                          student.paymentStatus === 'PENDING' ? 'text-amber-500' :
-                          student.paymentStatus === 'REJECTED' ? 'text-red-500' :
-                          student.paymentStatus === 'FREE' ? 'text-blue-500' :
-                          'text-slate-400';
+                          student.paymentStatus === 'VERIFIED' ? 'text-emerald-600 dark:text-emerald-400' :
+                          student.paymentStatus === 'PENDING' ? 'text-amber-500 dark:text-amber-400' :
+                          student.paymentStatus === 'REJECTED' ? 'text-red-500 dark:text-red-400' :
+                          student.paymentStatus === 'FREE' ? 'text-blue-500 dark:text-blue-400' :
+                          'text-[hsl(var(--muted-foreground))]';
                         return (
                           <button
                             key={student.userId}
                             onClick={() => setStudentPopup({ recordingId: watchHistoryRec.id, userId: student.userId })}
-                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition text-left group"
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[hsl(var(--muted))]/70 border border-transparent hover:border-[hsl(var(--border))] transition text-left group"
                           >
                             {student.user?.profile?.avatarUrl ? (
-                              <img src={student.user.profile.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                              <img src={student.user.profile.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-[hsl(var(--border))]" />
                             ) : (
                               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
                                 <span className="text-white font-bold text-[10px]">
@@ -713,7 +787,7 @@ export default function AdminRecordingHistory() {
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-semibold text-slate-800 truncate">{student.user?.profile?.fullName || student.user?.email || 'Unknown'}</p>
+                                <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">{student.user?.profile?.fullName || student.user?.email || 'Unknown'}</p>
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${attColor}`}>
                                   {student.attendanceStatus || 'NOT VIEWED'}
                                 </span>
@@ -724,7 +798,7 @@ export default function AdminRecordingHistory() {
                                 )}
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <p className="text-[11px] text-slate-400">{student.user?.profile?.instituteId || '—'}</p>
+                                <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{student.user?.profile?.instituteId || '—'}</p>
                                 <span className={`text-[10px] font-semibold ${payColor}`}>
                                   {student.paymentStatus === 'VERIFIED' ? '● Paid' :
                                    student.paymentStatus === 'FREE' ? '● Free' :
@@ -736,26 +810,26 @@ export default function AdminRecordingHistory() {
                             </div>
                             <div className="flex items-center gap-4 flex-shrink-0">
                               <div className="text-right">
-                                <p className="text-xs font-bold text-indigo-600">{fmtDuration(student.totalWatchedSec)}</p>
-                                <p className="text-[10px] text-slate-400">watch time</p>
+                                <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{fmtDuration(student.totalWatchedSec)}</p>
+                                <p className="text-[10px] text-[hsl(var(--muted-foreground))]">watch time</p>
                               </div>
                               <div className="text-right">
-                                <p className="text-xs font-bold text-slate-700">{student.sessionCount}</p>
-                                <p className="text-[10px] text-slate-400">session{student.sessionCount !== 1 ? 's' : ''}</p>
+                                <p className="text-xs font-bold text-[hsl(var(--foreground))]">{student.sessionCount}</p>
+                                <p className="text-[10px] text-[hsl(var(--muted-foreground))]">session{student.sessionCount !== 1 ? 's' : ''}</p>
                               </div>
                               {student.lastWatchedAt && (
                                 <div className="text-right hidden sm:block">
-                                  <p className="text-[11px] text-slate-500">{fmtDate(student.lastWatchedAt)}</p>
-                                  <p className="text-[10px] text-slate-400">last viewed</p>
+                                  <p className="text-[11px] text-[hsl(var(--foreground))]/70">{fmtDate(student.lastWatchedAt)}</p>
+                                  <p className="text-[10px] text-[hsl(var(--muted-foreground))]">last viewed</p>
                                 </div>
                               )}
-                              <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                              <svg className="w-4 h-4 text-[hsl(var(--muted-foreground))]/50 group-hover:text-indigo-500 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                             </div>
                           </button>
                         );
                       })}
                     {(watchHistoryData.students || []).length === 0 && (
-                      <p className="text-center text-sm text-slate-400 py-8">No students found for this recording</p>
+                      <p className="text-center text-sm text-[hsl(var(--muted-foreground))] py-8">No students found for this recording</p>
                     )}
                   </div>
                 </div>

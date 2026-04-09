@@ -114,7 +114,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 const STATUS_BADGE: Record<string,string> = {
-  ACTIVE:"bg-emerald-100 text-emerald-700",INACTIVE:"bg-slate-100 text-slate-500",PENDING:"bg-amber-100 text-amber-700",OLD:"bg-purple-100 text-purple-700"
+  ACTIVE:"bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",INACTIVE:"bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]",PENDING:"bg-amber-500/15 text-amber-600 dark:text-amber-400",OLD:"bg-purple-500/15 text-purple-600 dark:text-purple-400"
 };
 
 const IcDl = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>;
@@ -209,30 +209,34 @@ export default function AdminIdCards() {
   const inputCls = "w-full px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 outline-none transition";
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <div className="w-full space-y-6 animate-fade-in">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/25 flex-shrink-0">
-            <IcCard />
+      {/* ── Hero Banner ── */}
+      <div className="relative bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-2xl p-6 md:p-8 overflow-hidden">
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-indigo-500/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/30 to-blue-500/30 flex items-center justify-center flex-shrink-0 ring-2 ring-white/10">
+              <IcCard />
+            </div>
+            <div>
+              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-0.5">ID Card Manager</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">Student ID Cards</h1>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Student ID Cards</h1>
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Generate &amp; export student cards as PNG</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {selList.length > 0 && (
-            <button onClick={() => exportBulk(selList,"id_cards_selected")} disabled={exporting}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 shadow-lg shadow-emerald-500/20 transition-all">
-              <IcZip /> Export Selected ({selList.length})
+          <div className="flex flex-wrap gap-2">
+            {selList.length > 0 && (
+              <button onClick={() => exportBulk(selList,"id_cards_selected")} disabled={exporting}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 shadow-lg shadow-emerald-500/25 transition-all">
+                <IcZip /> Export Selected ({selList.length})
+              </button>
+            )}
+            <button onClick={() => exportBulk(filtered,"id_cards")} disabled={exporting||filtered.length===0}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:from-indigo-600 hover:to-blue-700 disabled:opacity-50 shadow-lg shadow-indigo-500/25 transition-all">
+              <IcDl /> Export All ({filtered.length})
             </button>
-          )}
-          <button onClick={() => exportBulk(filtered,"id_cards")} disabled={exporting||filtered.length===0}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 disabled:opacity-50 shadow-lg shadow-indigo-500/20 transition-all">
-            <IcDl /> Export All ({filtered.length})
-          </button>
+          </div>
         </div>
       </div>
 
@@ -363,11 +367,11 @@ export default function AdminIdCards() {
                     <td className="px-4 py-4" onClick={e=>e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5">
                         <button onClick={()=>openPreview(i)} title="Preview"
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${previewIdx===i?"bg-indigo-500 text-white":"bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-indigo-100 hover:text-indigo-600"}`}>
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${previewIdx===i?"bg-indigo-500 text-white":"bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400"}`}>
                           <IcEye />
                         </button>
                         <button onClick={()=>exportOne(s)} disabled={exporting} title="Download PNG"
-                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 hover:bg-blue-100 disabled:opacity-40 transition-all">
+                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-500 dark:text-blue-400 hover:bg-blue-500/20 disabled:opacity-40 transition-all">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                         </button>
                       </div>

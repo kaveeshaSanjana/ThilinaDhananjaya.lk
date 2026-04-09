@@ -194,36 +194,36 @@ export default function AdminInstituteSelect() {
   }
 
   return (
-    <div className="w-full px-4 sm:px-6 py-6 space-y-6 animate-fade-in">
+    <div className="w-full space-y-6 animate-fade-in">
       {showCreate && (
         <CreateInstituteModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />
       )}
 
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-          </div>
+      {/* ── Hero Banner ── */}
+      <div className="relative bg-gradient-to-r from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-2xl p-6 md:p-8 overflow-hidden">
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-indigo-500/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Admin Setup</p>
-            <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Select an Institute</h1>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Choose the institute you want to manage for this session. After selection, the existing pages will work as they do now.</p>
+            <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-1">Admin Setup</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">Select an Institute</h1>
+            <p className="text-slate-400 text-sm mt-1.5 max-w-md">Choose the institute you want to manage for this session.</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 text-white text-sm font-semibold hover:from-indigo-600 hover:to-blue-700 transition shadow-lg shadow-indigo-500/25 flex items-center gap-2 self-start sm:self-auto"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Create Institute
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-sm font-bold hover:from-indigo-700 hover:to-blue-700 shadow-lg shadow-indigo-500/20 transition"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          Create Institute
-        </button>
       </div>
 
       {institutes.length === 0 ? (
-        <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm p-8 sm:p-10 text-center space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-3xl bg-[hsl(var(--muted))] flex items-center justify-center">
-            <svg className="w-8 h-8 text-[hsl(var(--muted-foreground))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm p-8 sm:p-10 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center">
+            <svg className="w-7 h-7 text-indigo-500/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
           </div>
           <div>
             <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">No institute found</h2>
@@ -231,7 +231,7 @@ export default function AdminInstituteSelect() {
           </div>
         </div>
       ) : (
-        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(310px,370px))] justify-center sm:justify-start gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {institutes.map((institute, idx) => (
             <button
               key={institute.id}
@@ -240,22 +240,22 @@ export default function AdminInstituteSelect() {
                 select(institute.id);
                 navigate(redirect && redirect.startsWith('/') ? redirect : getInstituteAdminPath(institute.id));
               }}
-              className={`relative w-full max-w-[370px] flex flex-col rounded-xl bg-white bg-clip-border text-gray-700 shadow-md border border-slate-100 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg text-left ${
+              className={`group relative w-full flex flex-col rounded-2xl bg-[hsl(var(--card))] ring-1 ring-[hsl(var(--border))] shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl text-left ${
                 selected?.id === institute.id
-                  ? 'ring-2 ring-indigo-500/20 border-indigo-300'
-                  : ''
+                  ? 'ring-2 ring-indigo-500/40'
+                  : 'hover:ring-[hsl(var(--ring))]/30'
               }`}
             >
-              <div className={`relative mx-3 mt-3 h-36 overflow-hidden rounded-xl bg-clip-border text-white shadow-lg shadow-blue-gray-500/30 bg-gradient-to-r ${gradients[idx % gradients.length]}`}>
+              <div className={`relative mx-3 mt-3 h-32 overflow-hidden rounded-xl text-white shadow-lg bg-gradient-to-r ${gradients[idx % gradients.length]}`}>
                 {institute.logoUrl ? (
                   <img src={institute.logoUrl} alt={institute.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-white/30 text-7xl font-black">{institute.name?.[0]?.toUpperCase() || 'I'}</span>
+                    <span className="text-white/20 text-6xl font-black">{institute.name?.[0]?.toUpperCase() || 'I'}</span>
                   </div>
                 )}
                 {institute.isOwner && (
-                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide bg-white/90 text-indigo-700">
+                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide bg-white/90 text-indigo-700 backdrop-blur-sm">
                     Owner
                   </span>
                 )}
@@ -266,29 +266,29 @@ export default function AdminInstituteSelect() {
                 )}
               </div>
 
-              <div className="p-4">
-                <h5 className="mb-1.5 block text-lg font-semibold leading-snug tracking-normal text-slate-900 truncate">
+              <div className="p-4 flex-1 flex flex-col">
+                <h5 className="mb-1 text-base font-bold text-[hsl(var(--foreground))] truncate">
                   {institute.name}
                 </h5>
-                <p className="block text-sm font-light leading-relaxed text-slate-600 line-clamp-2 min-h-[40px]">
-                  {institute.description || institute.address || institute.phone || institute.slug || 'No institute details available yet.'}
+                <p className="text-sm text-[hsl(var(--muted-foreground))] line-clamp-2 min-h-[36px]">
+                  {institute.description || institute.address || institute.phone || institute.slug || 'No details available.'}
                 </p>
-                <div className="mt-2 flex items-center justify-between text-xs gap-2">
-                  <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold uppercase tracking-wide truncate max-w-[58%]">
+                <div className="mt-3 flex items-center justify-between text-xs gap-2">
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold uppercase tracking-wide truncate max-w-[55%]">
                     {institute.slug}
                   </span>
-                  <span className="font-bold text-emerald-600">{institute._count?.classes ?? 0} Classes</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{institute._count?.classes ?? 0} Classes</span>
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                  <span className="px-2.5 py-1 rounded-md bg-slate-100 font-semibold text-slate-600">
+                <div className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+                  <span className="px-2 py-0.5 rounded-md bg-[hsl(var(--muted))] font-semibold text-[hsl(var(--foreground))]/80">
                     {institute._count?.users ?? 0} students
                   </span>
                   {institute.phone && <span className="truncate">{institute.phone}</span>}
                 </div>
               </div>
 
-              <div className="p-4 pt-0 mt-auto">
-                <span className="block w-full select-none rounded-lg bg-blue-500 py-2.5 px-4 text-center align-middle text-[11px] font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/35">
+              <div className="p-3 pt-0 mt-auto">
+                <span className="block w-full select-none rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 py-2.5 text-center text-[11px] font-bold uppercase text-white shadow-md shadow-indigo-500/20 group-hover:shadow-lg group-hover:from-indigo-600 group-hover:to-blue-700 transition-all">
                   Select Institute
                 </span>
               </div>

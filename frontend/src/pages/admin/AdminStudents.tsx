@@ -449,9 +449,17 @@ export default function AdminStudents() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSave} className="overflow-y-auto max-h-[80vh]">
+            <form onSubmit={handleSave} autoComplete="off" className="overflow-y-auto max-h-[80vh]">
             <div className="p-6 space-y-5">
               {error && <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"><svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
+
+              {/* Prevent browser credential autofill in create mode */}
+              {!editingStudent && (
+                <div className="hidden" aria-hidden="true">
+                  <input type="text" name="username" autoComplete="username" />
+                  <input type="password" name="current-password" autoComplete="current-password" />
+                </div>
+              )}
 
               {/* Account */}
               <div className="bg-slate-50 rounded-2xl p-4 space-y-4">
@@ -473,12 +481,12 @@ export default function AdminStudents() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-slate-600 mb-1.5">Email <span className="text-red-500">*</span></label>
-                      <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="student@email.com" required
+                      <input type="email" name="student-email-create" autoComplete="off" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="student@email.com" required
                         className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-600 mb-1.5">Password <span className="text-red-500">*</span></label>
-                      <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 chars" required
+                      <input type="password" name="student-password-create" autoComplete="new-password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 chars" required
                         className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>

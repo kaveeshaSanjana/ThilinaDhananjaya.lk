@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { useInstitute } from '../../context/InstituteContext';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
@@ -19,30 +19,82 @@ const STAT_CARDS = [
   { key: 'recordings', label: 'Recordings', gradient: 'from-purple-500 to-purple-600', shadow: 'shadow-purple-500/25', icon: 'M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
 ];
 
+const getClassInstituteId = (cls: any): string =>
+  cls?.instituteId || cls?.institute?.id || cls?.institute?.instituteId || '';
+
+const getRecordingInstituteId = (rec: any): string =>
+  rec?.instituteId || rec?.month?.instituteId || rec?.month?.class?.instituteId || rec?.month?.class?.institute?.id || '';
+
+const getRecordingClassId = (rec: any): string =>
+  rec?.classId || rec?.month?.classId || rec?.month?.class?.id || '';
+
+const getPaymentInstituteId = (p: any): string =>
+  p?.instituteId || p?.month?.instituteId || p?.month?.class?.instituteId || p?.month?.class?.institute?.id || '';
+
 export default function AdminDashboard() {
   const { selected } = useInstitute();
+  const { instituteId: routeInstituteId } = useParams<{ instituteId: string }>();
+  const effectiveId = routeInstituteId || selected?.id;
+
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [classList, setClassList] = useState<any[]>([]);
+  const [instituteName, setInstituteName] = useState('');
   const [loading, setLoading] = useState(true);
-  const quickLinks = QUICK_LINKS.map((item) => ({ ...item, to: getInstituteAdminPath(selected?.id, item.to.replace('/admin', '')) }));
+  const quickLinks = QUICK_LINKS.map((item) => ({ ...item, to: getInstituteAdminPath(effectiveId, item.to.replace('/admin', '')) }));
 
   useEffect(() => {
-    if (!selected?.id) {
+    if (!effectiveId) {
       setCounts({ students: 0, classes: 0, payments: 0, recordings: 0 });
       setClassList([]);
+      setInstituteName('');
       setLoading(false);
       return;
     }
 
     setLoading(true);
     Promise.all([
-      api.get('/stats/dashboard').then(r => r.data).catch(() => ({ students: 0, classes: 0, pendingPayments: 0, recordings: 0 })),
-      api.get('/classes').then(r => r.data || []).catch(() => []),
-    ]).then(([stats, classes]) => {
-      setClassList(classes);
-      setCounts({ students: stats.students, classes: stats.classes, payments: stats.pendingPayments, recordings: stats.recordings });
+      // Institute detail → _count.users (students) + _count.classes
+      api.get(`/institutes/${effectiveId}`).then(r => r.data).catch(() => null),
+      // Institute classes, payments, recordings (server + client filter)
+      api.get('/classes', { params: { instituteId: effectiveId } }).then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+      api.get('/payments/all', { params: { instituteId: effectiveId } }).then(r => Array.isArray(r.data) ? r.data : (r.data?.data || [])).catch(() => []),
+      api.get('/recordings', { params: { limit: 500, instituteId: effectiveId } }).then(r => {
+        const raw = r.data;
+        return raw?.data ? raw.data : Array.isArray(raw) ? raw : [];
+      }).catch(() => []),
+    ]).then(([instituteDetail, rawClasses, rawPayments, rawRecordings]) => {
+      const hasClassInstituteMetadata = rawClasses.some((c: any) => Boolean(getClassInstituteId(c)));
+      const scopedClasses = hasClassInstituteMetadata
+        ? rawClasses.filter((c: any) => getClassInstituteId(c) === effectiveId)
+        : rawClasses;
+
+      const allowedClassIds = new Set(scopedClasses.map((c: any) => c.id));
+
+      const pendingPayments = rawPayments.filter((p: any) => {
+        if (p.status !== 'PENDING') return false;
+        const pid = getPaymentInstituteId(p);
+        if (pid) return pid === effectiveId;
+        return true;
+      }).length;
+
+      const scopedRecordings = rawRecordings.filter((rec: any) => {
+        const rid = getRecordingInstituteId(rec);
+        if (rid) return rid === effectiveId;
+        const classId = getRecordingClassId(rec);
+        if (classId && allowedClassIds.size > 0) return allowedClassIds.has(classId);
+        return true;
+      });
+
+      setClassList(scopedClasses);
+      setInstituteName(instituteDetail?.name || '');
+      setCounts({
+        students: instituteDetail?._count?.users ?? 0,
+        classes:  instituteDetail?._count?.classes ?? scopedClasses.length,
+        payments: pendingPayments,
+        recordings: scopedRecordings.length,
+      });
     }).finally(() => setLoading(false));
-  }, [selected?.id]);
+  }, [effectiveId]);
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -54,7 +106,7 @@ export default function AdminDashboard() {
           <p className="text-blue-300 text-xs font-semibold uppercase tracking-widest mb-1">Admin Panel</p>
           <h1 className="text-2xl md:text-3xl font-bold text-white">LMS Dashboard</h1>
           <p className="text-slate-400 text-sm mt-1.5 max-w-md">Monitor your selected institute — students, classes, payments, and recordings at a glance.</p>
-          {selected?.name && <p className="text-white/70 text-sm mt-2 font-semibold">{selected.name}</p>}
+          {(instituteName || selected?.name) && <p className="text-white/70 text-sm mt-2 font-semibold">{instituteName || selected?.name}</p>}
         </div>
       </div>
 
@@ -95,7 +147,7 @@ export default function AdminDashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-[hsl(var(--foreground))] uppercase tracking-wide">Available Classes</h2>
-          <Link to={getInstituteAdminPath(selected?.id, '/classes')} className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">View all</Link>
+          <Link to={getInstituteAdminPath(effectiveId, '/classes')} className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition">View all</Link>
         </div>
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -110,7 +162,7 @@ export default function AdminDashboard() {
             {classList.slice(0, 6).map((cls: any) => (
               <Link
                 key={cls.id}
-                to={getInstituteAdminPath(selected?.id, `/classes/${cls.id}`)}
+                to={getInstituteAdminPath(effectiveId, `/classes/${cls.id}`)}
                 className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group"
               >
                 <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate group-hover:text-blue-600 transition">{cls.name}</p>
