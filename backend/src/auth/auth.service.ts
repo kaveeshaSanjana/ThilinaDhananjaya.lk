@@ -50,7 +50,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    const isPasswordValid = await this.verifyPassword(dto.password, user);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -122,6 +122,30 @@ export class AuthService {
 
   private generateAccessToken(userId: string, role: string): string {
     return this.jwtService.sign({ sub: userId, role });
+  }
+
+  /**
+   * Supports legacy plain-text passwords while migrating them to bcrypt.
+   */
+  private async verifyPassword(plainPassword: string, user: { id: string; password: string | null }): Promise<boolean> {
+    const storedPassword = user.password ?? '';
+    const isBcryptHash = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(storedPassword);
+
+    if (isBcryptHash) {
+      return bcrypt.compare(plainPassword, storedPassword);
+    }
+
+    if (storedPassword !== plainPassword) {
+      return false;
+    }
+
+    const hashedPassword = await bcrypt.hash(plainPassword, 12);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    return true;
   }
 
   private async generateRefreshToken(userId: string): Promise<string> {
