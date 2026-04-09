@@ -13,6 +13,8 @@ export class PaymentsService {
     type: PaymentType;
     reason?: string;
     slipUrl: string;
+    paymentMethod?: string;
+    paymentPortion?: string;
   }) {
     // Resolve the class monthlyFee to auto-fill amount
     const month = await this.prisma.month.findUnique({
@@ -31,6 +33,8 @@ export class PaymentsService {
         reason: data.reason,
         slipUrl: data.slipUrl,
         amount,
+        paymentMethod: data.paymentMethod as any,
+        paymentPortion: data.paymentPortion as any,
       },
       include: { month: { include: { class: true } } },
     });
@@ -98,7 +102,7 @@ export class PaymentsService {
   }
 
   /** Admin: verify a slip — if MONTHLY, this unlocks the month for the student */
-  async verifySlip(slipId: string, transactionId?: string, adminNote?: string, paidDate?: string) {
+  async verifySlip(slipId: string, transactionId?: string, adminNote?: string, paidDate?: string, paymentMethod?: string, paymentPortion?: string) {
     const slip = await this.prisma.paymentSlip.findUnique({
       where: { id: slipId },
       include: {
@@ -129,7 +133,7 @@ export class PaymentsService {
 
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
-      data: { status: 'VERIFIED', transactionId, adminNote, amount, paidDate: resolvedPaidDate },
+      data: { status: 'VERIFIED', transactionId, adminNote, amount, paidDate: resolvedPaidDate, paymentMethod: paymentMethod as any, paymentPortion: paymentPortion as any },
       include: { month: { include: { class: true } }, user: { include: { profile: true } } },
     });
   }

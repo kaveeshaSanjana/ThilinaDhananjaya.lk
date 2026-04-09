@@ -58,7 +58,7 @@ export class PaymentsController {
   @Roles('ADMIN')
   @Patch(':id/verify')
   verifySlip(@Param('id') id: string, @Body() body: VerifySlipDto) {
-    return this.paymentsService.verifySlip(id, body.transactionId, body.adminNote, body.paidDate);
+    return this.paymentsService.verifySlip(id, body.transactionId, body.adminNote, body.paidDate, body.paymentMethod as any, body.paymentPortion as any);
   }
 
   /** Admin: reject slip */

@@ -86,7 +86,7 @@ export default function AdminSlips() {
 
   // Verify / Reject modals for online slips
   const [verifyModal, setVerifyModal] = useState<{ id: string; studentName: string } | null>(null);
-  const [verifyForm, setVerifyForm] = useState({ transactionId: '', adminNote: '' });
+  const [verifyForm, setVerifyForm] = useState({ transactionId: '', adminNote: '', paymentMethod: '', paymentPortion: '' });
   const [rejectModal, setRejectModal] = useState<{ id: string; studentName: string } | null>(null);
   const [rejectForm, setRejectForm] = useState({ rejectReason: '', adminNote: '' });
   const [actionError, setActionError] = useState('');
@@ -101,7 +101,7 @@ export default function AdminSlips() {
 
   const openVerify = (p: any) => {
     setVerifyModal({ id: p.id, studentName: p.user?.profile?.fullName || p.user?.email || 'Student' });
-    setVerifyForm({ transactionId: '', adminNote: '' });
+    setVerifyForm({ transactionId: '', adminNote: '', paymentMethod: p.paymentMethod || '', paymentPortion: p.paymentPortion || '' });
     setActionError('');
     setPreview(null);
   };
@@ -113,11 +113,15 @@ export default function AdminSlips() {
   };
   const submitVerify = async () => {
     if (!verifyModal) return;
+    if (!verifyForm.paymentMethod) { setActionError('Please select a payment method (Online or Physical)'); return; }
+    if (!verifyForm.paymentPortion) { setActionError('Please select a payment amount (Full or Half)'); return; }
     setActingId(verifyModal.id); setActionError('');
     try {
       await api.patch(`/payments/${verifyModal.id}/verify`, {
         transactionId: verifyForm.transactionId.trim() || undefined,
         adminNote: verifyForm.adminNote.trim() || undefined,
+        paymentMethod: verifyForm.paymentMethod,
+        paymentPortion: verifyForm.paymentPortion,
       });
       setVerifyModal(null); load();
     } catch (e: any) { setActionError(e.response?.data?.message || 'Failed to verify slip'); }
@@ -616,6 +620,44 @@ export default function AdminSlips() {
             </div>
             <div className="p-5 space-y-3">
               {actionError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Method <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'ONLINE', label: 'Online', desc: 'Bank / online transfer' },
+                    { value: 'PHYSICAL', label: 'Physical', desc: 'Cash / in-person' },
+                  ].map(opt => (
+                    <button key={opt.value} type="button" onClick={() => setVerifyForm(p => ({ ...p, paymentMethod: opt.value }))}
+                      className={`flex flex-col items-start gap-0.5 p-3 rounded-xl border-2 transition text-left ${
+                        verifyForm.paymentMethod === opt.value
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-blue-300'
+                      }`}>
+                      <span className={`text-xs font-bold ${verifyForm.paymentMethod === opt.value ? 'text-blue-700' : 'text-slate-700'}`}>{opt.label}</span>
+                      <span className="text-[10px] text-slate-400">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Amount <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'FULL', label: 'Full Payment', desc: 'Full monthly fee' },
+                    { value: 'HALF', label: 'Half Payment', desc: 'Half of monthly fee' },
+                  ].map(opt => (
+                    <button key={opt.value} type="button" onClick={() => setVerifyForm(p => ({ ...p, paymentPortion: opt.value }))}
+                      className={`flex flex-col items-start gap-0.5 p-3 rounded-xl border-2 transition text-left ${
+                        verifyForm.paymentPortion === opt.value
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 hover:border-emerald-300'
+                      }`}>
+                      <span className={`text-xs font-bold ${verifyForm.paymentPortion === opt.value ? 'text-emerald-700' : 'text-slate-700'}`}>{opt.label}</span>
+                      <span className="text-[10px] text-slate-400">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Transaction ID <span className="text-slate-400 font-normal">(optional)</span></label>
                 <input value={verifyForm.transactionId} onChange={e => setVerifyForm(p => ({ ...p, transactionId: e.target.value }))} placeholder="e.g. TXN123456" className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />

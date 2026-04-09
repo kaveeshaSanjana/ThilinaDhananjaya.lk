@@ -12,6 +12,16 @@ enum ManualPaymentStatus {
   UNPAID = 'UNPAID',
 }
 
+enum PaymentMethod {
+  ONLINE = 'ONLINE',
+  PHYSICAL = 'PHYSICAL',
+}
+
+enum PaymentPortion {
+  FULL = 'FULL',
+  HALF = 'HALF',
+}
+
 export class SubmitSlipDto {
   @IsString()
   @IsNotEmpty()
@@ -27,6 +37,14 @@ export class SubmitSlipDto {
   @IsString()
   @IsNotEmpty()
   slipUrl: string;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(PaymentPortion)
+  paymentPortion?: PaymentPortion;
 }
 
 export class AdminNoteDto {
@@ -51,6 +69,14 @@ export class VerifySlipDto {
   @IsOptional()
   @IsDateString()
   paidDate?: string;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(PaymentPortion)
+  paymentPortion?: PaymentPortion;
 }
 
 export class RejectSlipDto {

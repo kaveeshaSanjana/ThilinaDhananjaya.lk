@@ -8,7 +8,7 @@ export default function PaymentSubmitPage() {
   const { instituteId } = useParams();
   const [classes, setClasses] = useState<any[]>([]);
   const [months, setMonths] = useState<any[]>([]);
-  const [form, setForm] = useState({ classId: '', monthId: '', slipImage: '' });
+  const [form, setForm] = useState({ classId: '', monthId: '', slipImage: '', paymentMethod: '', paymentPortion: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -49,6 +49,8 @@ export default function PaymentSubmitPage() {
         monthId: form.monthId,
         type: 'MONTHLY',
         slipUrl: form.slipImage,
+        paymentMethod: form.paymentMethod || undefined,
+        paymentPortion: form.paymentPortion || undefined,
       });
       setSuccess(true);
       setTimeout(() => navigate(getInstitutePath(instituteId, '/payments/my')), 2000);
@@ -98,6 +100,51 @@ export default function PaymentSubmitPage() {
               <option value="">{form.classId ? 'Select a month' : 'Select a class first'}</option>
               {months.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">Payment Method <span className="text-red-500">*</span></label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'ONLINE', label: 'Online Payment', desc: 'Bank transfer / online banking', icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                )},
+                { value: 'PHYSICAL', label: 'Physical Payment', desc: 'Cash / in-person payment', icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                )},
+              ].map(opt => (
+                <button key={opt.value} type="button" onClick={() => update('paymentMethod', opt.value)}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-xl border-2 transition text-left ${
+                    form.paymentMethod === opt.value
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-[hsl(var(--border))] hover:border-blue-300 bg-[hsl(var(--card))]'
+                  }`}>
+                  <span className={form.paymentMethod === opt.value ? 'text-blue-600' : 'text-slate-500'}>{opt.icon}</span>
+                  <span className={`text-sm font-semibold ${form.paymentMethod === opt.value ? 'text-blue-700' : 'text-[hsl(var(--foreground))]'}`}>{opt.label}</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+            <input type="text" required value={form.paymentMethod} onChange={() => {}} className="sr-only" tabIndex={-1} aria-hidden="true" />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">Payment Amount <span className="text-red-500">*</span></label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'FULL', label: 'Full Payment', desc: 'Pay the full monthly fee' },
+                { value: 'HALF', label: 'Half Payment', desc: 'Pay half of the monthly fee' },
+              ].map(opt => (
+                <button key={opt.value} type="button" onClick={() => update('paymentPortion', opt.value)}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-xl border-2 transition text-left ${
+                    form.paymentPortion === opt.value
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-[hsl(var(--border))] hover:border-emerald-300 bg-[hsl(var(--card))]'
+                  }`}>
+                  <span className={`text-sm font-semibold ${form.paymentPortion === opt.value ? 'text-emerald-700' : 'text-[hsl(var(--foreground))]'}`}>{opt.label}</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+            <input type="text" required value={form.paymentPortion} onChange={() => {}} className="sr-only" tabIndex={-1} aria-hidden="true" />
           </div>
           <div>
             <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">Payment slip</label>
