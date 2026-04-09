@@ -209,7 +209,7 @@ export default function AdminIdCards() {
   const inputCls = "w-full px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 outline-none transition";
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -288,7 +288,7 @@ export default function AdminIdCards() {
       </div>
 
       {/* Table + Preview */}
-      <div className={`flex flex-col ${previewIdx!==null?"xl:flex-row":""} gap-6 items-start`}>
+      <div className={`flex flex-col ${previewIdx!==null?"xl:flex-row":""} gap-8 items-start`}>
 
         {/* Table */}
         <div className={`${previewIdx!==null?"xl:flex-1":"w-full"} rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-sm overflow-hidden`}>
@@ -303,14 +303,14 @@ export default function AdminIdCards() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)]">
-                  <th className="px-4 py-3 w-10"><input type="checkbox" checked={selectedIds.size===filtered.length&&filtered.length>0} onChange={toggleAll} className="rounded border-[hsl(var(--border))]" /></th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">#</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Student</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">ID</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider hidden sm:table-cell">Barcode</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider hidden lg:table-cell">Classes</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3.5 w-10"><input type="checkbox" checked={selectedIds.size===filtered.length&&filtered.length>0} onChange={toggleAll} className="rounded border-[hsl(var(--border))]" /></th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">#</th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Student</th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">ID</th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider hidden sm:table-cell">Barcode</th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider hidden lg:table-cell">Classes</th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,11 +335,11 @@ export default function AdminIdCards() {
                       ${selectedIds.has(s.userId)?"bg-indigo-500/5":"hover:bg-[hsl(var(--muted)/0.3)]"}
                       ${previewIdx===i?"ring-1 ring-inset ring-indigo-500/40 bg-indigo-500/5":""}`}
                     onClick={()=>openPreview(i)}>
-                    <td className="px-4 py-3" onClick={e=>e.stopPropagation()}>
+                    <td className="px-4 py-4" onClick={e=>e.stopPropagation()}>
                       <input type="checkbox" checked={selectedIds.has(s.userId)} onChange={()=>toggleSelect(s.userId)} className="rounded border-[hsl(var(--border))]" />
                     </td>
-                    <td className="px-4 py-3 text-xs text-[hsl(var(--muted-foreground))] tabular-nums">{i+1}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 text-xs text-[hsl(var(--muted-foreground))] tabular-nums">{i+1}</td>
+                    <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 overflow-hidden ring-2 ring-[hsl(var(--card))]">
                           {s.avatarUrl ? <img src={s.avatarUrl} alt="" className="w-8 h-8 object-cover" /> : s.fullName.split(" ").map((p:string)=>p[0]).slice(0,2).join("").toUpperCase()}
@@ -350,17 +350,17 @@ export default function AdminIdCards() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3"><span className="font-mono text-xs font-bold text-indigo-500">{s.instituteId}</span></td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
+                    <td className="px-4 py-4"><span className="font-mono text-xs font-bold text-indigo-500">{s.instituteId}</span></td>
+                    <td className="px-4 py-4 hidden sm:table-cell">
                       {s.barcodeId ? <span className="font-mono text-xs text-[hsl(var(--foreground))]">{s.barcodeId}</span> : <span className="text-[11px] italic text-[hsl(var(--muted-foreground))]">None</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${STATUS_BADGE[s.status]||STATUS_BADGE.ACTIVE}`}>{s.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-[hsl(var(--muted-foreground))] hidden lg:table-cell max-w-[140px] truncate">
+                    <td className="px-4 py-4 text-xs text-[hsl(var(--muted-foreground))] hidden lg:table-cell max-w-[140px] truncate">
                       {s.classes.map(c=>c.name).join(", ")||"—"}
                     </td>
-                    <td className="px-4 py-3" onClick={e=>e.stopPropagation()}>
+                    <td className="px-4 py-4" onClick={e=>e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5">
                         <button onClick={()=>openPreview(i)} title="Preview"
                           className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${previewIdx===i?"bg-indigo-500 text-white":"bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-indigo-100 hover:text-indigo-600"}`}>
@@ -381,7 +381,7 @@ export default function AdminIdCards() {
 
         {/* Preview panel */}
         {previewIdx!==null && filtered[previewIdx] && (
-          <div ref={previewRef} className="xl:w-[400px] xl:flex-shrink-0 rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-sm overflow-hidden xl:sticky xl:top-4">
+          <div ref={previewRef} className="xl:w-[380px] xl:flex-shrink-0 rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-sm overflow-hidden xl:sticky xl:top-4">
             <div className="px-5 py-3.5 border-b border-[hsl(var(--border))] flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Card Preview</p>

@@ -91,6 +91,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 .animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
 
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee var(--marquee-speed, 25s) linear infinite; }
+
 .skeleton {
   background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--background)) 50%, hsl(var(--muted)) 75%);
   background-size: 200% 100%;

@@ -105,11 +105,8 @@ function AppRoutes() {
       <Route path="live/:token" element={<LiveJoinPage />} />
       <Route path="lecture-live/:token" element={<LectureLiveJoinPage />} />
 
-      {/* Public landing page for non-logged-in users */}
-      {!user && <Route path="/" element={<LandingPage />} />}
-
       <Route path="/" element={<Layout />}>
-        <Route index element={<ClassesPage />} />
+        <Route index element={user ? <ClassesPage /> : <LandingPage />} />
         <Route path="institute/:instituteId" element={<ClassesPage />} />
         <Route path="classes" element={<ClassesPage />} />
         <Route path="institute/:instituteId/classes" element={<ClassesPage />} />

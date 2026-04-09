@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
 import { getInstituteAdminPath, getInstitutePath, replaceInstituteAdminPath } from '../lib/instituteRoutes';
+import logoImg from '../assets/logo.png';
 
 /* -------- Sidebar Nav Item -------- */
 function NavItem({ to, icon, label, badge, onClick, exact }: { to: string; icon: React.ReactNode; label: string; badge?: number; onClick?: () => void; exact?: boolean }) {
@@ -131,6 +132,10 @@ export default function Layout() {
 
   // ---------- PUBLIC LAYOUT (no sidebar) ----------
   if (!user) {
+    const isLandingPage = location.pathname === '/';
+    if (isLandingPage) {
+      return <Outlet />;
+    }
     return (
       <div className="min-h-screen bg-[hsl(var(--background))] transition-colors duration-300">
         {/* Top navbar for public */}
@@ -138,11 +143,7 @@ export default function Layout() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
             {/* Brand */}
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-md shadow-[hsl(var(--primary)/0.2)]">
-                <svg className="w-4.5 h-4.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
-                </svg>
-              </div>
+              <img src={logoImg} alt="Eazy English" className="h-10 w-10 object-contain" />
               <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
             </Link>
 
@@ -194,11 +195,7 @@ export default function Layout() {
       {/* Sidebar Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[hsl(var(--border))]">
         <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-md shadow-[hsl(var(--primary)/0.2)]">
-            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
-            </svg>
-          </div>
+          <img src={logoImg} alt="Eazy English" className="h-8 w-8 object-contain" />
           <span className="text-[13px] font-bold text-[hsl(var(--foreground))] leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
         </Link>
         <div className="flex items-center gap-0.5">
@@ -341,19 +338,19 @@ export default function Layout() {
 
       {/* Bottom: User profile + Logout */}
       <div className="px-4 py-4 border-t border-[hsl(var(--border))]">
-        <div className="flex items-center gap-3 mb-3">
+        <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} className="flex items-center gap-3 mb-3 rounded-xl px-2 py-2 -mx-2 hover:bg-[hsl(var(--muted))] transition-all duration-200 cursor-pointer group">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0 ring-2 ring-[hsl(var(--card))] shadow-md">
             <span className="text-white text-xs font-bold">{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate uppercase tracking-wide leading-tight">
+            <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate uppercase tracking-wide leading-tight group-hover:text-[hsl(var(--primary))] transition-colors">
               {user.profile?.fullName || user.email}
             </p>
             <p className="text-[10px] text-[hsl(var(--muted-foreground))] truncate mt-0.5">
               {user.role === 'ADMIN' ? 'Administrator' : 'Student'}
             </p>
           </div>
-        </div>
+        </Link>
         <button onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[hsl(var(--border))] text-[13px] font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--danger)/0.08)] hover:text-[hsl(var(--danger))] hover:border-[hsl(var(--danger)/0.2)] transition-all duration-200 bg-[hsl(var(--card))]">
           <span className="w-4 h-4 flex-shrink-0">{icons.logout}</span>
@@ -404,9 +401,10 @@ export default function Layout() {
             <button className="relative p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition lg:hidden">
               <span className="w-5 h-5 block">{icons.bell}</span>
             </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow">
+            <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')}
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow hover:ring-[hsl(var(--primary)/0.3)] transition-all cursor-pointer">
               <span className="text-white text-xs font-bold">{initials}</span>
-            </div>
+            </Link>
           </div>
         </header>
 
