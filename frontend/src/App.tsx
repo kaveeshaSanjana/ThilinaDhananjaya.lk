@@ -91,7 +91,14 @@ function AdminLegacyRedirect() {
 function AppRoutes() {
   const { user, loading } = useAuth();
 
-  if (loading) return <div className="flex justify-center items-center h-screen text-lg">Loading...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4" />
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
 
   return (
     <Routes>

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import teacherImg from '../assets/teacher.png';
+import logoImg from '../assets/logo.png';
 import classroomBg from '../assets/classroom-bg.png';
 
 /* ── Floating particles on right panel ── */
@@ -86,11 +87,9 @@ export default function LoginPage() {
 
           {/* ── Brand ── */}
           <div className="flex items-center gap-4 mb-10">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-xl shadow-[hsl(var(--primary)/0.25)] relative group">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-xl shadow-[hsl(var(--primary)/0.25)] p-1.5 relative group">
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-500" />
-              <svg className="w-7 h-7 text-white relative z-10" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z" />
-              </svg>
+              <img src={logoImg} alt="Eazy English" className="w-full h-full object-contain relative z-10" />
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-[hsl(var(--foreground))] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</h1>

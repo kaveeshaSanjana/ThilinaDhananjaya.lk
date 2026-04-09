@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .finally(() => setLoading(false));
     } else {
       // Try a silent refresh — maybe we have a valid refresh token cookie
-      api.post('/auth/refresh', {}, { timeout: 5000 })
+      api.post('/auth/refresh', {}, { timeout: 2000 })
         .then((res) => {
           sessionStorage.setItem('accessToken', res.data.accessToken);
           setToken(res.data.accessToken);
