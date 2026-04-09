@@ -51,26 +51,8 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  const configuredOrigins = (process.env.FRONTEND_URL || '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-  const defaultDevOrigins = ['http://localhost:5173', 'http://localhost:5174'];
-  const allowedOrigins = new Set([...configuredOrigins, ...defaultDevOrigins]);
-
   app.enableCors({
-    origin: (origin, callback) => {
-      const isLocalhostDevOrigin =
-        process.env.NODE_ENV !== 'production' &&
-        !!origin &&
-        /^http:\/\/localhost:\d+$/.test(origin);
-
-      if (!origin || allowedOrigins.has(origin) || isLocalhostDevOrigin) {
-        callback(null, true);
-      } else {
-        callback(null, false);
-      }
-    },
+    origin: true, // Allow all origins (public registration endpoint requires this)
     credentials: true,
   });
 
