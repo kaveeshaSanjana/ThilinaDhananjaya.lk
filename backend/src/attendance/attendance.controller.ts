@@ -409,4 +409,24 @@ export class AttendanceController {
   getClassStudentPayments(@Param('classId') classId: string) {
     return this.attendanceService.getClassStudentPayments(classId);
   }
+
+  /** Admin: get all dates that have at least one attendance record (for calendar) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/dates')
+  getClassAttendanceDates(@Param('classId') classId: string) {
+    return this.attendanceService.getClassAttendanceDates(classId);
+  }
+
+  /** Admin: close a class date — auto-marks all absent students */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/class/:classId/close-date/:date')
+  closeClassDate(
+    @Param('classId') classId: string,
+    @Param('date') date: string,
+    @Request() req: any,
+  ) {
+    return this.attendanceService.closeClassDate(classId, date, req.user.sub);
+  }
 }

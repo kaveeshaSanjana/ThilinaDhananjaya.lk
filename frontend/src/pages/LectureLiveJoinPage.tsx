@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
@@ -52,7 +52,10 @@ export default function LectureLiveJoinPage() {
   // Single error surface for both login and join errors
   const [stepError, setStepError] = useState('');
 
-  // Step covers full flow: idle â†’ signing-in â†’ joining â†’ done
+  // When true, show login form even if user is already logged in
+  const [useOtherAccount, setUseOtherAccount] = useState(false);
+
+  // Step covers full flow: idle → signing-in → joining → done
   type Step = 'idle' | 'signing-in' | 'joining' | 'done';
   const [step, setStep] = useState<Step>('idle');
 
@@ -62,10 +65,7 @@ export default function LectureLiveJoinPage() {
     meetingPassword?: string;
   } | null>(null);
 
-  // useRef flag prevents double-join on rerenders (avoids useState race)
-  const joinAttempted = useRef(false);
-
-  // â”€â”€ Fetch lecture from token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Fetch lecture from token ──────────────────────────────
   useEffect(() => {
     if (!token) return;
     api.get(`/lectures/live/${token}`)
@@ -91,15 +91,7 @@ export default function LectureLiveJoinPage() {
     }
   };
 
-  // â”€â”€ Auto-join when page opens with active session â”€â”€â”€â”€â”€
-  useEffect(() => {
-    if (authLoading || !user || !lecture || joinAttempted.current) return;
-    joinAttempted.current = true;
-    doJoin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, lecture]);
-
-  // â”€â”€ Login â†’ then immediately join (no useEffect relay) â”€
+  // ── Login → then immediately join (no useEffect relay) ──
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStepError('');
@@ -352,45 +344,60 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Idle: logged in ─── */}
-          {step === 'idle' && user && (
+          {/* ─── Idle: logged in → confirm identity ─── */}
+          {step === 'idle' && user && !useOtherAccount && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-xl font-bold text-slate-800 mb-1">Ready to join?</h2>
-                <p className="text-slate-500 text-sm">Your attendance will be marked when you click join.</p>
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Is this you?</h2>
+                <p className="text-slate-500 text-sm">Confirm your profile to mark attendance and join the lecture.</p>
               </div>
 
               {/* User card */}
-              <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg shadow-blue-500/30">
                   {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-800 truncate">
+                  <p className="font-bold text-slate-800 truncate text-base">
                     {(user as any).profile?.fullName || (user as any).email}
                   </p>
-                  <p className="text-sm text-slate-400">Signed in</p>
+                  <p className="text-sm text-blue-600 font-medium">Currently signed in</p>
                 </div>
+                <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </div>
 
               {stepError && (
                 <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600">{stepError}</div>
               )}
 
+              {/* Yes — join as this user */}
               <button
                 onClick={doJoin}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                {lectureState === 'live' ? 'Join Live Lecture' : lectureState === 'upcoming' ? 'Mark Attendance & Get Link' : 'Mark Attendance'}
+                Yes, that's me — {lectureState === 'live' ? 'Join Lecture' : lectureState === 'upcoming' ? 'Mark Attendance & Get Link' : 'Mark Attendance'}
+              </button>
+
+              {/* Not me */}
+              <button
+                onClick={() => { setUseOtherAccount(true); setStepError(''); }}
+                className="w-full py-3 rounded-2xl border-2 border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 hover:border-slate-300 transition flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Not me — use a different account
               </button>
             </div>
           )}
 
-          {/* ─── Idle: not logged in → login form ─── */}
-          {step === 'idle' && !user && (
+          {/* ─── Idle: not logged in (or chose different account) → login form ─── */}
+          {step === 'idle' && (!user || useOtherAccount) && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 mb-1">Sign in to join</h2>

@@ -293,7 +293,10 @@ export class AttendanceService {
       }),
       this.prisma.attendance.findMany({ where: { recordingId } }),
       this.prisma.watchSession.findMany({ where: { recordingId }, orderBy: { startedAt: 'desc' } }),
-      this.prisma.paymentSlip.findMany({ where: { monthId: recording.monthId } }),
+      this.prisma.paymentSlip.findMany({
+        where: { monthId: recording.monthId },
+        select: { id: true, userId: true, monthId: true, status: true, type: true, createdAt: true },
+      }),
     ]);
 
     const attMap = new Map<string, (typeof attendances)[0]>();
@@ -412,6 +415,7 @@ export class AttendanceService {
       }),
       this.prisma.paymentSlip.findFirst({
         where: { userId, monthId: recording.monthId, type: 'MONTHLY', status: 'VERIFIED' },
+        select: { id: true, status: true },
       }),
       this.prisma.user.findUnique({
         where: { id: userId },
@@ -427,6 +431,7 @@ export class AttendanceService {
       } else {
         const pending = await this.prisma.paymentSlip.findFirst({
           where: { userId, monthId: recording.monthId, type: 'MONTHLY' },
+          select: { id: true, status: true },
           orderBy: { createdAt: 'desc' },
         });
         paymentStatus = pending?.status || 'NOT_PAID';
@@ -921,6 +926,71 @@ export class AttendanceService {
   }
 
   /**
+   * Get all distinct dates that have at least one attendance record for a class.
+   * Used by the frontend calendar to highlight class-held days.
+   */
+  async getClassAttendanceDates(classId: string): Promise<string[]> {
+    const records = await this.prisma.classAttendance.findMany({
+      where: { classId },
+      select: { date: true },
+      distinct: ['date'],
+      orderBy: { date: 'asc' },
+    });
+    return records.map(r => r.date.toISOString().split('T')[0]);
+  }
+
+  /**
+   * Close a class date: mark all enrolled students who have NO record for that
+   * date as ABSENT. Returns the list of students marked absent.
+   */
+  async closeClassDate(classId: string, date: string, markedBy: string) {
+    const dateObj = new Date(date);
+
+    const [enrollments, existing] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { classId },
+        select: { userId: true },
+      }),
+      this.prisma.classAttendance.findMany({
+        where: { classId, date: dateObj },
+        select: { userId: true, status: true },
+      }),
+    ]);
+
+    const markedUserIds = new Set(existing.map(r => r.userId));
+    const absentUserIds = enrollments
+      .map(e => e.userId)
+      .filter(uid => !markedUserIds.has(uid));
+
+    if (absentUserIds.length === 0) {
+      return { marked: 0, absentStudents: [] };
+    }
+
+    await this.prisma.classAttendance.createMany({
+      data: absentUserIds.map(userId => ({
+        userId,
+        classId,
+        date: dateObj,
+        status: 'ABSENT' as ClassAttendanceStatus,
+        method: 'auto-close',
+        markedBy,
+      })),
+      skipDuplicates: true,
+    });
+
+    // Return the newly marked absent students with profile info
+    const absentStudents = await this.prisma.classAttendance.findMany({
+      where: { classId, date: dateObj, userId: { in: absentUserIds } },
+      include: {
+        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, phone: true } } } },
+      },
+      orderBy: { user: { profile: { fullName: 'asc' } } },
+    });
+
+    return { marked: absentUserIds.length, absentStudents };
+  }
+
+  /**
    * Get enrolled students for a class (for bulk attendance marking).
    */
   async getEnrolledStudentsForClass(classId: string) {
@@ -1266,6 +1336,7 @@ export class AttendanceService {
       }),
       this.prisma.paymentSlip.findMany({
         where: { monthId: { in: monthIds } },
+        select: { id: true, userId: true, monthId: true, status: true, type: true, createdAt: true },
       }),
     ]);
 
@@ -1419,7 +1490,10 @@ export class AttendanceService {
     const monthIds = months.map(m => m.id);
     const payments = await this.prisma.paymentSlip.findMany({
       where: { monthId: { in: monthIds } },
-      include: { month: { select: { id: true, name: true, year: true, month: true } } },
+      select: {
+        id: true, userId: true, monthId: true, status: true, type: true, createdAt: true, amount: true,
+        month: { select: { id: true, name: true, year: true, month: true } },
+      },
     });
 
     // Build student payment map

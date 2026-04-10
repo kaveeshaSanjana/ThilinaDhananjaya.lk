@@ -56,6 +56,8 @@ const icons = {
   login: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>,
   sun: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   moon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
+  materials: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
+  physAttend: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
 };
 
 export default function Layout() {
@@ -284,16 +286,23 @@ export default function Layout() {
               label="Live Lessons"
               exact
             />
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/media`)} icon={icons.materials} label="Materials" exact />
             {user?.role === 'ADMIN' && (
-              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Month Rec Attendance" exact />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Rec Attendance" exact />
+            )}
+            {user?.role === 'ADMIN' && (
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" exact />
             )}
             {user?.role === 'STUDENT' && (
               <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`)} icon={icons.attend} label="Rec Attendance" exact />
             )}
           </SideSection>
         ) : isClassDetail ? (
-          <SideSection label="Classes">
+          <SideSection label="Class">
             <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}`)} icon={icons.classes} label="Months" exact />
+            {user?.role === 'ADMIN' && (
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" />
+            )}
           </SideSection>
         ) : (
           <>

@@ -13,6 +13,7 @@ import { StatsModule } from './stats/stats.module';
 import { LecturesModule } from './lectures/lectures.module';
 import { InstituteModule } from './institutes/institutes.module';
 import { PublicModule } from './public/public.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { PublicModule } from './public/public.module';
     LecturesModule,
     InstituteModule,
     PublicModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

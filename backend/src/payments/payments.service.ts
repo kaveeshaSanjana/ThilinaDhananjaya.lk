@@ -44,7 +44,17 @@ export class PaymentsService {
   async getMyPayments(userId: string) {
     return this.prisma.paymentSlip.findMany({
       where: { userId },
-      include: { month: { include: { class: true } } },
+      select: {
+        id: true, userId: true, monthId: true, type: true, reason: true,
+        slipUrl: true, amount: true, paidDate: true, transactionId: true,
+        status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
+        month: {
+          select: {
+            id: true, name: true, year: true, month: true, status: true, monthlyFee: true,
+            class: { select: { id: true, name: true, subject: true, monthlyFee: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -85,11 +95,22 @@ export class PaymentsService {
     const [data, total] = await Promise.all([
       this.prisma.paymentSlip.findMany({
         where,
-        include: {
+        select: {
+          id: true, userId: true, monthId: true, type: true, reason: true,
+          slipUrl: true, amount: true, paidDate: true, transactionId: true,
+          status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
           user: {
-            include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } },
+            select: {
+              id: true, email: true,
+              profile: { select: { fullName: true, instituteId: true, avatarUrl: true } },
+            },
           },
-          month: { include: { class: { select: { id: true, name: true, subject: true } } } },
+          month: {
+            select: {
+              id: true, name: true, year: true, month: true,
+              class: { select: { id: true, name: true, subject: true } },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         take,
@@ -105,9 +126,10 @@ export class PaymentsService {
   async verifySlip(slipId: string, transactionId?: string, adminNote?: string, paidDate?: string, paymentMethod?: string, paymentPortion?: string) {
     const slip = await this.prisma.paymentSlip.findUnique({
       where: { id: slipId },
-      include: {
-        month: { include: { class: { select: { monthlyFee: true } } } },
-        user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
+      select: {
+        id: true, amount: true,
+        month: { select: { class: { select: { monthlyFee: true } } } },
+        user: { select: { email: true, profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
     });
     if (!slip) throw new NotFoundException('Payment slip not found');
@@ -116,7 +138,10 @@ export class PaymentsService {
     if (transactionId) {
       const existing = await this.prisma.paymentSlip.findFirst({
         where: { transactionId, NOT: { id: slipId } },
-        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
+        select: {
+          id: true,
+          user: { select: { email: true, profile: { select: { fullName: true, instituteId: true } } } },
+        },
       });
       if (existing) {
         const name = existing.user?.profile?.fullName || existing.user?.email || 'Unknown';
@@ -143,7 +168,12 @@ export class PaymentsService {
     return this.prisma.paymentSlip.update({
       where: { id: slipId },
       data: { status: 'REJECTED', rejectReason: rejectReason || 'Rejected by admin', adminNote },
-      include: { month: { include: { class: true } } },
+      select: {
+        id: true, userId: true, monthId: true, type: true, reason: true,
+        slipUrl: true, amount: true, paidDate: true, transactionId: true,
+        status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
+        month: { select: { id: true, classId: true, name: true, year: true, month: true, status: true, createdAt: true, updatedAt: true, class: true } },
+      },
     });
   }
 
@@ -151,7 +181,12 @@ export class PaymentsService {
   async getStudentPayments(userId: string) {
     return this.prisma.paymentSlip.findMany({
       where: { userId },
-      include: { month: { include: { class: true } } },
+      select: {
+        id: true, userId: true, monthId: true, type: true, reason: true,
+        slipUrl: true, amount: true, paidDate: true, transactionId: true,
+        status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
+        month: { select: { id: true, classId: true, name: true, year: true, month: true, status: true, createdAt: true, updatedAt: true, class: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -315,6 +350,7 @@ export class PaymentsService {
     // Find the most recent slip for this student+month
     const existingSlip = await this.prisma.paymentSlip.findFirst({
       where: { userId, monthId },
+      select: { id: true, amount: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -322,7 +358,12 @@ export class PaymentsService {
       const updated = await this.prisma.paymentSlip.update({
         where: { id: existingSlip.id },
         data: { status: slipStatus, adminNote, amount: existingSlip.amount ?? amount, paidDate: resolvedPaidDate },
-        include: { month: { include: { class: true } } },
+        select: {
+          id: true, userId: true, monthId: true, type: true, reason: true,
+          slipUrl: true, amount: true, paidDate: true, transactionId: true,
+          status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
+          month: { select: { id: true, classId: true, name: true, year: true, month: true, status: true, createdAt: true, updatedAt: true, class: true } },
+        },
       });
       return { paymentStatus: status, slip: updated };
     }
@@ -339,7 +380,12 @@ export class PaymentsService {
         status: slipStatus,
         adminNote: adminNote ?? `Manually marked as ${status} by admin`,
       },
-      include: { month: { include: { class: true } } },
+      select: {
+        id: true, userId: true, monthId: true, type: true, reason: true,
+        slipUrl: true, amount: true, paidDate: true, transactionId: true,
+        status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
+        month: { select: { id: true, classId: true, name: true, year: true, month: true, status: true, createdAt: true, updatedAt: true, class: true } },
+      },
     });
     return { paymentStatus: status, slip: created };
   }

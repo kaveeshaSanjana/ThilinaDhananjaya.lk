@@ -209,7 +209,238 @@ function CreateRecordingModal({
     document.body
   );
 }
+/* ─── Edit Recording Modal ─────────────────────────────────── */
+function EditRecordingModal({
+  rec,
+  onClose,
+  onUpdated,
+}: {
+  rec: any;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const [form, setForm] = useState({
+    title:          String(rec.title        ?? ''),
+    description:    String(rec.description  ?? ''),
+    videoUrl:       String(rec.videoUrl     ?? ''),
+    videoType:      String(rec.videoType    ?? 'OTHER'),
+    thumbnail:      String(rec.thumbnail    ?? ''),
+    topic:          String(rec.topic        ?? ''),
+    icon:           String(rec.icon         ?? ''),
+    materials:      String(rec.materials    ?? ''),
+    duration:       rec.duration != null ? String(rec.duration) : '',
+    status:         String(rec.status       ?? 'PAID_ONLY'),
+    order:          rec.order    != null ? String(rec.order)    : '',
+    welcomeMessage: String(rec.welcomeMessage ?? ''),
+  });
+  const [saving, setSaving]               = useState(false);
+  const [err, setErr]                     = useState('');
+  const [uploadingThumb, setUploadingThumb] = useState(false);
 
+  const handleThumbUpload = async (file: File) => {
+    setUploadingThumb(true); setErr('');
+    try {
+      const url = await uploadImage(file, 'recordings');
+      setForm(p => ({ ...p, thumbnail: url }));
+    } catch (e: any) {
+      setErr(e.message || 'Thumbnail upload failed');
+    } finally { setUploadingThumb(false); }
+  };
+
+  const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) { setErr('Title is required'); return; }
+    setSaving(true); setErr('');
+    try {
+      const body: Record<string, unknown> = { title: form.title.trim() };
+      if (form.description.trim())    body.description    = form.description.trim();
+      if (form.videoUrl.trim())       body.videoUrl       = form.videoUrl.trim();
+      if (form.videoType)             body.videoType      = form.videoType;
+      body.thumbnail      = form.thumbnail.trim()  || null;
+      if (form.topic.trim())          body.topic          = form.topic.trim();
+      if (form.icon.trim())           body.icon           = form.icon.trim();
+      if (form.materials.trim())      body.materials      = form.materials.trim();
+      if (form.duration !== '')       body.duration       = Number(form.duration);
+      if (form.status)                body.status         = form.status;
+      if (form.order !== '')          body.order          = Number(form.order);
+      if (form.welcomeMessage.trim()) body.welcomeMessage = form.welcomeMessage.trim();
+      await api.patch(`/recordings/${rec.id}`, body);
+      onUpdated();
+      onClose();
+    } catch (e: any) {
+      setErr(e.response?.data?.message || 'Failed to update recording');
+    } finally { setSaving(false); }
+  };
+
+  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] transition';
+  const labelCls = 'block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5';
+  const sectionCls = 'bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50';
+  const sectionLabelCls = 'text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest';
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-2xl bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))] shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">Edit Recording</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Update the details for this recording</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1">
+          <div className="p-6 space-y-5">
+            {err && (
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                <p className="text-sm text-red-500">{err}</p>
+              </div>
+            )}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Classification</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Title <span className="text-red-500">*</span></label>
+                  <input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelCls}>Visibility</label>
+                  <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+                    {RECORDING_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Video</p>
+              <div>
+                <label className={labelCls}>Video URL</label>
+                <input className={inputCls} placeholder="https://..." value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Video Type</label>
+                <select className={inputCls} value={form.videoType} onChange={e => set('videoType', e.target.value)}>
+                  <option value="">None</option>
+                  {VIDEO_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Media</p>
+              <div>
+                <label className={labelCls}>Thumbnail URL</label>
+                <div className="space-y-2">
+                  <input className={inputCls} placeholder="https://..." value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CropImageInput onFile={handleThumbUpload} aspectRatio={16 / 9} loading={uploadingThumb} label="Upload Thumbnail" cropTitle="Crop Thumbnail" />
+                    <span className="text-[11px] text-[hsl(var(--muted-foreground))]">JPEG/PNG/WebP/GIF up to 5MB</span>
+                  </div>
+                  {form.thumbnail && <img src={form.thumbnail} alt="Thumbnail preview" className="w-full max-h-28 object-cover rounded-xl ring-1 ring-[hsl(var(--border))]" />}
+                </div>
+              </div>
+            </div>
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Details</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Topic</label>
+                  <input className={inputCls} placeholder="Topic name" value={form.topic} onChange={e => set('topic', e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>Icon</label>
+                  <input className={inputCls} placeholder="e.g. 📹" value={form.icon} onChange={e => set('icon', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Description</label>
+                <textarea className={`${inputCls} resize-none`} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Materials (JSON or links)</label>
+                <textarea className={`${inputCls} resize-none`} rows={2} value={form.materials} onChange={e => set('materials', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Duration (seconds)</label>
+                  <input className={inputCls} type="number" min={0} value={form.duration} onChange={e => set('duration', e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>Order</label>
+                  <input className={inputCls} type="number" min={0} value={form.order} onChange={e => set('order', e.target.value)} />
+                </div>
+              </div>
+              <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+            </div>
+            <div className="flex gap-3 pt-2 pb-2">
+              <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
+              <button type="submit" disabled={saving || uploadingThumb} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold hover:from-violet-600 hover:to-purple-700 transition shadow-lg shadow-violet-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─── Delete Recording Modal ───────────────────────────────── */
+function DeleteRecordingModal({
+  rec,
+  onClose,
+  onDeleted,
+}: {
+  rec: any;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr]           = useState('');
+
+  const handleDelete = async () => {
+    setDeleting(true); setErr('');
+    try {
+      await api.delete(`/recordings/${rec.id}`);
+      onDeleted();
+      onClose();
+    } catch (e: any) {
+      setErr(e.response?.data?.message || 'Failed to delete recording');
+      setDeleting(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-sm bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] p-6">
+        <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-red-100 mx-auto mb-4">
+          <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </div>
+        <h2 className="text-base font-bold text-[hsl(var(--foreground))] text-center mb-1">Delete Recording</h2>
+        <p className="text-sm text-[hsl(var(--muted-foreground))] text-center mb-5">
+          Are you sure you want to delete <span className="font-semibold text-[hsl(var(--foreground))]">&#34;{rec.title}&#34;</span>? This cannot be undone.
+        </p>
+        {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-4">{err}</p>}
+        <div className="flex items-center gap-3">
+          <button onClick={onClose} disabled={deleting} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] hover:bg-[hsl(var(--border))] transition">Cancel</button>
+          <button onClick={handleDelete} disabled={deleting} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition flex items-center justify-center gap-2">
+            {deleting && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
+            {deleting ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ─── Helpers ────────────────────────────────────────── */
 
 function fmtDuration(sec: number): string {
@@ -353,7 +584,12 @@ function LiveLectureCard({ rec, onJoin, onWatch }: { rec: any; onJoin: (rec: any
 
 /* ─── Recording Card ─────────────────────────────────── */
 
-function RecordingCard({ rec, idx, onClick }: { rec: any; idx: number; onClick: () => void }) {
+function RecordingCard({
+  rec, idx, onClick, isAdmin, onEdit, onDelete,
+}: {
+  rec: any; idx: number; onClick: () => void;
+  isAdmin?: boolean; onEdit?: (r: any) => void; onDelete?: (r: any) => void;
+}) {
   const vt = VIDEO_TYPE_CFG[rec.videoType] || VIDEO_TYPE_CFG.OTHER;
   return (
     <div className="bg-white rounded-2xl border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100/60 transition-all cursor-pointer group flex flex-col overflow-hidden"
@@ -405,6 +641,18 @@ function RecordingCard({ rec, idx, onClick }: { rec: any; idx: number; onClick: 
               Files
             </a>
           )}
+          {isAdmin && (
+            <>
+              <button onClick={e => { e.stopPropagation(); onEdit?.(rec); }}
+                className="p-2 rounded-xl text-violet-600 bg-violet-50 hover:bg-violet-100 border border-violet-200 transition" title="Edit">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              </button>
+              <button onClick={e => { e.stopPropagation(); onDelete?.(rec); }}
+                className="p-2 rounded-xl text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition" title="Delete">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -426,6 +674,8 @@ export default function ClassMonthRecordingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editRec, setEditRec]       = useState<any>(null);
+  const [deleteRec, setDeleteRec]   = useState<any>(null);
 
   const fetchData = async () => {
     try {
@@ -520,6 +770,12 @@ export default function ClassMonthRecordingsPage() {
         {isAdmin && (
           <div className="flex items-center gap-2 shrink-0">
             <Link
+              to={getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${classId}/months/${monthId}/media`)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-all">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+              Study Materials
+            </Link>
+            <Link
               to={getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${classId}/months/${monthId}/live-lessons`)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-all">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -565,7 +821,7 @@ export default function ClassMonthRecordingsPage() {
           </h3>
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {regularRecs.map((rec: any, idx: number) => (
-              <RecordingCard key={rec.id} rec={rec} idx={idx} onClick={() => handleWatch(rec)} />
+              <RecordingCard key={rec.id} rec={rec} idx={idx} onClick={() => handleWatch(rec)} isAdmin={isAdmin} onEdit={setEditRec} onDelete={setDeleteRec} />
             ))}
           </div>
         </div>
@@ -578,6 +834,12 @@ export default function ClassMonthRecordingsPage() {
           </div>
           <p className="text-[hsl(var(--muted-foreground))] text-sm">No recordings in this month yet</p>
         </div>
+      )}
+      {editRec && (
+        <EditRecordingModal rec={editRec} onClose={() => setEditRec(null)} onUpdated={() => { setLoading(true); fetchData(); }} />
+      )}
+      {deleteRec && (
+        <DeleteRecordingModal rec={deleteRec} onClose={() => setDeleteRec(null)} onDeleted={() => { setLoading(true); fetchData(); }} />
       )}
     </div>
   );

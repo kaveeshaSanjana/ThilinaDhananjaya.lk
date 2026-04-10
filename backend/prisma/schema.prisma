@@ -106,6 +106,14 @@ enum Gender {
   OTHER
 }
 
+enum MediaType {
+  PDF
+  IMAGE
+  LINK
+  DOCUMENT
+  OTHER
+}
+
 // ─── Institute (Multi-Tenant) ──────────────────────────────
 
 model Institute {
@@ -249,6 +257,7 @@ model Month {
   recordings Recording[]
   payments   PaymentSlip[]
   lectures   Lecture[]
+  media      MonthMedia[]
 
   @@unique([classId, year, month])
   @@index([classId])
@@ -311,6 +320,29 @@ model Recording {
   @@index([monthId, order])
   @@index([status])
   @@index([isLive])
+}
+
+// ─── Month Media (Study Materials) ─────────────────────────
+
+model MonthMedia {
+  id          String          @id @default(uuid())
+  monthId     String
+  title       String
+  description String?         @db.Text
+  fileUrl     String          @db.Text
+  mediaType   MediaType       @default(OTHER)
+  thumbnail   String?         @db.Text
+  size        Int?            // file size in bytes
+  order       Int             @default(0)
+  status      RecordingStatus @default(STUDENTS_ONLY)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([monthId, order])
+  @@index([status])
 }
 
 // ─── Enrollment (Student <-> Class) ──────────────────────

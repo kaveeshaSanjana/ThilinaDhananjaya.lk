@@ -33,6 +33,8 @@ import AdminInstitute from './pages/admin/AdminInstitute';
 import AdminInstituteSelect from './pages/admin/AdminInstituteSelect';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
+import ClassMonthMediaPage from './pages/ClassMonthMediaPage';
+import ClassPhysicalAttendancePage from './pages/ClassPhysicalAttendancePage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
 
@@ -128,6 +130,10 @@ function AppRoutes() {
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/my-attendance" element={<ProtectedRoute><StudentMonthRecAttendance /></ProtectedRoute>} />
         <Route path="classes/:classId/months/:monthId/live-lessons" element={<ProtectedRoute><ClassMonthLiveLessonsPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/live-lessons" element={<ProtectedRoute><ClassMonthLiveLessonsPage /></ProtectedRoute>} />
+        <Route path="classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
+        <Route path="institute/:instituteId/classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
+        <Route path="classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
