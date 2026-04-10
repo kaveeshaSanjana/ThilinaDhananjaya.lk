@@ -50,7 +50,7 @@ export class PaymentsService {
         status: true, adminNote: true, rejectReason: true, createdAt: true, updatedAt: true,
         month: {
           select: {
-            id: true, name: true, year: true, month: true, status: true, monthlyFee: true,
+            id: true, name: true, year: true, month: true, status: true,
             class: { select: { id: true, name: true, subject: true, monthlyFee: true } },
           },
         },

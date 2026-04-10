@@ -348,45 +348,53 @@ export default function ClassPhysicalAttendancePage() {
 
       <div className="flex gap-6 mt-6">
         {/* Sidebar */}
-        <aside className="hidden lg:flex flex-col gap-4 w-60 shrink-0">
-          {/* Nav links */}
-          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-3 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-2 mb-2">Navigation</p>
-            <div className="space-y-0.5">
-              <Link
-                to={mkPath(`/classes/${classId}`)}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
-              >
-                <span className="text-base">📋</span> Class Overview
-              </Link>
-              <Link
-                to={mkPath(`/classes/${classId}/physical-attendance`)}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold bg-purple-50 text-purple-700 ring-1 ring-purple-200 transition-all"
-              >
-                <span className="text-base">📅</span> Attendance
-              </Link>
-            </div>
-          </div>
-          {/* Month list */}
-          {allMonths.length > 0 && (
-            <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-3 shadow-sm">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-2 mb-2">Months</p>
-              <div className="space-y-0.5 max-h-64 overflow-y-auto">
-                {allMonths.map((m: any, idx: number) => (
-                  <Link
-                    key={m.id}
-                    to={mkPath(`/classes/${classId}/months/${m.id}`)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
-                  >
-                    <div className={`w-5 h-5 rounded-md bg-gradient-to-br ${monthGradients[idx % monthGradients.length]} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>
-                      {idx + 1}
-                    </div>
-                    <span className="truncate">{m.name}</span>
-                  </Link>
-                ))}
+        <aside className="hidden lg:flex flex-col w-56 shrink-0">
+          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+            {/* Class section */}
+            <div className="px-3 pt-3 pb-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--muted-foreground)/0.5)] px-2 pb-1.5">Class</p>
+              <div className="space-y-0.5">
+                <Link
+                  to={mkPath(`/classes/${classId}`)}
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
+                >
+                  <svg className="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                  <span>Months</span>
+                </Link>
+                <Link
+                  to={mkPath(`/classes/${classId}/physical-attendance`)}
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] transition-all"
+                >
+                  <svg className="w-[18px] h-[18px] shrink-0 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  <span>Physical Attendance</span>
+                </Link>
               </div>
             </div>
-          )}
+
+            {/* Months section */}
+            {allMonths.length > 0 && (
+              <>
+                <div className="mx-3 border-t border-[hsl(var(--border))]" />
+                <div className="px-3 pt-2 pb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--muted-foreground)/0.5)] px-2 pb-1.5">Months</p>
+                  <div className="space-y-0.5 max-h-72 overflow-y-auto">
+                    {allMonths.map((m: any, idx: number) => (
+                      <Link
+                        key={m.id}
+                        to={mkPath(`/classes/${classId}/months/${m.id}`)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
+                      >
+                        <div className={`w-5 h-5 rounded-md bg-gradient-to-br ${monthGradients[idx % monthGradients.length]} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>
+                          {idx + 1}
+                        </div>
+                        <span className="truncate">{m.name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </aside>
 
         {/* Main content */}

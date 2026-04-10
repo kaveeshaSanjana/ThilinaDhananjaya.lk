@@ -235,7 +235,7 @@ export class AttendanceController {
   /** Student: my sessions for a specific recording */
   @UseGuards(JwtAuthGuard)
   @Get('watch-history/recording/:recordingId')
-  getMyRecordingSessions(
+  getMyWatchHistoryByRecording(
     @Request() req: any,
     @Param('recordingId') recordingId: string,
   ) {

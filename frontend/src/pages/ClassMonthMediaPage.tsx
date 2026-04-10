@@ -535,7 +535,6 @@ export default function ClassMonthMediaPage() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [monthName, setMonthName]   = useState('');
   const [classData, setClassData]   = useState<any>(null);
-  const [allMonths, setAllMonths]   = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
 
@@ -563,7 +562,6 @@ export default function ClassMonthMediaPage() {
         const cls = classRes.data?.class ?? classRes.data;
         setClassData(cls);
         const months: any[] = monthsRes.data || [];
-        setAllMonths(months);
         // Find month name
         const month = months.find((m: any) => m.id === monthId);
         if (month) setMonthName(month.name);
@@ -606,92 +604,8 @@ export default function ClassMonthMediaPage() {
   const resolvedInstId = instituteId || classData?.instituteId || classData?.institute?.id || null;
   const mkPath = (suffix: string) => getInstitutePath(resolvedInstId, suffix);
 
-  const monthGradients = [
-    'from-blue-500 to-indigo-600', 'from-emerald-500 to-teal-600',
-    'from-orange-500 to-amber-600', 'from-purple-500 to-violet-600',
-    'from-rose-500 to-pink-600',   'from-cyan-500 to-sky-600',
-    'from-fuchsia-500 to-pink-600','from-lime-500 to-green-600',
-  ];
-
-  const subNavItems: { label: string; icon: string; to: string; active?: boolean }[] = [
-    { label: 'Recordings',      icon: '🎬', to: mkPath(`/classes/${classId}/months/${monthId}`) },
-    { label: 'Live Lessons',    icon: '📡', to: mkPath(`/classes/${classId}/months/${monthId}/live-lessons`) },
-    { label: 'Study Materials', icon: '📚', to: mkPath(`/classes/${classId}/months/${monthId}/media`), active: true },
-    ...(isAdmin ? [{ label: 'Attendance', icon: '📅', to: mkPath(`/classes/${classId}/physical-attendance`) }] : []),
-  ];
-
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Back link */}
-      <Link
-        to={mkPath(`/classes/${classId}`)}
-        className="inline-flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium group"
-      >
-        <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to class
-      </Link>
-
-      <div className="flex gap-6 mt-6">
-        {/* Sidebar */}
-        <aside className="hidden lg:flex flex-col gap-4 w-60 shrink-0">
-          <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-3 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-2 mb-2">This Month</p>
-            <div className="space-y-0.5">
-              {subNavItems.map(item => (
-                <Link
-                  key={item.label}
-                  to={item.to}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${item.active ? 'bg-purple-50 text-purple-700 font-semibold ring-1 ring-purple-200' : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'}`}
-                >
-                  <span className="text-base leading-none">{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-          {allMonths.length > 0 && (
-            <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-3 shadow-sm">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))] px-2 mb-2">All Months</p>
-              <div className="space-y-0.5 max-h-72 overflow-y-auto">
-                {allMonths.map((m: any, idx: number) => {
-                  const isAct = m.id === monthId;
-                  const grad = monthGradients[idx % monthGradients.length];
-                  return (
-                    <Link
-                      key={m.id}
-                      to={mkPath(`/classes/${classId}/months/${m.id}/media`)}
-                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all ${isAct ? 'bg-purple-50 text-purple-700 font-semibold ring-1 ring-purple-200' : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'}`}
-                    >
-                      <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${grad} flex items-center justify-center shrink-0 text-white text-[9px] font-bold`}>
-                        {idx + 1}
-                      </div>
-                      <span className="truncate font-medium">{m.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-6">
-          {/* Mobile sub-nav */}
-          <div className="flex gap-2 lg:hidden overflow-x-auto pb-1">
-            {subNavItems.map(item => (
-              <Link
-                key={item.label}
-                to={item.to}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${item.active ? 'bg-purple-50 text-purple-700 font-semibold ring-1 ring-purple-200' : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] border border-[hsl(var(--border))]'}`}
-              >
-                <span>{item.icon}</span>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -780,18 +694,16 @@ export default function ClassMonthMediaPage() {
         </div>
       )}
 
-          {/* Modals */}
-          {showCreate && monthId && (
-            <CreateMediaModal monthId={monthId} onClose={() => setShowCreate(false)} onCreated={handleCreated} />
-          )}
-          {editItem && (
-            <EditMediaModal item={editItem} onClose={() => setEditItem(null)} onUpdated={handleUpdated} />
-          )}
-          {deleteItem && (
-            <DeleteMediaModal item={deleteItem} onClose={() => setDeleteItem(null)} onDeleted={handleDeleted} />
-          )}
-        </div>
-      </div>
+      {/* Modals */}
+      {showCreate && monthId && (
+        <CreateMediaModal monthId={monthId} onClose={() => setShowCreate(false)} onCreated={handleCreated} />
+      )}
+      {editItem && (
+        <EditMediaModal item={editItem} onClose={() => setEditItem(null)} onUpdated={handleUpdated} />
+      )}
+      {deleteItem && (
+        <DeleteMediaModal item={deleteItem} onClose={() => setDeleteItem(null)} onDeleted={handleDeleted} />
+      )}
     </div>
   );
 }

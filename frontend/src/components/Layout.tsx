@@ -274,27 +274,15 @@ export default function Layout() {
         )}
 
         {isMonthDetail ? (
-          <SideSection label="Month">
-            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}`)} icon={icons.recordings} label="Recordings" exact />
-            <NavItem
-              to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/live-lessons`)}
-              icon={
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              }
-              label="Live Lessons"
-              exact
-            />
-            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/media`)} icon={icons.materials} label="Materials" exact />
+          <SideSection label="Attendance">
             {user?.role === 'ADMIN' && (
-              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Rec Attendance" exact />
-            )}
-            {user?.role === 'ADMIN' && (
-              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" exact />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Recording Attendance" exact />
             )}
             {user?.role === 'STUDENT' && (
-              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`)} icon={icons.attend} label="Rec Attendance" exact />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/my-attendance`)} icon={icons.attend} label="My Rec Attendance" exact />
+            )}
+            {user?.role === 'ADMIN' && (
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" />
             )}
           </SideSection>
         ) : isClassDetail ? (
