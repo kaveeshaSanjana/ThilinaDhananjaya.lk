@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
 
@@ -92,11 +93,24 @@ export default function AdminSlips() {
   const [actionError, setActionError] = useState('');
 
   const currentClassId = useRef('');
+  const initialMonthIdRef = useRef('');
+  const location = useLocation();
 
   const load = () => { setLoading(true); api.get('/payments/all').then(r => { const res = r.data; setPayments(Array.isArray(res) ? res : (res?.data || [])); }).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => {
     load();
     api.get('/classes').then(r => setClasses(r.data || [])).catch(() => {});
+    // Pre-select class/month from query params (e.g. from month detail sidebar link)
+    const params = new URLSearchParams(location.search);
+    const qTab = params.get('tab');
+    const qClassId = params.get('classId');
+    const qMonthId = params.get('monthId');
+    if (qTab === 'physical' && qClassId) {
+      setTab('physical');
+      if (qMonthId) initialMonthIdRef.current = qMonthId;
+      setSelectedClassId(qClassId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openVerify = (p: any) => {
@@ -175,9 +189,11 @@ export default function AdminSlips() {
           setPaymentLoading(false);
           return;
         }
-        const lastMonth = months[months.length - 1];
-        setPaymentMonthId(lastMonth.id);
-        await fetchOverview(selectedClassId, lastMonth.id);
+        const preselect = initialMonthIdRef.current && months.find(m => m.id === initialMonthIdRef.current);
+        initialMonthIdRef.current = '';
+        const targetMonth = preselect || months[months.length - 1];
+        setPaymentMonthId(targetMonth.id);
+        await fetchOverview(selectedClassId, targetMonth.id);
       })
       .catch(() => {
         setPaymentMonths([]);

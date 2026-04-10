@@ -58,6 +58,8 @@ const icons = {
   moon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
   materials: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
   physAttend: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  live: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /><circle cx="9" cy="5" r="1.5" fill="currentColor" stroke="none" /><circle cx="9" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth={1.2} /></svg>,
+  folder: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
 };
 
 export default function Layout() {
@@ -274,6 +276,12 @@ export default function Layout() {
         )}
 
         {isMonthDetail ? (
+          <>
+          <SideSection label="Content">
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}`)} icon={icons.recordings} label="Recordings" exact />
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/live-lessons`)} icon={icons.live} label="Live Lessons" exact />
+            <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/media`)} icon={icons.folder} label="Materials" exact />
+          </SideSection>
           <SideSection label="Attendance">
             {user?.role === 'ADMIN' && (
               <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/rec-attendance`)} icon={icons.attend} label="Recording Attendance" exact />
@@ -285,6 +293,18 @@ export default function Layout() {
               <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" />
             )}
           </SideSection>
+          <SideSection label="Payments">
+            {user?.role === 'STUDENT' && (
+              <>
+                <NavItem to={getInstitutePath(scopedInstituteId, '/payments/submit')} icon={icons.upload} label="Upload Slip" />
+                <NavItem to={getInstitutePath(scopedInstituteId, '/payments/my')} icon={icons.pay} label="My Payments" />
+              </>
+            )}
+            {user?.role === 'ADMIN' && (
+              <NavItem to={`${getInstituteAdminPath(adminInstituteId, '/slips')}?tab=physical&classId=${monthDetailClassId}&monthId=${monthDetailMonthId}`} icon={icons.slips} label="Class Payments" />
+            )}
+          </SideSection>
+          </>
         ) : isClassDetail ? (
           <SideSection label="Class">
             <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}`)} icon={icons.classes} label="Months" exact />

@@ -1,7 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+﻿import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+const db = prisma as any;
 
 function ago(minutes: number): Date {
   return new Date(Date.now() - minutes * 60000);
@@ -12,13 +13,33 @@ function fromNow(minutes: number): Date {
 }
 
 async function main() {
+  console.log('Clearing all existing data...');
+
+  // Disable FK checks for clean truncation (MySQL)
+  await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 0`;
+  await prisma.watchSession.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.classAttendance.deleteMany();
+  await prisma.paymentSlip.deleteMany();
+  await prisma.enrollment.deleteMany();
+  await db.monthMedia.deleteMany();
+  await db.lecture.deleteMany();
+  await prisma.recording.deleteMany();
+  await prisma.month.deleteMany();
+  await prisma.class.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await db.adminInstitute.deleteMany();
+  await prisma.profile.deleteMany();
+  await prisma.user.deleteMany();
+  await db.institute.deleteMany();
+  await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 1`;
+  console.log('All data cleared.');
+
   console.log('Seeding database...');
 
-  // ─── Institutes ────────────────────────────────────────
-  const institute1 = await (prisma as any).institute.upsert({
-    where: { slug: 'thilina-dhananjaya' },
-    update: {},
-    create: {
+  // â”€â”€â”€ Institute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const institute = await db.institute.create({
+    data: {
       id: 'inst-td-001',
       name: 'Thilina Dhananjaya Academy',
       slug: 'thilina-dhananjaya',
@@ -28,598 +49,320 @@ async function main() {
       themeColor: '#6d28d9',
     },
   });
+  console.log(`Institute created: ${institute.name}`);
 
-  const institute2 = await (prisma as any).institute.upsert({
-    where: { slug: 'td-science-hub' },
-    update: {},
-    create: {
-      id: 'inst-td-002',
-      name: 'TD Science Hub',
-      slug: 'td-science-hub',
-      address: 'No. 12, Kandy Road, Kurunegala',
-      phone: '0372100200',
-      description: 'Science and Technology focused learning centre',
-      themeColor: '#0891b2',
-    },
-  });
-  console.log(`Institutes: ${institute1.name}, ${institute2.name}`);
-
-  // ─── Admin ─────────────────────────────────────────────
+  // â”€â”€â”€ Admin user: admin@td.lk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const adminPassword = await bcrypt.hash('admin123', 12);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@thilinadhananjaya.lk' },
-    update: { orgId: institute1.id },
-    create: {
-      email: 'admin@thilinadhananjaya.lk',
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@td.lk',
       password: adminPassword,
       role: 'ADMIN',
-      orgId: institute1.id,
+      orgId: institute.id,
       profile: {
         create: {
           instituteId: 'TD-ADMIN-0001',
           fullName: 'Thilina Dhananjaya',
+          phone: '0112345678',
+          status: 'ACTIVE',
+          gender: 'MALE',
+        },
+      },
+    },
+  });
+  await db.adminInstitute.create({
+    data: { adminId: admin.id, instituteId: institute.id, isOwner: true },
+  });
+  console.log(`Admin created: ${admin.email}`);
+
+  // â”€â”€â”€ Primary student: student@td.lk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const studentPassword = await bcrypt.hash('student123', 12);
+  const primaryStudent = await prisma.user.create({
+    data: {
+      email: 'student@td.lk',
+      password: studentPassword,
+      role: 'STUDENT',
+      orgId: institute.id,
+      profile: {
+        create: {
+          instituteId: 'TD-2026-S001',
+          fullName: 'Kavya Perera',
+          phone: '0771122334',
+          whatsappPhone: '0771122334',
+          school: 'Vishaka Vidyalaya',
+          address: 'No. 12, Temple Road, Nugegoda',
+          gender: 'FEMALE',
+          dateOfBirth: new Date('2007-03-15'),
+          guardianName: 'Saman Perera',
+          guardianPhone: '0779988776',
+          relationship: 'Father',
           status: 'ACTIVE',
         },
       },
     },
   });
+  console.log(`Primary student created: ${primaryStudent.email}`);
 
-  // Link admin to both institutes
-  await (prisma as any).adminInstitute.upsert({
-    where: { adminId_instituteId: { adminId: admin.id, instituteId: institute1.id } },
-    update: {},
-    create: { adminId: admin.id, instituteId: institute1.id, isOwner: true },
-  });
-  await (prisma as any).adminInstitute.upsert({
-    where: { adminId_instituteId: { adminId: admin.id, instituteId: institute2.id } },
-    update: {},
-    create: { adminId: admin.id, instituteId: institute2.id, isOwner: false },
-  });
-  console.log(`Admin user: ${admin.email} linked to both institutes`);
-  console.log(`Admin user created: ${admin.email}`);
-
-  // ─── Cleanup old test student that may conflict ────────
-  const oldStudent = await prisma.user.findUnique({ where: { email: 'student@test.com' } });
-  if (oldStudent) {
-    await prisma.user.delete({ where: { id: oldStudent.id } });
-    console.log('Removed old student@test.com');
-  }
-
-  // ─── Sample Class (linked to institute1) ──────────────
-  const sampleClass = await prisma.class.upsert({
-    where: { id: 'sample-class-1' },
-    update: { orgId: institute1.id },
-    create: {
-      id: 'sample-class-1',
-      name: 'Combined Mathematics',
-      description: 'A/L Combined Mathematics - 2026 batch',
-      subject: 'Combined Mathematics',
-      monthlyFee: 3000,
-      orgId: institute1.id,
-    },
-  });
-
-  // ─── Science Class (linked to institute2) ─────────────
-  const scienceClass = await prisma.class.upsert({
-    where: { id: 'sample-class-2' },
-    update: { orgId: institute2.id },
-    create: {
-      id: 'sample-class-2',
-      name: 'Physics',
-      description: 'A/L Physics - 2026 batch',
-      subject: 'Physics',
-      monthlyFee: 2500,
-      orgId: institute2.id,
-    },
-  });
-
-  // ─── January month (original) ─────────────────────────
-  await prisma.month.upsert({
-    where: { classId_year_month: { classId: sampleClass.id, year: 2026, month: 1 } },
-    update: {},
-    create: {
-      classId: sampleClass.id,
-      name: 'January 2026',
-      year: 2026,
-      month: 1,
-    },
-  });
-
-  // ─── April month (for mock data) ──────────────────────
-  const aprilMonth = await prisma.month.upsert({
-    where: { classId_year_month: { classId: sampleClass.id, year: 2026, month: 4 } },
-    update: {},
-    create: {
-      classId: sampleClass.id,
-      name: 'April 2026',
-      year: 2026,
-      month: 4,
-      status: 'ANYONE',
-    },
-  });
-
-  // ─── Sample recordings ─────────────────────────────────
-  await prisma.recording.upsert({
-    where: { id: 'sample-recording-1' },
-    update: {},
-    create: {
-      id: 'sample-recording-1',
-      monthId: aprilMonth.id,
-      title: 'Introduction to Limits',
-      description: 'First lesson on limits and continuity',
-      videoUrl: 'https://example.com/sample-video.mp4',
-      duration: 3600,
-      status: 'ANYONE',
-      order: 1,
-    },
-  });
-
-  const mockRecording = await prisma.recording.upsert({
-    where: { id: 'mock-recording-1' },
-    update: {},
-    create: {
-      id: 'mock-recording-1',
-      monthId: aprilMonth.id,
-      title: 'Lesson 03 — Quadratic Equations',
-      description: 'Solving quadratic equations and graphing parabolas',
-      videoUrl: 'https://example.com/quadratic.mp4',
-      videoType: 'DRIVE',
-      duration: 3600,
-      status: 'ANYONE',
-      order: 2,
-    },
-  });
-
-  // ─── 10 Mock Students ─────────────────────────────────
-  const studentPassword = await bcrypt.hash('student123', 12);
-  const studentsData = [
-    { email: 'kavindu@gmail.com',  iid: 'TD-2026-0001', name: 'Kavindu Perera',           phone: '0771234567', school: 'Royal College',        orgId: institute1.id },
-    { email: 'nethmi@gmail.com',   iid: 'TD-2026-0002', name: 'Nethmi Fernando',           phone: '0712345678', school: 'Visakha Vidyalaya',    orgId: institute1.id },
-    { email: 'tharushi@gmail.com', iid: 'TD-2026-0003', name: 'Tharushi Silva',            phone: '0761122334', school: 'Devi Balika',          orgId: institute1.id },
-    { email: 'dilshan@gmail.com',  iid: 'TD-2026-0004', name: 'Dilshan Jayawardena',       phone: '0777654321', school: 'Ananda College',       orgId: institute1.id },
-    { email: 'sanduni@gmail.com',  iid: 'TD-2026-0005', name: 'Sanduni Rathnayake',        phone: '0723344556', school: 'Musaeus College',      orgId: institute1.id },
-    { email: 'hasitha@gmail.com',  iid: 'TD-2026-0006', name: 'Hasitha Bandara',           phone: '0789988776', school: 'Dharmaraja College',   orgId: institute2.id },
-    { email: 'nimesh@gmail.com',   iid: 'TD-2026-0007', name: 'Nimesh Wickramasinghe',     phone: '0754433221', school: 'Nalanda College',      orgId: institute2.id },
-    { email: 'ishara@gmail.com',   iid: 'TD-2026-0008', name: 'Ishara De Silva',           phone: '0764455667', school: 'S. Thomas College',    orgId: institute2.id },
-    { email: 'malini@gmail.com',   iid: 'TD-2026-0009', name: 'Malini Gunasekara',         phone: '0711223344', school: 'Ladies College',       orgId: institute1.id },
-    { email: 'chaminda@gmail.com', iid: 'TD-2026-0010', name: 'Chaminda Vaas',             phone: '0755566778', school: 'Richmond College',     orgId: institute1.id },
+  // â”€â”€â”€ Additional students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const extraStudentsData = [
+    { email: 'kavindu@gmail.com',  iid: 'TD-2026-S002', name: 'Kavindu Perera',       phone: '0771234567', school: 'Royal College',      gender: 'MALE',   status: 'ACTIVE'   },
+    { email: 'nethmi@gmail.com',   iid: 'TD-2026-S003', name: 'Nethmi Fernando',       phone: '0712345678', school: 'Visakha Vidyalaya',  gender: 'FEMALE', status: 'ACTIVE'   },
+    { email: 'dilshan@gmail.com',  iid: 'TD-2026-S004', name: 'Dilshan Jayawardena',   phone: '0777654321', school: 'Ananda College',     gender: 'MALE',   status: 'ACTIVE'   },
+    { email: 'sanduni@gmail.com',  iid: 'TD-2026-S005', name: 'Sanduni Rathnayake',    phone: '0723344556', school: 'Musaeus College',    gender: 'FEMALE', status: 'INACTIVE' },
+    { email: 'hasitha@gmail.com',  iid: 'TD-2026-S006', name: 'Hasitha Bandara',       phone: '0789988776', school: 'Dharmaraja College', gender: 'MALE',   status: 'ACTIVE'   },
   ];
 
-  const users: { id: string; email: string }[] = [];
-  // Clean up any existing mock students and profiles to avoid unique constraint conflicts
-  const mockEmails = studentsData.map(s => s.email);
-  const mockIids = studentsData.map(s => s.iid);
-  // Delete profiles by instituteId first (in case they belong to different users)
-  const conflictingProfiles = await prisma.profile.findMany({ where: { instituteId: { in: mockIids } } });
-  if (conflictingProfiles.length > 0) {
-    const conflictingUserIds = conflictingProfiles.map(p => p.userId);
-    await prisma.user.deleteMany({ where: { id: { in: conflictingUserIds } } });
-  }
-  await prisma.user.deleteMany({ where: { email: { in: mockEmails } } });
-
-  for (const s of studentsData) {
+  const extraUsers: { id: string; email: string }[] = [];
+  for (const s of extraStudentsData) {
     const u = await prisma.user.create({
       data: {
         email: s.email,
         password: studentPassword,
         role: 'STUDENT',
-        orgId: s.orgId,
+        orgId: institute.id,
         profile: {
           create: {
             instituteId: s.iid,
             fullName: s.name,
             phone: s.phone,
             school: s.school,
-            status: 'ACTIVE',
+            gender: s.gender as any,
+            status: s.status as any,
           },
         },
       },
     });
-    users.push(u);
+    extraUsers.push(u);
   }
-  console.log(`Created ${users.length} mock students`);
+  console.log(`Additional students created: ${extraUsers.length}`);
 
-  const recId = mockRecording.id;
+  // Convenience array: [primaryStudent, ...extraUsers]
+  const allStudents: { id: string; email: string }[] = [primaryStudent, ...extraUsers];
 
-  // Enroll students 1-9 (student 10 = not enrolled)
-  for (let i = 0; i < 9; i++) {
-    await prisma.enrollment.upsert({
-      where: { userId_classId: { userId: users[i].id, classId: sampleClass.id } },
-      update: {},
-      create: { userId: users[i].id, classId: sampleClass.id },
-    });
-  }
-  console.log('Enrollments created (9 of 10)');
-
-  // ─── Payment Slips ────────────────────────────────────
-  // Students: 1=VERIFIED, 2=PENDING, 3=REJECTED, 6=VERIFIED, 8=VERIFIED, 9=PENDING
-  // Students 4,5,7,10 = no payment slip
-  const paymentEntries: { userId: string; status: 'VERIFIED' | 'PENDING' | 'REJECTED' }[] = [
-    { userId: users[0].id, status: 'VERIFIED' },
-    { userId: users[1].id, status: 'PENDING' },
-    { userId: users[2].id, status: 'REJECTED' },
-    { userId: users[5].id, status: 'VERIFIED' },
-    { userId: users[7].id, status: 'VERIFIED' },
-    { userId: users[8].id, status: 'PENDING' },
-  ];
-  for (const p of paymentEntries) {
-    const existing = await prisma.paymentSlip.findFirst({
-      where: { userId: p.userId, monthId: aprilMonth.id },
-    });
-    if (!existing) {
-      await prisma.paymentSlip.create({
-        data: {
-          userId: p.userId,
-          monthId: aprilMonth.id,
-          type: 'MONTHLY',
-          slipUrl: 'https://example.com/mock-slip.jpg',
-          amount: 3000,
-          status: p.status,
-          paidDate: p.status === 'VERIFIED' ? ago(1440) : null,
-        },
-      });
-    }
-  }
-  console.log('Payment slips created');
-
-  // ─── Attendance Records ────────────────────────────────
-
-  // Helper: upsert attendance
-  async function upsertAttendance(userId: string, data: any) {
-    await prisma.attendance.upsert({
-      where: { userId_recordingId: { userId, recordingId: recId } },
-      update: data,
-      create: { userId, recordingId: recId, ...data },
-    });
-  }
-
-  // 1) Kavindu — COMPLETED
-  await upsertAttendance(users[0].id, {
-    status: 'COMPLETED',
-    watchedSec: 3200,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(180).toISOString() },
-      { type: 'INCOMPLETE_EXIT', watchedSec: 900, at: ago(160).toISOString() },
-      { type: 'START', videoPosition: 0, at: ago(120).toISOString() },
-      { type: 'PUSH', watchedSec: 3200, at: ago(30).toISOString() },
-      { type: 'END', videoPosition: 3200, watchedSec: 3200, at: ago(28).toISOString() },
-    ],
-  });
-
-  // 2) Nethmi — COMPLETED
-  await upsertAttendance(users[1].id, {
-    status: 'COMPLETED',
-    watchedSec: 3600,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(240).toISOString() },
-      { type: 'PUSH', watchedSec: 3600, at: ago(200).toISOString() },
-      { type: 'END', videoPosition: 3600, watchedSec: 3600, at: ago(198).toISOString() },
-    ],
-  });
-
-  // 3) Tharushi — INCOMPLETE
-  await upsertAttendance(users[2].id, {
-    status: 'INCOMPLETE',
-    watchedSec: 450,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(500).toISOString() },
-      { type: 'INCOMPLETE_EXIT', watchedSec: 450, at: ago(490).toISOString() },
-    ],
-  });
-
-  // 4) Dilshan — INCOMPLETE
-  await upsertAttendance(users[3].id, {
-    status: 'INCOMPLETE',
-    watchedSec: 120,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(700).toISOString() },
-      { type: 'INCOMPLETE_EXIT', watchedSec: 120, at: ago(695).toISOString() },
-    ],
-  });
-
-  // 5) Sanduni — MANUAL
-  await upsertAttendance(users[4].id, {
-    status: 'MANUAL',
-    watchedSec: 0,
-    eventName: 'Manual - 2026-04-05',
-    details: [
-      { type: 'MANUAL', eventName: 'Manual - 2026-04-05', at: ago(1440).toISOString() },
-    ],
-  });
-
-  // 6) Hasitha — COMPLETED + live join
-  await upsertAttendance(users[5].id, {
-    status: 'COMPLETED',
-    watchedSec: 2800,
-    liveJoinedAt: ago(350),
-    details: [
-      { type: 'LIVE_JOIN', at: ago(350).toISOString() },
-      { type: 'START', videoPosition: 0, at: ago(320).toISOString() },
-      { type: 'PUSH', watchedSec: 2800, at: ago(310).toISOString() },
-      { type: 'END', videoPosition: 2800, watchedSec: 2800, at: ago(308).toISOString() },
-    ],
-  });
-
-  // 7) Nimesh — NO attendance record (never watched)
-  // skip
-
-  // 8) Ishara — INCOMPLETE (suspicious seeker)
-  await upsertAttendance(users[7].id, {
-    status: 'INCOMPLETE',
-    watchedSec: 800,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(600).toISOString() },
-      { type: 'INCOMPLETE_EXIT', watchedSec: 800, at: ago(585).toISOString() },
-    ],
-  });
-
-  // 9) Malini — INCOMPLETE (currently watching)
-  await upsertAttendance(users[8].id, {
-    status: 'INCOMPLETE',
-    watchedSec: 600,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(15).toISOString() },
-    ],
-  });
-
-  // 10) Chaminda — COMPLETED (not enrolled)
-  await upsertAttendance(users[9].id, {
-    status: 'COMPLETED',
-    watchedSec: 3600,
-    details: [
-      { type: 'START', videoPosition: 0, at: ago(120).toISOString() },
-      { type: 'PUSH', watchedSec: 3600, at: ago(60).toISOString() },
-      { type: 'END', videoPosition: 3600, watchedSec: 3600, at: ago(58).toISOString() },
-    ],
-  });
-
-  console.log('Attendance records created');
-
-  // ─── Watch Sessions ────────────────────────────────────
-
-  // Delete existing mock sessions first to avoid duplicates on re-seed
-  await prisma.watchSession.deleteMany({ where: { recordingId: recId } });
-
-  const sessionsToCreate: any[] = [];
-
-  // 1) Kavindu — 3 sessions
-  sessionsToCreate.push(
-    {
-      userId: users[0].id, recordingId: recId,
-      startedAt: ago(200), endedAt: ago(160), videoStartPos: 0, videoEndPos: 810, totalWatchedSec: 900, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(200).toISOString() },
-        { type: 'pause', videoTime: 300, wallTime: ago(195).toISOString() },
-        { type: 'play', videoTime: 300, wallTime: ago(194).toISOString() },
-        { type: 'seek', videoTime: 800, wallTime: ago(188).toISOString() },
-        { type: 'pause', videoTime: 900, wallTime: ago(180).toISOString() },
-      ],
+  // â”€â”€â”€ Classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const mathClass = await prisma.class.create({
+    data: {
+      id: 'class-math-2026',
+      name: 'Combined Mathematics',
+      subject: 'Combined Mathematics',
+      description: 'A/L Combined Mathematics â€” 2026 batch. Covering Pure & Applied Maths.',
+      monthlyFee: 3000,
+      orgId: institute.id,
+      status: 'STUDENTS_ONLY',
+      vision: 'To help every student master mathematics with clarity and confidence.',
+      mission: 'Structured lessons, live support, and personalized attention for A/L exam success.',
     },
-    {
-      userId: users[0].id, recordingId: recId,
-      startedAt: ago(155), endedAt: ago(85), videoStartPos: 0, videoEndPos: 1800, totalWatchedSec: 2000, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(155).toISOString() },
-        { type: 'buffer', videoTime: 500, wallTime: ago(147).toISOString() },
-        { type: 'play', videoTime: 500, wallTime: ago(147).toISOString() },
-        { type: 'pause', videoTime: 1200, wallTime: ago(135).toISOString() },
-        { type: 'play', videoTime: 1200, wallTime: ago(133).toISOString() },
-        { type: 'pause', videoTime: 2000, wallTime: ago(120).toISOString() },
-      ],
-    },
-    {
-      userId: users[0].id, recordingId: recId,
-      startedAt: ago(92), endedAt: ago(28), videoStartPos: 2000, videoEndPos: 3200, totalWatchedSec: 1200, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 2000, wallTime: ago(92).toISOString() },
-        { type: 'pause', videoTime: 2600, wallTime: ago(82).toISOString() },
-        { type: 'play', videoTime: 2600, wallTime: ago(80).toISOString() },
-        { type: 'ended', videoTime: 3200, wallTime: ago(60).toISOString() },
-      ],
-    },
-  );
-
-  // 2) Nethmi — 1 session
-  sessionsToCreate.push({
-    userId: users[1].id, recordingId: recId,
-    startedAt: ago(282), endedAt: ago(198), videoStartPos: 0, videoEndPos: 3240, totalWatchedSec: 3600, status: 'ENDED',
-    events: [
-      { type: 'play', videoTime: 0, wallTime: ago(282).toISOString() },
-      { type: 'pause', videoTime: 1200, wallTime: ago(262).toISOString() },
-      { type: 'play', videoTime: 1200, wallTime: ago(260).toISOString() },
-      { type: 'ended', videoTime: 3600, wallTime: ago(198).toISOString() },
-    ],
   });
 
-  // 3) Tharushi — 1 session
-  sessionsToCreate.push({
-    userId: users[2].id, recordingId: recId,
-    startedAt: ago(510), endedAt: ago(490), videoStartPos: 0, videoEndPos: 405, totalWatchedSec: 450, status: 'ENDED',
-    events: [
-      { type: 'play', videoTime: 0, wallTime: ago(510).toISOString() },
-      { type: 'pause', videoTime: 200, wallTime: ago(507).toISOString() },
-      { type: 'play', videoTime: 200, wallTime: ago(506).toISOString() },
-      { type: 'pause', videoTime: 450, wallTime: ago(500).toISOString() },
-    ],
-  });
-
-  // 4) Dilshan — 2 sessions
-  sessionsToCreate.push(
-    {
-      userId: users[3].id, recordingId: recId,
-      startedAt: ago(705), endedAt: ago(695), videoStartPos: 0, videoEndPos: 108, totalWatchedSec: 120, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(705).toISOString() },
-        { type: 'pause', videoTime: 120, wallTime: ago(700).toISOString() },
-      ],
-    },
-    {
-      userId: users[3].id, recordingId: recId,
-      startedAt: ago(402), endedAt: ago(398), videoStartPos: 0, videoEndPos: 2754, totalWatchedSec: 60, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(402).toISOString() },
-        { type: 'seek', videoTime: 3000, wallTime: ago(401).toISOString() },
-        { type: 'pause', videoTime: 3060, wallTime: ago(400).toISOString() },
-      ],
-    },
-  );
-
-  // 5) Sanduni — 0 sessions (manual only)
-  // skip
-
-  // 6) Hasitha — 2 sessions (live join)
-  sessionsToCreate.push(
-    {
-      userId: users[5].id, recordingId: recId,
-      startedAt: ago(380), endedAt: ago(320), videoStartPos: 0, videoEndPos: 1620, totalWatchedSec: 1800, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(380).toISOString() },
-        { type: 'pause', videoTime: 600, wallTime: ago(370).toISOString() },
-        { type: 'play', videoTime: 600, wallTime: ago(368).toISOString() },
-        { type: 'pause', videoTime: 1800, wallTime: ago(350).toISOString() },
-      ],
-    },
-    {
-      userId: users[5].id, recordingId: recId,
-      startedAt: ago(332), endedAt: ago(308), videoStartPos: 1800, videoEndPos: 2520, totalWatchedSec: 1600, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 1800, wallTime: ago(332).toISOString() },
-        { type: 'buffer', videoTime: 2200, wallTime: ago(327).toISOString() },
-        { type: 'play', videoTime: 2200, wallTime: ago(327).toISOString() },
-        { type: 'ended', videoTime: 2800, wallTime: ago(320).toISOString() },
-      ],
-    },
-  );
-
-  // 7) Nimesh — 0 sessions
-  // skip
-
-  // 8) Ishara — 4 sessions (suspicious seeker)
-  sessionsToCreate.push(
-    {
-      userId: users[7].id, recordingId: recId,
-      startedAt: ago(603), endedAt: ago(597), videoStartPos: 0, videoEndPos: 2790, totalWatchedSec: 150, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(603).toISOString() },
-        { type: 'seek', videoTime: 1000, wallTime: ago(602).toISOString() },
-        { type: 'seek', videoTime: 2000, wallTime: ago(601).toISOString() },
-        { type: 'seek', videoTime: 3000, wallTime: ago(600).toISOString() },
-        { type: 'pause', videoTime: 3100, wallTime: ago(600).toISOString() },
-      ],
-    },
-    {
-      userId: users[7].id, recordingId: recId,
-      startedAt: ago(502), endedAt: ago(498), videoStartPos: 0, videoEndPos: 2745, totalWatchedSec: 90, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(502).toISOString() },
-        { type: 'seek', videoTime: 1500, wallTime: ago(501).toISOString() },
-        { type: 'seek', videoTime: 3000, wallTime: ago(500).toISOString() },
-        { type: 'pause', videoTime: 3050, wallTime: ago(500).toISOString() },
-      ],
-    },
-    {
-      userId: users[7].id, recordingId: recId,
-      startedAt: ago(304), endedAt: ago(296), videoStartPos: 500, videoEndPos: 2880, totalWatchedSec: 180, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 500, wallTime: ago(304).toISOString() },
-        { type: 'seek', videoTime: 1800, wallTime: ago(303).toISOString() },
-        { type: 'pause', videoTime: 1900, wallTime: ago(301).toISOString() },
-        { type: 'play', videoTime: 1900, wallTime: ago(301).toISOString() },
-        { type: 'seek', videoTime: 3200, wallTime: ago(300).toISOString() },
-      ],
-    },
-    {
-      userId: users[7].id, recordingId: recId,
-      startedAt: ago(103), endedAt: ago(97), videoStartPos: 0, videoEndPos: 2880, totalWatchedSec: 100, status: 'ENDED',
-      events: [
-        { type: 'play', videoTime: 0, wallTime: ago(103).toISOString() },
-        { type: 'seek', videoTime: 3200, wallTime: ago(102).toISOString() },
-        { type: 'pause', videoTime: 3200, wallTime: ago(100).toISOString() },
-      ],
-    },
-  );
-
-  // 9) Malini — 1 session (currently watching)
-  sessionsToCreate.push({
-    userId: users[8].id, recordingId: recId,
-    startedAt: ago(30), endedAt: null, videoStartPos: 0, videoEndPos: 540, totalWatchedSec: 600, status: 'WATCHING',
-    events: [
-      { type: 'play', videoTime: 0, wallTime: ago(30).toISOString() },
-      { type: 'pause', videoTime: 200, wallTime: ago(27).toISOString() },
-      { type: 'play', videoTime: 200, wallTime: ago(26).toISOString() },
-    ],
-  });
-
-  // 10) Chaminda — 1 session (not enrolled, but watched)
-  sessionsToCreate.push({
-    userId: users[9].id, recordingId: recId,
-    startedAt: ago(182), endedAt: ago(58), videoStartPos: 0, videoEndPos: 3240, totalWatchedSec: 3600, status: 'ENDED',
-    events: [
-      { type: 'play', videoTime: 0, wallTime: ago(182).toISOString() },
-      { type: 'pause', videoTime: 1800, wallTime: ago(152).toISOString() },
-      { type: 'play', videoTime: 1800, wallTime: ago(150).toISOString() },
-      { type: 'ended', videoTime: 3600, wallTime: ago(120).toISOString() },
-    ],
-  });
-
-  for (const s of sessionsToCreate) {
-    await prisma.watchSession.create({ data: s });
-  }
-  console.log(`Created ${sessionsToCreate.length} watch sessions`);
-
-  // ─── Science Class: Months & Recordings ──────────────
-  const scienceApril = await prisma.month.upsert({
-    where: { classId_year_month: { classId: scienceClass.id, year: 2026, month: 4 } },
-    update: {},
-    create: {
-      classId: scienceClass.id,
-      name: 'April 2026',
-      year: 2026,
-      month: 4,
+  const scienceClass = await prisma.class.create({
+    data: {
+      id: 'class-physics-2026',
+      name: 'Physics',
+      subject: 'Physics',
+      description: 'A/L Physics â€” 2026 batch. Theory and practical problem solving.',
+      monthlyFee: 2500,
+      orgId: institute.id,
       status: 'STUDENTS_ONLY',
     },
   });
-  await prisma.recording.upsert({
-    where: { id: 'physics-recording-1' },
-    update: {},
-    create: {
-      id: 'physics-recording-1',
-      monthId: scienceApril.id,
-      title: 'Newton\'s Laws of Motion',
-      description: 'Exploring all three laws with experiments',
-      videoUrl: 'https://example.com/physics-01.mp4',
+  console.log(`Classes created: ${mathClass.name}, ${scienceClass.name}`);
+
+  // â”€â”€â”€ Months â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const janMonth = await prisma.month.create({
+    data: { classId: mathClass.id, name: 'January 2026', year: 2026, month: 1, status: 'ANYONE' },
+  });
+  const febMonth = await prisma.month.create({
+    data: { classId: mathClass.id, name: 'February 2026', year: 2026, month: 2, status: 'STUDENTS_ONLY' },
+  });
+  const marMonth = await prisma.month.create({
+    data: { classId: mathClass.id, name: 'March 2026', year: 2026, month: 3, status: 'STUDENTS_ONLY' },
+  });
+  const aprMonth = await prisma.month.create({
+    data: { classId: mathClass.id, name: 'April 2026', year: 2026, month: 4, status: 'STUDENTS_ONLY' },
+  });
+
+  // Physics months
+  const physAprMonth = await prisma.month.create({
+    data: { classId: scienceClass.id, name: 'April 2026', year: 2026, month: 4, status: 'STUDENTS_ONLY' },
+  });
+  console.log('Months created');
+
+  // â”€â”€â”€ Recordings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // January
+  const janRec1 = await prisma.recording.create({
+    data: {
+      id: 'rec-jan-01',
+      monthId: janMonth.id,
+      title: 'Lesson 01 â€” Algebra Revision',
+      description: 'Revision of key algebraic identities and expressions',
+      videoUrl: 'https://example.com/jan-01.mp4',
+      videoType: 'DRIVE',
+      duration: 3000,
+      status: 'ANYONE',
+      order: 1,
+    },
+  });
+  const janRec2 = await prisma.recording.create({
+    data: {
+      id: 'rec-jan-02',
+      monthId: janMonth.id,
+      title: 'Lesson 02 â€” Polynomials',
+      description: 'Factorisation, remainder theorem and factor theorem',
+      videoUrl: 'https://example.com/jan-02.mp4',
+      videoType: 'DRIVE',
+      duration: 3300,
+      status: 'STUDENTS_ONLY',
+      order: 2,
+    },
+  });
+
+  // February
+  await prisma.recording.create({
+    data: {
+      id: 'rec-feb-01',
+      monthId: febMonth.id,
+      title: 'Lesson 01 â€” Functions & Graphs',
+      description: 'Domain, range, composite and inverse functions',
+      videoUrl: 'https://example.com/feb-01.mp4',
+      videoType: 'DRIVE',
+      duration: 3600,
+      status: 'STUDENTS_ONLY',
+      order: 1,
+    },
+  });
+  await prisma.recording.create({
+    data: {
+      id: 'rec-feb-02',
+      monthId: febMonth.id,
+      title: 'Lesson 02 â€” Inequalities',
+      description: 'Solving linear and quadratic inequalities',
+      videoUrl: 'https://example.com/feb-02.mp4',
+      videoType: 'DRIVE',
+      duration: 3200,
+      status: 'PAID_ONLY',
+      order: 2,
+    },
+  });
+
+  // March
+  await prisma.recording.create({
+    data: {
+      id: 'rec-mar-01',
+      monthId: marMonth.id,
+      title: 'Lesson 01 â€” Sequences & Series',
+      description: 'Arithmetic and geometric progressions, summation formulas',
+      videoUrl: 'https://example.com/mar-01.mp4',
       videoType: 'DRIVE',
       duration: 4200,
       status: 'STUDENTS_ONLY',
       order: 1,
-      welcomeMessage: '<p>Hey <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! Welcome to <strong>April 2026</strong> — today we cover Newton\'s Laws. 🔬</p>',
     },
   });
 
-  // Enroll students 6-8 in science class
-  for (let i = 5; i < 8; i++) {
-    await prisma.enrollment.upsert({
-      where: { userId_classId: { userId: users[i].id, classId: scienceClass.id } },
-      update: {},
-      create: { userId: users[i].id, classId: scienceClass.id },
-    });
-  }
-  console.log('Science class seeded');
-
-  // ─── Sample Lectures (for both classes) ───────────────
-  const db = prisma as any;
-
-  // Delete existing sample lectures to avoid duplicates
-  await db.lecture.deleteMany({
-    where: { id: { in: ['lec-live-now', 'lec-upcoming-1', 'lec-upcoming-2', 'lec-ended-1', 'lec-ended-2', 'lec-physics-1'] } },
+  // April
+  const aprRec1 = await prisma.recording.create({
+    data: {
+      id: 'rec-apr-01',
+      monthId: aprMonth.id,
+      title: 'Lesson 01 â€” Introduction to Limits',
+      description: 'Understanding limits, left/right-hand limits, continuity basics',
+      videoUrl: 'https://example.com/apr-01.mp4',
+      videoType: 'DRIVE',
+      duration: 3600,
+      status: 'ANYONE',
+      order: 1,
+      welcomeMessage: '<p>Welcome <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">ðŸ‘¤ Student Name</span>! This is your first lesson for <span contenteditable="false" data-variable="{{month}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-purple-100 text-purple-700 border-purple-200" style="user-select:all;cursor:default">ðŸ“… Month</span>. Enjoy! ðŸŽ¯</p>',
+    },
+  });
+  const aprRec2 = await prisma.recording.create({
+    data: {
+      id: 'rec-apr-02',
+      monthId: aprMonth.id,
+      title: 'Lesson 02 â€” Differentiation Basics',
+      description: 'First principles, power rule, product & quotient rule',
+      videoUrl: 'https://example.com/apr-02.mp4',
+      videoType: 'DRIVE',
+      duration: 4500,
+      status: 'STUDENTS_ONLY',
+      order: 2,
+    },
+  });
+  const aprRec3 = await prisma.recording.create({
+    data: {
+      id: 'rec-apr-03',
+      monthId: aprMonth.id,
+      title: 'Lesson 03 â€” Quadratic Equations',
+      description: 'Solving quadratic equations, graphing parabolas, discriminant analysis',
+      videoUrl: 'https://example.com/apr-03.mp4',
+      videoType: 'DRIVE',
+      duration: 3600,
+      status: 'PAID_ONLY',
+      order: 3,
+      topic: 'Quadratic Equations',
+      welcomeMessage: '<p>Hey <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">ðŸ‘¤ Student Name</span>! Today\'s lesson on <strong>Quadratic Equations</strong> is really important for your exam. Good luck! ðŸ“</p>',
+    },
   });
 
-  // 1) Currently LIVE — started 30 min ago, ends in 30 min
+  // Physics April
+  const physRec1 = await prisma.recording.create({
+    data: {
+      id: 'rec-phys-apr-01',
+      monthId: physAprMonth.id,
+      title: 'Lesson 01 â€” Newton\'s Laws of Motion',
+      description: 'Exploring all three laws with derivations and real-world experiments',
+      videoUrl: 'https://example.com/phys-apr-01.mp4',
+      videoType: 'DRIVE',
+      duration: 4200,
+      status: 'STUDENTS_ONLY',
+      order: 1,
+    },
+  });
+  console.log('Recordings created');
+
+  // â”€â”€â”€ Month Media â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  await db.monthMedia.create({
+    data: {
+      monthId: aprMonth.id,
+      title: 'April Formula Sheet',
+      description: 'Comprehensive formula reference for April topics',
+      fileUrl: 'https://example.com/media/apr-formula-sheet.pdf',
+      mediaType: 'PDF',
+      order: 1,
+      status: 'STUDENTS_ONLY',
+    },
+  });
+  await db.monthMedia.create({
+    data: {
+      monthId: aprMonth.id,
+      title: 'Practice Problem Set â€” April',
+      description: '50 practice questions covering Limits, Differentiation and Quadratics',
+      fileUrl: 'https://example.com/media/apr-problems.pdf',
+      mediaType: 'PDF',
+      order: 2,
+      status: 'PAID_ONLY',
+    },
+  });
+  await db.monthMedia.create({
+    data: {
+      monthId: janMonth.id,
+      title: 'Algebra Cheat Sheet',
+      description: 'Key identities and formulas for Algebra revision',
+      fileUrl: 'https://example.com/media/jan-algebra.pdf',
+      mediaType: 'PDF',
+      order: 1,
+      status: 'ANYONE',
+    },
+  });
+  console.log('Month media created');
+
+  // â”€â”€â”€ Lectures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // 1) Currently LIVE
   await db.lecture.create({
     data: {
       id: 'lec-live-now',
-      monthId: aprilMonth.id,
-      title: 'Differentiation — Live Q&A Session',
+      monthId: aprMonth.id,
+      title: 'Differentiation â€” Live Q&A Session',
       description: 'Live doubt-clearing session for Chapter 4. All students welcome.',
       mode: 'ONLINE',
       platform: 'Zoom',
@@ -630,54 +373,52 @@ async function main() {
       meetingPassword: 'maths2026',
       maxParticipants: 150,
       status: 'STUDENTS_ONLY',
-      welcomeMessage: '<p>🎉 Welcome, <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! This session is happening <strong>right now</strong> for <span contenteditable="false" data-variable="{{month}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-purple-100 text-purple-700 border-purple-200" style="user-select:all;cursor:default">📅 Month</span>. Join quickly! 🚀</p>',
+      welcomeMessage: '<p>ðŸŽ‰ Welcome, <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">ðŸ‘¤ Student Name</span>! This session is happening <strong>right now</strong>. Join quickly! ðŸš€</p>',
     },
   });
 
-  // 2) Upcoming tomorrow morning
+  // 2) Upcoming
   await db.lecture.create({
     data: {
       id: 'lec-upcoming-1',
-      monthId: aprilMonth.id,
-      title: 'Integration — Definite Integrals',
+      monthId: aprMonth.id,
+      title: 'Integration â€” Definite Integrals',
       description: 'Chapter 5 coverage: area under curves, definite integrals and applications.',
       mode: 'ONLINE',
       platform: 'Google Meet',
-      startTime: fromNow(60 * 20),        // 20 hours from now
-      endTime: fromNow(60 * 22),          // 22 hours from now
+      startTime: fromNow(60 * 20),
+      endTime: fromNow(60 * 22),
       sessionLink: 'https://meet.google.com/abc-defg-hij',
       maxParticipants: 200,
       status: 'STUDENTS_ONLY',
-      welcomeMessage: '<p>Hello <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span> 👋</p><p>Your next lecture is scheduled for <span contenteditable="false" data-variable="{{date}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-green-100 text-green-700 border-green-200" style="user-select:all;cursor:default">🗓️ Date</span>. Please revise Chapter 4 before joining. 📚</p>',
     },
   });
 
-  // 3) Upcoming this weekend — OFFLINE
+  // 3) Upcoming offline
   await db.lecture.create({
     data: {
       id: 'lec-upcoming-2',
-      monthId: aprilMonth.id,
-      title: 'Mock Exam — Paper I',
+      monthId: aprMonth.id,
+      title: 'Mock Exam â€” Paper I',
       description: 'Full 3-hour mock paper under exam conditions.',
       mode: 'OFFLINE',
-      startTime: fromNow(60 * 48),       // 2 days from now
+      startTime: fromNow(60 * 48),
       endTime: fromNow(60 * 51),
       maxParticipants: 80,
       status: 'PAID_ONLY',
-      welcomeMessage: '<p>Dear <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>,</p><p>Please arrive <strong>15 minutes early</strong> for the mock exam. Bring your student ID and stationery. Good luck! 🍀</p>',
     },
   });
 
-  // 4) Ended last week
+  // 4) Past lecture
   await db.lecture.create({
     data: {
-      id: 'lec-ended-1',
-      monthId: aprilMonth.id,
+      id: 'lec-past-1',
+      monthId: aprMonth.id,
       title: 'Binomial Theorem & Permutations',
       description: 'Completed session on binomial expansion and combinatorics.',
       mode: 'ONLINE',
       platform: 'Zoom',
-      startTime: ago(60 * 3 * 24),       // 3 days ago
+      startTime: ago(60 * 3 * 24),
       endTime: ago(60 * 3 * 24 - 120),
       sessionLink: 'https://zoom.us/j/99887766',
       meetingId: '998 877 6655',
@@ -686,48 +427,395 @@ async function main() {
     },
   });
 
-  // 5) Ended two weeks ago
+  // 5) Past offline
   await db.lecture.create({
     data: {
-      id: 'lec-ended-2',
-      monthId: aprilMonth.id,
-      title: 'Vectors & 3D Geometry — Introduction',
+      id: 'lec-past-2',
+      monthId: janMonth.id,
+      title: 'Vectors & 3D Geometry â€” Introduction',
       description: 'First lecture on 3D vectors, dot product, cross product.',
       mode: 'OFFLINE',
-      startTime: ago(60 * 7 * 24),       // 7 days ago
+      startTime: ago(60 * 7 * 24),
       endTime: ago(60 * 7 * 24 - 180),
       maxParticipants: 100,
       status: 'ANYONE',
     },
   });
 
-  // 6) Physics class — upcoming
+  // 6) Physics â€” upcoming
   await db.lecture.create({
     data: {
       id: 'lec-physics-1',
-      monthId: scienceApril.id,
+      monthId: physAprMonth.id,
       title: 'Circular Motion & Centripetal Force',
       description: 'Live derivation and problem solving for circular motion.',
       mode: 'ONLINE',
       platform: 'Zoom',
-      startTime: fromNow(60 * 3),        // 3 hours from now
+      startTime: fromNow(60 * 3),
       endTime: fromNow(60 * 5),
       sessionLink: 'https://zoom.us/j/55544433322',
       meetingId: '555 444 3332',
       meetingPassword: 'phys2026',
       maxParticipants: 100,
       status: 'STUDENTS_ONLY',
-      welcomeMessage: '<p>Hi <span contenteditable="false" data-variable="{{studentName}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200" style="user-select:all;cursor:default">👤 Student Name</span>! Today we\'re covering <strong>Circular Motion</strong> in <span contenteditable="false" data-variable="{{className}}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-semibold border bg-amber-100 text-amber-700 border-amber-200" style="user-select:all;cursor:default">📚 Class Name</span>. See you at the session! ⚛️</p>',
+    },
+  });
+  console.log('Lectures created');
+
+  // â”€â”€â”€ Enrollments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // All 6 students enrolled in Math class; first 3 also in Physics
+  for (const student of allStudents) {
+    await prisma.enrollment.create({
+      data: { userId: student.id, classId: mathClass.id },
+    });
+  }
+  for (let i = 0; i < 3; i++) {
+    await prisma.enrollment.create({
+      data: { userId: allStudents[i].id, classId: scienceClass.id },
+    });
+  }
+  console.log('Enrollments created');
+
+  // â”€â”€â”€ Payment Slips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // April payments: primaryStudent=VERIFIED, kavindu=VERIFIED, nethmi=PENDING, dilshan=REJECTED, sanduni=none, hasitha=PENDING
+  const aprPayments: { student: { id: string; email: string }; status: 'VERIFIED' | 'PENDING' | 'REJECTED'; paidDate?: Date }[] = [
+    { student: allStudents[0], status: 'VERIFIED', paidDate: ago(60 * 24 * 5) },  // student@td.lk
+    { student: allStudents[1], status: 'VERIFIED', paidDate: ago(60 * 24 * 4) },  // kavindu
+    { student: allStudents[2], status: 'PENDING' },                                // nethmi
+    { student: allStudents[3], status: 'REJECTED' },                               // dilshan
+    { student: allStudents[5], status: 'PENDING' },                                // hasitha
+  ];
+  for (const p of aprPayments) {
+    await prisma.paymentSlip.create({
+      data: {
+        userId: p.student.id,
+        monthId: aprMonth.id,
+        type: 'MONTHLY',
+        slipUrl: 'https://example.com/mock-slip.jpg',
+        amount: 3000,
+        status: p.status,
+        paidDate: p.paidDate ?? null,
+        paymentMethod: 'ONLINE',
+        paymentPortion: 'FULL',
+        ...(p.status === 'REJECTED' ? { rejectReason: 'Slip image unclear, please re-upload.' } : {}),
+      },
+    });
+  }
+
+  // Admission payment for student@td.lk
+  await prisma.paymentSlip.create({
+    data: {
+      userId: allStudents[0].id,
+      monthId: janMonth.id,
+      type: 'ADMISSION',
+      slipUrl: 'https://example.com/mock-admission-slip.jpg',
+      amount: 1500,
+      status: 'VERIFIED',
+      paidDate: ago(60 * 24 * 90),
+      paymentMethod: 'PHYSICAL',
+      paymentPortion: 'FULL',
+    },
+  });
+  console.log('Payment slips created');
+
+  // â”€â”€â”€ Attendance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const recId = aprRec3.id;
+
+  // student@td.lk â€” COMPLETED
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: recId,
+      status: 'COMPLETED',
+      watchedSec: 3450,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(300).toISOString() },
+        { type: 'PUSH', watchedSec: 3450, at: ago(60).toISOString() },
+        { type: 'END', videoPosition: 3450, watchedSec: 3450, at: ago(58).toISOString() },
+      ],
     },
   });
 
-  console.log('Sample lectures created (1 live, 3 upcoming, 2 ended, 1 physics)');
+  // kavindu â€” COMPLETED
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[1].id,
+      recordingId: recId,
+      status: 'COMPLETED',
+      watchedSec: 3600,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(250).toISOString() },
+        { type: 'PUSH', watchedSec: 3600, at: ago(210).toISOString() },
+        { type: 'END', videoPosition: 3600, watchedSec: 3600, at: ago(208).toISOString() },
+      ],
+    },
+  });
+
+  // nethmi â€” INCOMPLETE
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[2].id,
+      recordingId: recId,
+      status: 'INCOMPLETE',
+      watchedSec: 600,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(500).toISOString() },
+        { type: 'INCOMPLETE_EXIT', watchedSec: 600, at: ago(490).toISOString() },
+      ],
+    },
+  });
+
+  // dilshan â€” INCOMPLETE (suspicious seeker)
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[3].id,
+      recordingId: recId,
+      status: 'INCOMPLETE',
+      watchedSec: 120,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(700).toISOString() },
+        { type: 'INCOMPLETE_EXIT', watchedSec: 120, at: ago(699).toISOString() },
+      ],
+    },
+  });
+
+  // sanduni â€” MANUAL
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[4].id,
+      recordingId: recId,
+      status: 'MANUAL',
+      watchedSec: 0,
+      eventName: 'Manual â€” 2026-04-05',
+      details: [{ type: 'MANUAL', eventName: 'Manual â€” 2026-04-05', at: ago(1440).toISOString() }],
+    },
+  });
+
+  // Also add attendance for jan/feb recordings for student@td.lk
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: janRec1.id,
+      status: 'COMPLETED',
+      watchedSec: 2900,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(60 * 24 * 90).toISOString() },
+        { type: 'END', videoPosition: 2900, watchedSec: 2900, at: ago(60 * 24 * 89).toISOString() },
+      ],
+    },
+  });
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: janRec2.id,
+      status: 'COMPLETED',
+      watchedSec: 3300,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(60 * 24 * 85).toISOString() },
+        { type: 'END', videoPosition: 3300, watchedSec: 3300, at: ago(60 * 24 * 84).toISOString() },
+      ],
+    },
+  });
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: aprRec1.id,
+      status: 'COMPLETED',
+      watchedSec: 3600,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(60 * 24 * 3).toISOString() },
+        { type: 'END', videoPosition: 3600, watchedSec: 3600, at: ago(60 * 24 * 2).toISOString() },
+      ],
+    },
+  });
+  await prisma.attendance.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: aprRec2.id,
+      status: 'INCOMPLETE',
+      watchedSec: 1200,
+      details: [
+        { type: 'START', videoPosition: 0, at: ago(60 * 2).toISOString() },
+        { type: 'INCOMPLETE_EXIT', watchedSec: 1200, at: ago(60 * 1).toISOString() },
+      ],
+    },
+  });
+  console.log('Attendance records created');
+
+  // â”€â”€â”€ Watch Sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // student@td.lk â€” 2 sessions on aprRec3
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: recId,
+      startedAt: ago(310),
+      endedAt: ago(250),
+      videoStartPos: 0,
+      videoEndPos: 1800,
+      totalWatchedSec: 1800,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(310).toISOString() },
+        { type: 'pause', videoTime: 600, wallTime: ago(300).toISOString() },
+        { type: 'play', videoTime: 600, wallTime: ago(298).toISOString() },
+        { type: 'pause', videoTime: 1800, wallTime: ago(280).toISOString() },
+      ],
+    },
+  });
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: recId,
+      startedAt: ago(120),
+      endedAt: ago(58),
+      videoStartPos: 1800,
+      videoEndPos: 3450,
+      totalWatchedSec: 1650,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 1800, wallTime: ago(120).toISOString() },
+        { type: 'buffer', videoTime: 2200, wallTime: ago(110).toISOString() },
+        { type: 'play', videoTime: 2200, wallTime: ago(110).toISOString() },
+        { type: 'ended', videoTime: 3600, wallTime: ago(60).toISOString() },
+      ],
+    },
+  });
+
+  // kavindu â€” 1 session on aprRec3
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[1].id,
+      recordingId: recId,
+      startedAt: ago(280),
+      endedAt: ago(208),
+      videoStartPos: 0,
+      videoEndPos: 3600,
+      totalWatchedSec: 3600,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(280).toISOString() },
+        { type: 'pause', videoTime: 1500, wallTime: ago(255).toISOString() },
+        { type: 'play', videoTime: 1500, wallTime: ago(253).toISOString() },
+        { type: 'ended', videoTime: 3600, wallTime: ago(210).toISOString() },
+      ],
+    },
+  });
+
+  // nethmi â€” 1 partial session on aprRec3
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[2].id,
+      recordingId: recId,
+      startedAt: ago(505),
+      endedAt: ago(490),
+      videoStartPos: 0,
+      videoEndPos: 540,
+      totalWatchedSec: 600,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(505).toISOString() },
+        { type: 'pause', videoTime: 600, wallTime: ago(495).toISOString() },
+      ],
+    },
+  });
+
+  // student@td.lk â€” 1 session on jan rec1
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: janRec1.id,
+      startedAt: ago(60 * 24 * 90),
+      endedAt: ago(60 * 24 * 89),
+      videoStartPos: 0,
+      videoEndPos: 2900,
+      totalWatchedSec: 2900,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(60 * 24 * 90).toISOString() },
+        { type: 'ended', videoTime: 2900, wallTime: ago(60 * 24 * 89).toISOString() },
+      ],
+    },
+  });
+
+  // student@td.lk â€” 1 session on aprRec1
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: aprRec1.id,
+      startedAt: ago(60 * 24 * 3),
+      endedAt: ago(60 * 24 * 2),
+      videoStartPos: 0,
+      videoEndPos: 3600,
+      totalWatchedSec: 3600,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(60 * 24 * 3).toISOString() },
+        { type: 'ended', videoTime: 3600, wallTime: ago(60 * 24 * 2).toISOString() },
+      ],
+    },
+  });
+
+  // student@td.lk â€” currently watching aprRec2
+  await prisma.watchSession.create({
+    data: {
+      userId: allStudents[0].id,
+      recordingId: aprRec2.id,
+      startedAt: ago(62),
+      endedAt: ago(60),
+      videoStartPos: 0,
+      videoEndPos: 1200,
+      totalWatchedSec: 1200,
+      status: 'ENDED',
+      events: [
+        { type: 'play', videoTime: 0, wallTime: ago(62).toISOString() },
+        { type: 'pause', videoTime: 1200, wallTime: ago(60).toISOString() },
+      ],
+    },
+  });
+  console.log('Watch sessions created');
+
+  // â”€â”€â”€ Class Attendances (physical) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const classDates = [
+    new Date('2026-04-01'),
+    new Date('2026-04-05'),
+    new Date('2026-04-08'),
+  ];
+  for (const date of classDates) {
+    await prisma.classAttendance.create({
+      data: {
+        userId: allStudents[0].id,
+        classId: mathClass.id,
+        date,
+        status: 'PRESENT',
+        method: 'barcode',
+        markedBy: admin.id,
+      },
+    });
+  }
+  // kavindu â€” 2 present, 1 late
+  await prisma.classAttendance.create({
+    data: { userId: allStudents[1].id, classId: mathClass.id, date: new Date('2026-04-01'), status: 'PRESENT', method: 'barcode' },
+  });
+  await prisma.classAttendance.create({
+    data: { userId: allStudents[1].id, classId: mathClass.id, date: new Date('2026-04-05'), status: 'LATE', method: 'manual', note: 'Arrived 15 min late' },
+  });
+  await prisma.classAttendance.create({
+    data: { userId: allStudents[1].id, classId: mathClass.id, date: new Date('2026-04-08'), status: 'ABSENT' },
+  });
+  // nethmi â€” absent from one
+  await prisma.classAttendance.create({
+    data: { userId: allStudents[2].id, classId: mathClass.id, date: new Date('2026-04-01'), status: 'PRESENT', method: 'barcode' },
+  });
+  await prisma.classAttendance.create({
+    data: { userId: allStudents[2].id, classId: mathClass.id, date: new Date('2026-04-05'), status: 'ABSENT' },
+  });
+  console.log('Class attendances created');
 
   console.log('\n--- Seed Complete ---');
-  console.log('Institutes: Thilina Dhananjaya Academy, TD Science Hub');
-  console.log('Admin login: admin@thilinadhananjaya.lk / admin123');
-  console.log('Student login (any): student123');
-  console.log(`Mock recording: "${mockRecording.title}" in April 2026`);
+  console.log('Institute: Thilina Dhananjaya Academy');
+  console.log('Admin login:   admin@td.lk   / admin123');
+  console.log('Student login: student@td.lk / student123');
 }
 
 main()
@@ -738,3 +826,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
