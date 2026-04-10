@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
@@ -64,7 +64,7 @@ export default function LectureLiveJoinPage() {
   // When true, show login form even if user is already logged in
   const [useOtherAccount, setUseOtherAccount] = useState(false);
 
-  // Step covers full flow: idle → signing-in → joining → done
+  // Step covers full flow: idle ? signing-in ? joining ? done
   type Step = 'idle' | 'signing-in' | 'joining' | 'done';
   const [step, setStep] = useState<Step>('idle');
 
@@ -74,7 +74,7 @@ export default function LectureLiveJoinPage() {
     meetingPassword?: string;
   } | null>(null);
 
-  // ── Fetch lecture from token ──────────────────────────────
+  // -- Fetch lecture from token ------------------------------
   useEffect(() => {
     if (!token) return;
     api.get(`/lectures/live/${token}`)
@@ -90,7 +90,7 @@ export default function LectureLiveJoinPage() {
       .catch(() => setFetchError('This live lecture link is invalid or has expired.'));
   }, [token]);
 
-  // ── Core join call (token must already be in sessionStorage) ──
+  // -- Core join call (token must already be in sessionStorage) --
   const doJoin = async () => {
     if (!token) return;
     setStep('joining');
@@ -108,7 +108,7 @@ export default function LectureLiveJoinPage() {
     }
   };
 
-  // ── Guest join (no auth) ──
+  // -- Guest join (no auth) --
   const handleGuestJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
@@ -132,14 +132,14 @@ export default function LectureLiveJoinPage() {
     }
   };
 
-  // ── Login → then immediately join (no useEffect relay) ──
+  // -- Login ? then immediately join (no useEffect relay) --
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStepError('');
     setStep('signing-in');
     try {
       await login(identifier, password);
-      // JWT is now in sessionStorage â€” doJoin can call the API immediately
+      // JWT is now in sessionStorage — doJoin can call the API immediately
       await doJoin();
     } catch (err: any) {
       // Only show error if we haven't already succeeded at doJoin
@@ -150,13 +150,13 @@ export default function LectureLiveJoinPage() {
     }
   };
 
-  // â”€â”€ Derived display values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Derived display values ────────────────────────────
   const isProcessing  = step === 'signing-in' || step === 'joining';
   const lectureState  = lecture ? getLectureState(lecture) : 'upcoming';
   const classNameStr  = lecture?.month?.class?.name || '';
   const monthNameStr  = lecture?.month?.name || '';
 
-  // â”€â”€ Full-page loading / error screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Full-page loading / error screens ────────────────
   if (authLoading || (!lecture && !fetchError)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
@@ -191,7 +191,7 @@ export default function LectureLiveJoinPage() {
       {/* Desktop: two-column card. Mobile: single column */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden lg:grid lg:grid-cols-[1fr_1fr]">
 
-        {/* ── Left panel: Lecture info (desktop) / header (mobile) ── */}
+        {/* -- Left panel: Lecture info (desktop) / header (mobile) -- */}
         <div className={`relative flex flex-col justify-between p-8 lg:p-10 ${
           lectureState === 'live'     ? 'bg-gradient-to-br from-red-500 via-red-600 to-orange-600' :
           lectureState === 'upcoming' ? 'bg-gradient-to-br from-[hsl(222,47%,11%)] via-[hsl(221,70%,25%)] to-[hsl(221,83%,38%)]' :
@@ -232,13 +232,13 @@ export default function LectureLiveJoinPage() {
 
             {/* Class + month */}
             {(classNameStr || monthNameStr) && (
-              <p className="text-white/75 text-sm mb-4">{classNameStr}{monthNameStr ? ` · ${monthNameStr}` : ''}</p>
+              <p className="text-white/75 text-sm mb-4">{classNameStr}{monthNameStr ? ` � ${monthNameStr}` : ''}</p>
             )}
 
             {/* Platform badge */}
             {lecture.mode === 'OFFLINE' ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 text-white border border-white/20">
-                🏫 Physical Class
+                ?? Physical Class
               </span>
             ) : lecture.platform ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 text-white border border-white/20">
@@ -261,10 +261,10 @@ export default function LectureLiveJoinPage() {
           </div>
         </div>
 
-        {/* ── Right panel: action area ── */}
+        {/* -- Right panel: action area -- */}
         <div className="p-8 lg:p-10 flex flex-col justify-center">
 
-          {/* ─── Mode switcher (only for public ANYONE lectures) ─── */}
+          {/* --- Mode switcher (only for public ANYONE lectures) --- */}
           {step === 'idle' && lecture.status === 'ANYONE' && (
             <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden mb-6">
               <button
@@ -272,7 +272,7 @@ export default function LectureLiveJoinPage() {
                 onClick={() => { setJoinMode('guest'); setStepError(''); setUseOtherAccount(false); }}
                 className={`flex-1 py-2.5 text-sm font-semibold transition flex items-center justify-center gap-1.5 ${
                   joinMode === 'guest'
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
@@ -298,11 +298,11 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Processing step indicator ─── */}
+          {/* --- Processing step indicator --- */}
           {isProcessing && (
             <div className="flex flex-col items-center py-6 gap-6">
               <div className="flex flex-col items-center gap-3 w-full max-w-xs mx-auto">
-                {/* Step 1 — only shown for account login flow */}
+                {/* Step 1 � only shown for account login flow */}
                 {joinMode === 'account' && (
                   <>
                     <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
@@ -322,7 +322,7 @@ export default function LectureLiveJoinPage() {
                       </div>
                       <div>
                         <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-blue-700' : 'text-green-700'}`}>
-                          {step === 'signing-in' ? 'Signing in…' : 'Signed in ✓'}
+                          {step === 'signing-in' ? 'Signing in�' : 'Signed in ?'}
                         </p>
                         {step === 'signing-in' && <p className="text-xs text-blue-500">Verifying your credentials</p>}
                       </div>
@@ -374,7 +374,7 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Done ─── */}
+          {/* --- Done --- */}
           {step === 'done' && joinResult && (
             <div className="text-center py-4">
               <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-green-100 flex items-center justify-center">
@@ -422,7 +422,7 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Idle: logged in → confirm identity (account mode) ─── */}
+          {/* --- Idle: logged in ? confirm identity (account mode) --- */}
           {step === 'idle' && joinMode === 'account' && user && !useOtherAccount && (
             <div className="space-y-5">
               <div>
@@ -450,7 +450,7 @@ export default function LectureLiveJoinPage() {
                 <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600">{stepError}</div>
               )}
 
-              {/* Yes — join as this user */}
+              {/* Yes � join as this user */}
               <button
                 onClick={doJoin}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
@@ -458,7 +458,7 @@ export default function LectureLiveJoinPage() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                Yes, that's me — {lectureState === 'live' ? 'Join Lecture' : lectureState === 'upcoming' ? 'Mark Attendance & Get Link' : 'Mark Attendance'}
+                Yes, that's me � {lectureState === 'live' ? 'Join Lecture' : lectureState === 'upcoming' ? 'Mark Attendance & Get Link' : 'Mark Attendance'}
               </button>
 
               {/* Not me */}
@@ -469,12 +469,12 @@ export default function LectureLiveJoinPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                Not me — use a different account
+                Not me � use a different account
               </button>
             </div>
           )}
 
-          {/* ─── Idle: not logged in (or chose different account) → login form (account mode) ─── */}
+          {/* --- Idle: not logged in (or chose different account) ? login form (account mode) --- */}
           {step === 'idle' && joinMode === 'account' && (!user || useOtherAccount) && (
             <div className="space-y-5">
               <div>
@@ -513,7 +513,7 @@ export default function LectureLiveJoinPage() {
                       onChange={e => setPassword(e.target.value)}
                       required
                       autoComplete="current-password"
-                      placeholder="••••••••"
+                      placeholder="��������"
                       className="w-full px-4 py-3.5 pr-12 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                     />
                     <button
@@ -540,7 +540,7 @@ export default function LectureLiveJoinPage() {
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Sign in → Attendance marked automatically → Meeting opens
+                  Sign in ? Attendance marked automatically ? Meeting opens
                 </div>
 
                 <button
@@ -556,7 +556,7 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Idle: guest mode form ─── */}
+          {/* --- Idle: guest mode form --- */}
           {step === 'idle' && joinMode === 'guest' && (
             <div className="space-y-5">
               <div>
@@ -582,7 +582,7 @@ export default function LectureLiveJoinPage() {
                     onChange={e => setGuestName(e.target.value)}
                     required
                     placeholder="e.g. Kamal Perera"
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                   />
                 </div>
                 <div>
@@ -593,7 +593,7 @@ export default function LectureLiveJoinPage() {
                     onChange={e => setGuestPhone(e.target.value)}
                     required
                     placeholder="e.g. 0771234567"
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                   />
                 </div>
                 <div>
@@ -603,7 +603,7 @@ export default function LectureLiveJoinPage() {
                     value={guestEmail}
                     onChange={e => setGuestEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                   />
                 </div>
                 <div>
@@ -613,13 +613,13 @@ export default function LectureLiveJoinPage() {
                     value={guestNote}
                     onChange={e => setGuestNote(e.target.value)}
                     placeholder="e.g. School, grade, or any message"
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-bold text-base hover:from-emerald-700 hover:to-emerald-800 transition shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2.5"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
