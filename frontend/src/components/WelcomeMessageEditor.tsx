@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 // Dynamic variable tokens that can be dragged into the editor
 const VARIABLE_TOKENS = [
@@ -18,10 +18,32 @@ interface WelcomeMessageEditorProps {
 export default function WelcomeMessageEditor({ value, onChange }: WelcomeMessageEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  // Track the last value we wrote into the DOM ourselves so we don't
+  // overwrite it (and reset the cursor) every time the parent re-renders.
+  const lastInternalValue = useRef<string>(value);
+
+  // Set initial HTML on mount only
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = value;
+      lastInternalValue.current = value;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync only when value changes from *outside* (e.g. form reset / modal reopen)
+  useEffect(() => {
+    if (editorRef.current && value !== lastInternalValue.current) {
+      editorRef.current.innerHTML = value;
+      lastInternalValue.current = value;
+    }
+  }, [value]);
 
   const saveContent = useCallback(() => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const html = editorRef.current.innerHTML;
+      lastInternalValue.current = html; // mark as internally-originated
+      onChange(html);
     }
   }, [onChange]);
 
@@ -176,9 +198,9 @@ export default function WelcomeMessageEditor({ value, onChange }: WelcomeMessage
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        dangerouslySetInnerHTML={{ __html: value }}
         className={`min-h-[120px] max-h-[200px] overflow-y-auto px-3 py-2.5 rounded-b-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition ${dragOver ? 'ring-2 ring-blue-400 bg-blue-50/30 border-blue-300' : ''}`}
-        style={{ lineHeight: '1.6' }}
+        style={{ lineHeight: '1.6', direction: 'ltr', unicodeBidi: 'bidi-override' }}
+        dir="ltr"
       />
 
       <p className="text-[10px] text-slate-400">

@@ -75,7 +75,14 @@ export class ClassesService {
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
       include: {
         _count: { select: { recordings: true } },
-        recordings: { orderBy: { order: 'asc' } },
+        recordings: {
+          orderBy: { order: 'asc' },
+          select: {
+            id: true, title: true, duration: true, thumbnail: true,
+            topic: true, icon: true, isLive: true, order: true,
+            videoType: true, status: true, createdAt: true,
+          },
+        },
       },
     });
   }

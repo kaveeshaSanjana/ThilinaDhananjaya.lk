@@ -1119,7 +1119,7 @@ export class AttendanceService {
 
   /** Student: get my attendance for all recordings in a specific class month */
   async getMyMonthAttendance(userId: string, monthId: string) {
-    const [month, attendances, sessions] = await Promise.all([
+    const [month, attendances, sessionAgg] = await Promise.all([
       this.prisma.month.findUnique({
         where: { id: monthId },
         select: {
@@ -1142,14 +1142,13 @@ export class AttendanceService {
           liveJoinedAt: true, updatedAt: true, details: true,
         },
       }),
-      this.prisma.watchSession.findMany({
+      // Lightweight aggregate: only count + sum per recording (no row data)
+      this.prisma.watchSession.groupBy({
+        by: ['recordingId'],
         where: { userId, recording: { monthId } },
-        select: {
-          recordingId: true, totalWatchedSec: true,
-          startedAt: true, endedAt: true, status: true,
-          videoStartPos: true, videoEndPos: true,
-        },
-        orderBy: { startedAt: 'desc' },
+        _count: { id: true },
+        _sum: { totalWatchedSec: true },
+        _max: { startedAt: true },
       }),
     ]);
 
@@ -1157,16 +1156,15 @@ export class AttendanceService {
 
     const attMap = new Map(attendances.map(a => [a.recordingId!, a]));
 
-    const sessionMap = new Map<string, typeof sessions>();
-    for (const s of sessions) {
-      if (!sessionMap.has(s.recordingId)) sessionMap.set(s.recordingId, []);
-      sessionMap.get(s.recordingId)!.push(s);
-    }
+    const aggMap = new Map(sessionAgg.map(a => [a.recordingId, {
+      count: a._count.id,
+      totalWatchedSec: a._sum.totalWatchedSec || 0,
+      lastWatchedAt: a._max.startedAt,
+    }]));
 
     const recordings = month.recordings.map(rec => {
       const att = attMap.get(rec.id) || null;
-      const recSessions = sessionMap.get(rec.id) || [];
-      const totalWatchedSec = recSessions.reduce((sum, s) => sum + (s.totalWatchedSec || 0), 0);
+      const agg = aggMap.get(rec.id) || { count: 0, totalWatchedSec: 0, lastWatchedAt: null };
       return {
         id: rec.id,
         title: rec.title,
@@ -1186,17 +1184,9 @@ export class AttendanceService {
               details: att.details,
             }
           : null,
-        sessionCount: recSessions.length,
-        totalWatchedSec,
-        lastWatchedAt: recSessions[0]?.startedAt || null,
-        sessions: recSessions.map(s => ({
-          startedAt: s.startedAt,
-          endedAt: s.endedAt,
-          videoStartPos: s.videoStartPos,
-          videoEndPos: s.videoEndPos,
-          totalWatchedSec: s.totalWatchedSec,
-          status: s.status,
-        })),
+        sessionCount: agg.count,
+        totalWatchedSec: agg.totalWatchedSec,
+        lastWatchedAt: agg.lastWatchedAt,
       };
     });
 
@@ -1208,6 +1198,19 @@ export class AttendanceService {
       recordings,
       summary: { total, completed, incomplete: recordings.filter(r => r.attendance?.status === 'INCOMPLETE').length, notWatched: recordings.filter(r => !r.attendance).length },
     };
+  }
+
+  /** Student: get my watch sessions for a single recording (lazy-loaded) */
+  async getMyRecordingSessions(userId: string, recordingId: string) {
+    const sessions = await this.prisma.watchSession.findMany({
+      where: { userId, recordingId },
+      select: {
+        startedAt: true, endedAt: true, status: true,
+        videoStartPos: true, videoEndPos: true, totalWatchedSec: true,
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+    return sessions;
   }
 
   /**

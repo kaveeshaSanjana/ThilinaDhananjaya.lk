@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import CropImageInput from '../components/CropImageInput';
 import { uploadImage } from '../lib/imageUpload';
 import { getInstitutePath } from '../lib/instituteRoutes';
+import WelcomeMessageEditor from '../components/WelcomeMessageEditor';
 
 /* ─── Types ──────────────────────────────────────────── */
 const VIDEO_TYPES = ['ZOOM', 'YOUTUBE', 'DRIVE', 'OTHER'] as const;
@@ -24,8 +25,6 @@ const EMPTY_FORM = {
   status: 'PAID_ONLY' as string,
   order: '',
   welcomeMessage: '',
-  isLive: false,
-  liveUrl: '',
 };
 
 /* ─── Create Recording Modal ─────────────────────────── */
@@ -73,8 +72,6 @@ function CreateRecordingModal({
       if (form.status)                body.status         = form.status;
       if (form.order !== '')          body.order          = Number(form.order);
       if (form.welcomeMessage.trim()) body.welcomeMessage = form.welcomeMessage.trim();
-      body.isLive = form.isLive;
-      if (form.liveUrl.trim())        body.liveUrl        = form.liveUrl.trim();
       await api.post('/recordings', body);
       onCreated();
       onClose();
@@ -83,141 +80,128 @@ function CreateRecordingModal({
     } finally { setSaving(false); }
   };
 
-  const inputCls = 'w-full px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
-  const labelCls = 'block text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1';
+  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] transition';
+  const labelCls = 'block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5';
+  const sectionCls = 'bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50';
+  const sectionLabelCls = 'text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest';
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-lg bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">
-          <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Create Recording</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))] shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">Create Recording</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Add a new video recording to this month</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
-
-          {/* Title */}
-          <div>
-            <label className={labelCls}>Title <span className="text-red-500">*</span></label>
-            <input className={inputCls} placeholder="e.g. Chapter 5 — Algebra" value={form.title} onChange={e => set('title', e.target.value)} />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className={labelCls}>Description</label>
-            <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
-          </div>
-
-          {/* Video URL + Type */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className={labelCls}>Video URL</label>
-              <input className={inputCls} placeholder="https://..." value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>Video Type</label>
-              <select className={inputCls} value={form.videoType} onChange={e => set('videoType', e.target.value)}>
-                {VIDEO_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Topic + Icon */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Topic</label>
-              <input className={inputCls} placeholder="e.g. Algebra" value={form.topic} onChange={e => set('topic', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>Icon (emoji)</label>
-              <input className={inputCls} placeholder="e.g. 📹" value={form.icon} onChange={e => set('icon', e.target.value)} />
-            </div>
-          </div>
-
-          {/* Thumbnail */}
-          <div>
-            <label className={labelCls}>Thumbnail</label>
-            <div className="space-y-2">
-              <input className={inputCls} placeholder="https://... or upload below" value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
-              <div className="flex items-center gap-2 flex-wrap">
-                <CropImageInput
-                  onFile={handleThumbUpload}
-                  aspectRatio={16 / 9}
-                  loading={uploadingThumb}
-                  label="Upload Image"
-                  cropTitle="Crop Thumbnail"
-                />
-                <span className="text-[11px] text-[hsl(var(--muted-foreground))]">JPEG/PNG/WebP/GIF · max 5 MB</span>
-              </div>
-              {form.thumbnail && (
-                <img src={form.thumbnail} alt="Thumbnail preview" className="w-full max-h-28 object-cover rounded-xl border border-[hsl(var(--border))]" />
-              )}
-            </div>
-          </div>
-
-          {/* Materials */}
-          <div>
-            <label className={labelCls}>Materials URL</label>
-            <input className={inputCls} placeholder="https://..." value={form.materials} onChange={e => set('materials', e.target.value)} />
-          </div>
-
-          {/* Duration + Order + Status */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className={labelCls}>Duration (sec)</label>
-              <input className={inputCls} type="number" min={0} placeholder="0" value={form.duration} onChange={e => set('duration', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>Order</label>
-              <input className={inputCls} type="number" min={0} placeholder="0" value={form.order} onChange={e => set('order', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>Visibility</label>
-              <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
-                {RECORDING_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Welcome Message */}
-          <div>
-            <label className={labelCls}>Welcome Message</label>
-            <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Optional welcome message..." value={form.welcomeMessage} onChange={e => set('welcomeMessage', e.target.value)} />
-          </div>
-
-          {/* Is Live */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Live Lecture</label>
-              <select className={inputCls} value={form.isLive ? 'yes' : 'no'} onChange={e => set('isLive', e.target.value === 'yes')}>
-                <option value="no">No</option>
-                <option value="yes">Yes</option>
-              </select>
-            </div>
-            {form.isLive && (
-              <div>
-                <label className={labelCls}>Live URL</label>
-                <input className={inputCls} placeholder="https://..." value={form.liveUrl} onChange={e => set('liveUrl', e.target.value)} />
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1">
+          <div className="p-6 space-y-5">
+            {err && (
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                <p className="text-sm text-red-500">{err}</p>
               </div>
             )}
-          </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving || uploadingThumb} className="px-5 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition flex items-center gap-2">
-              {saving && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
-              {saving ? 'Creating...' : 'Create Recording'}
-            </button>
+            {/* Classification */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Classification</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Title <span className="text-red-500">*</span></label>
+                  <input className={inputCls} placeholder="e.g. Lesson 01" value={form.title} onChange={e => set('title', e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelCls}>Visibility</label>
+                  <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+                    {RECORDING_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Video */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Video</p>
+              <div>
+                <label className={labelCls}>Video URL</label>
+                <input className={inputCls} placeholder="https://..." value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Video Type</label>
+                <select className={inputCls} value={form.videoType} onChange={e => set('videoType', e.target.value)}>
+                  <option value="">None</option>
+                  {VIDEO_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Media */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Media</p>
+              <div>
+                <label className={labelCls}>Thumbnail URL</label>
+                <div className="space-y-2">
+                  <input className={inputCls} placeholder="https://..." value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CropImageInput onFile={handleThumbUpload} aspectRatio={16 / 9} loading={uploadingThumb} label="Upload Thumbnail" cropTitle="Crop Thumbnail" />
+                    <span className="text-[11px] text-[hsl(var(--muted-foreground))]">JPEG/PNG/WebP/GIF up to 5MB</span>
+                  </div>
+                  {form.thumbnail && <img src={form.thumbnail} alt="Thumbnail preview" className="w-full max-h-28 object-cover rounded-xl ring-1 ring-[hsl(var(--border))]" />}
+                </div>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Details</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Topic</label>
+                  <input className={inputCls} placeholder="Topic name" value={form.topic} onChange={e => set('topic', e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>Icon</label>
+                  <input className={inputCls} placeholder="e.g. 📹" value={form.icon} onChange={e => set('icon', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Description</label>
+                <textarea className={`${inputCls} resize-none`} rows={3} placeholder="Optional notes..." value={form.description} onChange={e => set('description', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Materials (JSON or links)</label>
+                <textarea className={`${inputCls} resize-none`} rows={2} placeholder='e.g. ["https://file1.pdf"]' value={form.materials} onChange={e => set('materials', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Duration (seconds)</label>
+                  <input className={inputCls} type="number" min={0} placeholder="0" value={form.duration} onChange={e => set('duration', e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>Order</label>
+                  <input className={inputCls} type="number" min={0} placeholder="0" value={form.order} onChange={e => set('order', e.target.value)} />
+                </div>
+              </div>
+              <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 pt-2 pb-2">
+              <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
+              <button type="submit" disabled={saving || uploadingThumb} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {saving ? 'Creating...' : 'Create Recording'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -534,11 +518,19 @@ export default function ClassMonthRecordingsPage() {
           </div>
         </div>
         {isAdmin && (
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20 transition-all shrink-0">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Create Recording
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to={getInstitutePath(instituteId || classData?.instituteId || classData?.institute?.id || null, `/classes/${classId}/months/${monthId}/live-lessons`)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-all">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              Manage Lectures
+            </Link>
+            <button onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20 transition-all">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+              Create Recording
+            </button>
+          </div>
         )}
       </div>
 

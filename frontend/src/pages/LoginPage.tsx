@@ -1,41 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import teacherImg from '../assets/teacher.png';
 import logoImg from '../assets/logo.png';
-import classroomBg from '../assets/classroom-bg.png';
 
-/* ── Floating particles on right panel ── */
-function FloatingParticles() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext('2d')!;
-    let raf: number;
-    const particles: { x: number; y: number; r: number; dx: number; dy: number; o: number }[] = [];
-    const resize = () => { c.width = c.offsetWidth; c.height = c.offsetHeight; };
-    resize();
-    window.addEventListener('resize', resize);
-    for (let i = 0; i < 40; i++) {
-      particles.push({ x: Math.random() * c.width, y: Math.random() * c.height, r: Math.random() * 2 + 1, dx: (Math.random() - 0.5) * 0.4, dy: (Math.random() - 0.5) * 0.4, o: Math.random() * 0.5 + 0.2 });
-    }
-    const draw = () => {
-      ctx.clearRect(0, 0, c.width, c.height);
-      particles.forEach(p => {
-        p.x += p.dx; p.y += p.dy;
-        if (p.x < 0) p.x = c.width; if (p.x > c.width) p.x = 0;
-        if (p.y < 0) p.y = c.height; if (p.y > c.height) p.y = 0;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${p.o})`; ctx.fill();
-      });
-      raf = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
-  }, []);
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-[1]" />;
-}
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -46,8 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -73,197 +39,168 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[hsl(var(--background))]">
-      {/* ═══════ LEFT: Form Panel ═══════ */}
-      <div className="w-full lg:w-[48%] flex flex-col items-center justify-center px-6 py-8 lg:px-14 xl:px-20 relative overflow-hidden">
-        {/* Animated gradient blobs */}
-        <div className="absolute -top-32 -left-32 w-[400px] h-[400px] rounded-full bg-[hsl(var(--primary)/0.06)] blur-[100px] animate-float pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-[300px] h-[300px] rounded-full bg-[hsl(var(--accent)/0.06)] blur-[80px] pointer-events-none" style={{ animationDelay: '2s' }} />
+    <div className="min-h-screen flex">
 
-        {/* Dot pattern */}
-        <div className="absolute inset-0 opacity-[0.025]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, hsl(var(--foreground)) 1px, transparent 0)', backgroundSize: '28px 28px' }} />
+      {/* ═══════ LEFT: Brand panel ═══════ */}
+      <div className="hidden lg:flex lg:w-[44%] xl:w-[42%] relative overflow-hidden flex-col"
+        style={{ background: 'linear-gradient(145deg, hsl(222,47%,11%) 0%, hsl(221,70%,25%) 50%, hsl(221,83%,38%) 100%)' }}>
 
-        <div className={`w-full max-w-[440px] relative z-10 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+        {/* Decorative circles */}
+        <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/[0.04] pointer-events-none" />
+        <div className="absolute top-1/2 -left-20 w-56 h-56 rounded-full bg-white/[0.04] pointer-events-none" />
+        <div className="absolute bottom-32 right-8 w-40 h-40 rounded-full bg-white/[0.04] pointer-events-none" />
+        <div className="absolute top-1/4 right-12 w-20 h-20 rounded-full bg-white/[0.06] pointer-events-none" />
 
-          {/* ── Brand ── */}
-          <div className="flex items-center gap-4 mb-10">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center shadow-xl shadow-[hsl(var(--primary)/0.25)] p-1.5 relative group">
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-500" />
-              <img src={logoImg} alt="Eazy English" className="w-full h-full object-contain relative z-10" />
+        {/* Logo / brand at top */}
+        <div className="relative z-10 flex items-center gap-3 p-10 pb-0">
+          <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20 backdrop-blur-sm">
+            <img src={logoImg} alt="logo" className="w-7 h-7 object-contain brightness-0 invert" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-lg leading-none">Eazy English</p>
+            <p className="text-white/45 text-[10px] font-semibold tracking-[0.2em] mt-0.5">LEARNING PORTAL</p>
+          </div>
+        </div>
+
+        {/* Teacher photo — fills remaining space */}
+        <div className="relative flex-1 flex items-end justify-center mt-6 overflow-hidden">
+          {/* Radial glow behind teacher */}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[340px] h-[340px] rounded-full bg-[hsl(217,91%,62%,0.18)] blur-[60px] pointer-events-none" />
+          <img
+            src={teacherImg}
+            alt="Thilina Dhananjaya"
+            className="relative z-10 h-[88%] max-h-[520px] w-auto object-contain object-bottom"
+          />
+        </div>
+
+        {/* Bottom tagline */}
+        <div className="relative z-10 px-10 py-8 bg-gradient-to-t from-black/30 to-transparent">
+          <p className="text-white text-xl font-bold leading-snug">Learn English<br />with Confidence</p>
+          <p className="text-white/45 text-sm mt-1.5">Guided by Thilina Dhananjaya</p>
+        </div>
+      </div>
+
+      {/* ═══════ RIGHT: Form panel ═══════ */}
+      <div className="flex-1 flex items-center justify-center bg-[hsl(var(--background))] px-6 py-12 lg:px-14 xl:px-20">
+        <div className={`w-full max-w-[400px] transition-all duration-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}>
+
+          {/* Mobile logo */}
+          <div className="flex lg:hidden items-center gap-3 mb-10">
+            <div className="w-10 h-10 rounded-xl bg-[hsl(var(--primary))] flex items-center justify-center">
+              <img src={logoImg} alt="Eazy English" className="w-6 h-6 object-contain brightness-0 invert" />
             </div>
-            <div>
-              <h1 className="text-2xl font-extrabold text-[hsl(var(--foreground))] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</h1>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] font-semibold tracking-[0.2em] mt-0.5">LEARNING MANAGEMENT SYSTEM</p>
-            </div>
+            <span className="font-bold text-lg text-[hsl(var(--foreground))]">Eazy English</span>
           </div>
 
-          {/* ── Teacher card ── */}
-          <div className="flex items-center gap-4 mb-10 p-4 rounded-2xl bg-gradient-to-r from-[hsl(var(--muted))] to-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.3)] transition-all duration-300 group cursor-default">
-            <div className="relative">
-              <img src={teacherImg} alt="Thilina Dhananjaya" className="w-14 h-14 rounded-2xl object-cover shadow-lg ring-2 ring-[hsl(var(--primary)/0.2)] group-hover:ring-[hsl(var(--primary)/0.5)] transition-all" />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[hsl(var(--success))] border-2 border-[hsl(var(--background))] animate-pulse" />
-            </div>
-            <div>
-              <p className="text-base font-bold text-[hsl(var(--foreground))]">Thilina Dhananjaya</p>
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">English Language Instructor</p>
-            </div>
-          </div>
+          {/* Heading */}
+          <h1 className="text-[1.75rem] font-bold text-[hsl(var(--foreground))] leading-tight tracking-tight">
+            Sign in to your account
+          </h1>
+          <p className="text-[hsl(var(--muted-foreground))] text-sm mt-2 mb-8">
+            Enter your credentials to access your dashboard
+          </p>
 
-          {/* ── Heading ── */}
-          <h2 className="text-3xl lg:text-4xl font-extrabold text-[hsl(var(--foreground))] leading-tight tracking-tight">
-            Welcome back <span className="inline-block animate-bounce-slow">👋</span>
-          </h2>
-          <p className="text-[hsl(var(--muted-foreground))] text-base mt-2 mb-8">Sign in to continue your learning journey</p>
-
-          {/* ── Error ── */}
+          {/* Error */}
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-[hsl(var(--danger)/0.08)] border border-[hsl(var(--danger)/0.2)] text-sm text-[hsl(var(--danger))] flex items-start gap-3 animate-fade-in backdrop-blur-sm">
-              <div className="w-8 h-8 rounded-xl bg-[hsl(var(--danger)/0.15)] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <div>
-                <p className="font-semibold mb-0.5">Login Failed</p>
-                <p className="opacity-80">{error}</p>
-              </div>
+            <div className="mb-6 p-3.5 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-3">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p>{error}</p>
             </div>
           )}
 
-          {/* ═══════ FORM ═══════ */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Identifier field */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-bold text-[hsl(var(--foreground))]">
-                <svg className="w-4 h-4 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                Your Identifier
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Identifier */}
+            <div>
+              <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1.5">
+                Email / Phone / Student ID
               </label>
-              <div className={`relative rounded-2xl transition-all duration-300 ${focusedField === 'id' ? 'ring-2 ring-[hsl(var(--primary)/0.4)] shadow-lg shadow-[hsl(var(--primary)/0.1)]' : ''}`}>
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg className={`w-5 h-5 transition-colors duration-200 ${focusedField === 'id' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground)/0.4)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
-                </div>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-[hsl(var(--muted-foreground))]">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                </span>
                 <input
-                  type="text" value={identifier} onChange={e => setIdentifier(e.target.value)} required
-                  onFocus={() => setFocusedField('id')} onBlur={() => setFocusedField(null)}
-                  placeholder="Email, Phone, ID or Birth Certificate"
-                  className="w-full pl-12 pr-5 py-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground)/0.4)] focus:outline-none transition-all text-base"
+                  type="text"
+                  value={identifier}
+                  onChange={e => setIdentifier(e.target.value)}
+                  required
+                  placeholder="Enter your identifier"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.35)] focus:border-[hsl(var(--primary)/0.5)] transition text-sm"
                 />
               </div>
             </div>
 
-            {/* Password field */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-bold text-[hsl(var(--foreground))]">
-                <svg className="w-4 h-4 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1.5">
                 Password
               </label>
-              <div className={`relative rounded-2xl transition-all duration-300 ${focusedField === 'pw' ? 'ring-2 ring-[hsl(var(--primary)/0.4)] shadow-lg shadow-[hsl(var(--primary)/0.1)]' : ''}`}>
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg className={`w-5 h-5 transition-colors duration-200 ${focusedField === 'pw' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground)/0.4)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                </div>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-[hsl(var(--muted-foreground))]">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                </span>
                 <input
-                  type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
-                  onFocus={() => setFocusedField('pw')} onBlur={() => setFocusedField(null)}
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
                   placeholder="Enter your password"
-                  className="w-full pl-12 pr-14 py-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground)/0.4)] focus:outline-none transition-all text-base"
+                  className="w-full pl-10 pr-11 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.35)] focus:border-[hsl(var(--primary)/0.5)] transition text-sm"
                 />
-                <button type="button" onClick={() => setShowPw(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition-all duration-200">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <button
+                  type="button"
+                  onClick={() => setShowPw(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition rounded-lg hover:bg-[hsl(var(--muted))]"
+                >
+                  <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                     {showPw
-                      ? <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      : <><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></>}
+                      ? <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      : <><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></>
+                    }
                   </svg>
                 </button>
               </div>
             </div>
 
-            {/* Remember + Forgot */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${rememberMe ? 'bg-[hsl(var(--primary))] border-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] group-hover:border-[hsl(var(--primary)/0.5)]'}`}>
-                  {rememberMe && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                </div>
-                <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="sr-only" />
-                <span className="text-sm text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))] transition-colors">Remember me</span>
-              </label>
-              <Link to="#" className="text-sm text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] font-bold transition-colors hover:underline underline-offset-4">
-                Forgot password?
-              </Link>
-            </div>
-
             {/* Submit */}
-            <button type="submit" disabled={loading}
-              className="w-full py-4.5 rounded-2xl bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--primary-glow))] text-white text-base font-extrabold tracking-wide hover:shadow-2xl hover:shadow-[hsl(var(--primary)/0.35)] active:scale-[0.97] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              {loading && <svg className="w-5 h-5 animate-spin relative z-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-              <span className="relative z-10">{loading ? 'Signing in...' : 'Sign In →'}</span>
-            </button>
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl text-white font-semibold text-sm tracking-wide active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-[hsl(var(--primary)/0.25)]"
+                style={{ background: 'linear-gradient(135deg, hsl(221,83%,53%), hsl(217,91%,62%))' }}
+              >
+                {loading && (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </div>
           </form>
 
-          {/* ── Footer note ── */}
-          <p className="mt-8 text-center text-sm text-[hsl(var(--muted-foreground))]">
-            New student?{' '}
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-[hsl(var(--border))]" />
+            <span className="text-xs text-[hsl(var(--muted-foreground))]">no self-registration</span>
+            <div className="flex-1 h-px bg-[hsl(var(--border))]" />
+          </div>
+
+          {/* Footer */}
+          <div className="text-center text-sm text-[hsl(var(--muted-foreground))]">
+            Don't have an account?{' '}
             <span className="font-semibold text-[hsl(var(--foreground))]">Contact your instructor</span>
-            {' '}to get your login credentials.
-          </p>
-        </div>
-      </div>
-
-      {/* ═══════ RIGHT: Visual Panel ═══════ */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden items-center justify-center">
-        <img src={classroomBg} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" />
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(222,47%,8%,0.92)] via-[hsl(217,91%,15%,0.8)] to-[hsl(32,95%,25%,0.6)]" />
-        <FloatingParticles />
-
-        {/* Glow orbs */}
-        <div className="absolute top-16 right-16 w-80 h-80 bg-[hsl(var(--primary)/0.12)] rounded-full blur-[100px] pointer-events-none animate-float" />
-        <div className="absolute bottom-20 left-20 w-64 h-64 bg-[hsl(var(--accent)/0.12)] rounded-full blur-[80px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[hsl(var(--primary)/0.05)] rounded-full blur-[120px] pointer-events-none" />
-
-        {/* Content */}
-        <div className="relative z-10 text-center px-12 max-w-xl">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 mb-8 shadow-lg">
-            <div className="w-2.5 h-2.5 rounded-full bg-[hsl(var(--success))] animate-pulse shadow-[0_0_8px_hsl(var(--success))]" />
-            <span className="text-white/90 text-xs font-bold tracking-[0.15em]">LIVE CLASSES AVAILABLE</span>
           </div>
 
-          <h2 className="text-5xl xl:text-6xl font-extrabold text-white leading-[1.1] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            Master English
-            <br />
-            <span style={{
-              WebkitTextFillColor: 'transparent',
-              background: 'linear-gradient(135deg, hsl(32 95% 55%), hsl(32 95% 75%), hsl(32 95% 55%))',
-              backgroundSize: '200% 200%',
-              WebkitBackgroundClip: 'text',
-              animation: 'gradient-shift 3s ease infinite',
-            }}>
-              with Confidence
-            </span>
-          </h2>
-          <p className="text-white/55 text-lg mt-6 leading-relaxed max-w-md mx-auto">
-            Join hundreds of students learning English with expert guidance from Thilina Dhananjaya
-          </p>
-
-          {/* Stats */}
-          <div className="flex justify-center gap-6 mt-10">
-            {[
-              { num: '500+', label: 'Students', icon: '🎓' },
-              { num: '50+', label: 'Lessons', icon: '📚' },
-              { num: '4.9', label: 'Rating', icon: '⭐' },
-            ].map(s => (
-              <div key={s.label} className="text-center px-6 py-4 rounded-2xl bg-white/[0.07] backdrop-blur-sm border border-white/10 hover:bg-white/[0.12] hover:border-white/20 transition-all duration-300 group cursor-default">
-                <p className="text-xs mb-1">{s.icon}</p>
-                <p className="text-2xl font-extrabold text-white group-hover:scale-110 transition-transform">{s.num}</p>
-                <p className="text-white/40 text-xs mt-1 font-medium tracking-wide">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Testimonial */}
-          <div className="mt-10 p-5 rounded-2xl bg-white/[0.06] backdrop-blur-sm border border-white/10 text-left max-w-sm mx-auto">
-            <div className="flex gap-1 mb-2">{[...Array(5)].map((_, i) => <span key={i} className="text-yellow-400 text-sm">★</span>)}</div>
-            <p className="text-white/60 text-sm italic leading-relaxed">"This platform completely transformed how I learn English. Highly recommended!"</p>
-            <p className="text-white/40 text-xs mt-3 font-semibold">— A Happy Student</p>
-          </div>
         </div>
       </div>
     </div>

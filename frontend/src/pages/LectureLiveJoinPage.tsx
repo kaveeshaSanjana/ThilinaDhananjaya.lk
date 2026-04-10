@@ -126,15 +126,15 @@ export default function LectureLiveJoinPage() {
   // â”€â”€ Full-page loading / error screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (authLoading || (!lecture && !fetchError)) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-violet-50 flex items-center justify-center">
-        <div className="animate-spin w-9 h-9 border-[3px] border-violet-500 border-t-transparent rounded-full" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="animate-spin w-9 h-9 border-[3px] border-blue-600 border-t-transparent rounded-full" />
       </div>
     );
   }
 
   if (fetchError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-violet-50 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
             <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -143,7 +143,7 @@ export default function LectureLiveJoinPage() {
           </div>
           <h1 className="text-xl font-bold text-slate-800 mb-2">Link Invalid</h1>
           <p className="text-slate-500 mb-6">{fetchError}</p>
-          <button onClick={() => navigate('/')} className="px-6 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition">
+          <button onClick={() => navigate('/')} className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold hover:opacity-90 transition">
             Go Home
           </button>
         </div>
@@ -154,14 +154,14 @@ export default function LectureLiveJoinPage() {
   if (!lecture) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-violet-50 to-slate-100 flex items-center justify-center p-4 lg:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 flex items-center justify-center p-4 lg:p-8">
       {/* Desktop: two-column card. Mobile: single column */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden lg:grid lg:grid-cols-[1fr_1fr]">
 
         {/* ── Left panel: Lecture info (desktop) / header (mobile) ── */}
         <div className={`relative flex flex-col justify-between p-8 lg:p-10 ${
           lectureState === 'live'     ? 'bg-gradient-to-br from-red-500 via-red-600 to-orange-600' :
-          lectureState === 'upcoming' ? 'bg-gradient-to-br from-violet-600 via-violet-700 to-purple-800' :
+          lectureState === 'upcoming' ? 'bg-gradient-to-br from-[hsl(222,47%,11%)] via-[hsl(221,70%,25%)] to-[hsl(221,83%,38%)]' :
           'bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800'
         }`}>
           {/* decorative blobs */}
@@ -237,13 +237,13 @@ export default function LectureLiveJoinPage() {
               <div className="flex flex-col items-center gap-3 w-full max-w-xs mx-auto">
                 {/* Step 1 */}
                 <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
-                  step === 'signing-in' ? 'bg-violet-50 border-violet-300' : 'bg-green-50 border-green-200'
+                  step === 'signing-in' ? 'bg-blue-50 border-blue-300' : 'bg-green-50 border-green-200'
                 }`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    step === 'signing-in' ? 'bg-violet-100' : 'bg-green-100'
+                    step === 'signing-in' ? 'bg-blue-100' : 'bg-green-100'
                   }`}>
                     {step === 'signing-in' ? (
-                      <svg className="w-4 h-4 text-violet-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -252,10 +252,10 @@ export default function LectureLiveJoinPage() {
                     )}
                   </div>
                   <div>
-                    <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-violet-700' : 'text-green-700'}`}>
+                    <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-blue-700' : 'text-green-700'}`}>
                       {step === 'signing-in' ? 'Signing in…' : 'Signed in ✓'}
                     </p>
-                    {step === 'signing-in' && <p className="text-xs text-violet-500">Verifying your credentials</p>}
+                    {step === 'signing-in' && <p className="text-xs text-blue-500">Verifying your credentials</p>}
                   </div>
                 </div>
 
@@ -264,13 +264,13 @@ export default function LectureLiveJoinPage() {
 
                 {/* Step 2 */}
                 <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
-                  step === 'joining' ? 'bg-violet-50 border-violet-300' : 'bg-slate-50 border-slate-200'
+                  step === 'joining' ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'
                 }`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    step === 'joining' ? 'bg-violet-100' : 'bg-slate-100'
+                    step === 'joining' ? 'bg-blue-100' : 'bg-slate-100'
                   }`}>
                     {step === 'joining' ? (
-                      <svg className="w-4 h-4 text-violet-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -281,10 +281,10 @@ export default function LectureLiveJoinPage() {
                     )}
                   </div>
                   <div>
-                    <p className={`text-sm font-semibold ${step === 'joining' ? 'text-violet-700' : 'text-slate-400'}`}>
+                    <p className={`text-sm font-semibold ${step === 'joining' ? 'text-blue-700' : 'text-slate-400'}`}>
                       Recording attendance
                     </p>
-                    {step === 'joining' && <p className="text-xs text-violet-500">Marking you as present</p>}
+                    {step === 'joining' && <p className="text-xs text-blue-500">Marking you as present</p>}
                   </div>
                 </div>
 
@@ -324,7 +324,7 @@ export default function LectureLiveJoinPage() {
                   href={joinResult.sessionLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25"
+                  className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -362,7 +362,7 @@ export default function LectureLiveJoinPage() {
 
               {/* User card */}
               <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                   {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -379,7 +379,7 @@ export default function LectureLiveJoinPage() {
 
               <button
                 onClick={doJoin}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25 flex items-center justify-center gap-2.5"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -416,7 +416,7 @@ export default function LectureLiveJoinPage() {
                     required
                     autoComplete="username"
                     placeholder="you@example.com"
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:bg-white transition"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                   />
                 </div>
                 <div>
@@ -429,7 +429,7 @@ export default function LectureLiveJoinPage() {
                       required
                       autoComplete="current-password"
                       placeholder="••••••••"
-                      className="w-full px-4 py-3.5 pr-12 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:bg-white transition"
+                      className="w-full px-4 py-3.5 pr-12 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-white transition"
                     />
                     <button
                       type="button"
@@ -451,7 +451,7 @@ export default function LectureLiveJoinPage() {
                 </div>
 
                 {/* Flow hint */}
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 border border-violet-100 text-xs text-violet-600 font-medium">
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-600 font-medium">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -460,7 +460,7 @@ export default function LectureLiveJoinPage() {
 
                 <button
                   type="submit"
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-violet-700 text-white font-bold text-base hover:from-violet-600 hover:to-violet-800 transition shadow-xl shadow-violet-500/25 flex items-center justify-center gap-2.5"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />

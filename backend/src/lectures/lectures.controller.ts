@@ -74,7 +74,7 @@ export class LecturesController {
   @UseGuards(JwtAuthGuard)
   @Post('live/:token/join')
   joinByLiveToken(@Param('token') token: string, @Request() req: any) {
-    return this.lecturesService.joinByLiveToken(token, req.user.id);
+    return this.lecturesService.joinByLiveToken(token, req.user.sub);
   }
 
   /** Admin: generate or regenerate the shareable liveToken for a lecture */

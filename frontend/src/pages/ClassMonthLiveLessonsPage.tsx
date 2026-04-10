@@ -462,114 +462,128 @@ function CreateLectureModal({
     }
   };
 
-  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-base text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.4)] transition';
-  const labelCls = 'block text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-1.5';
+  const inputCls = 'w-full px-4 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))] placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]/30 focus:border-[hsl(var(--ring))] transition';
+  const labelCls = 'block text-sm font-semibold text-[hsl(var(--foreground))]/80 mb-1.5';
+  const sectionCls = 'bg-[hsl(var(--muted))]/50 rounded-2xl p-4 space-y-4 ring-1 ring-[hsl(var(--border))]/50';
+  const sectionLabelCls = 'text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest';
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative w-full max-w-2xl bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-[hsl(var(--border))] max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-7 py-5 border-b border-[hsl(var(--border))] shrink-0">
-          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Create Live Lesson</h2>
-          <button onClick={onClose} className="p-2 rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))] shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">Create Live Lesson</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Schedule a new live class session</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-7 py-6 space-y-5">
-          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{err}</p>}
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1">
+          <div className="p-6 space-y-5">
+            {err && (
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                <p className="text-sm text-red-500">{err}</p>
+              </div>
+            )}
 
-          {/* Title */}
-          <div>
-            <label className={labelCls}>Title <span className="text-red-500">*</span></label>
-            <input className={inputCls} placeholder="e.g. Chapter 5 — Grammar" value={form.title} onChange={e => set('title', e.target.value)} />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className={labelCls}>Description</label>
-            <textarea className={`${inputCls} resize-none`} rows={3} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
-          </div>
-
-          {/* Mode + Platform */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Mode <span className="text-red-500">*</span></label>
-              <select className={inputCls} value={form.mode} onChange={e => set('mode', e.target.value)}>
-                <option value="ONLINE">Online</option>
-                <option value="OFFLINE">Offline</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Platform</label>
-              <input className={inputCls} placeholder="Zoom, Meet, etc." value={form.platform} onChange={e => set('platform', e.target.value)} />
-            </div>
-          </div>
-
-          {/* Start + End time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Start Time <span className="text-red-500">*</span></label>
-              <input type="datetime-local" className={inputCls} value={form.startTime} onChange={e => set('startTime', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>End Time <span className="text-red-500">*</span></label>
-              <input type="datetime-local" className={inputCls} value={form.endTime} onChange={e => set('endTime', e.target.value)} />
-            </div>
-          </div>
-
-          {/* Session Link */}
-          <div>
-            <label className={labelCls}>Session Link</label>
-            <input className={inputCls} placeholder="https://zoom.us/j/..." value={form.sessionLink} onChange={e => set('sessionLink', e.target.value)} />
-          </div>
-
-          {/* Meeting ID + Password */}
-          {form.mode === 'ONLINE' && (
-            <div className="grid grid-cols-2 gap-4">
+            {/* Basic Info */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Basic Info</p>
               <div>
-                <label className={labelCls}>Meeting ID</label>
-                <input className={inputCls} placeholder="123 456 7890" value={form.meetingId} onChange={e => set('meetingId', e.target.value)} />
+                <label className={labelCls}>Title <span className="text-red-500">*</span></label>
+                <input className={inputCls} placeholder="e.g. Chapter 5 — Grammar" value={form.title} onChange={e => set('title', e.target.value)} />
               </div>
               <div>
-                <label className={labelCls}>Password</label>
-                <input className={inputCls} placeholder="abc123" value={form.meetingPassword} onChange={e => set('meetingPassword', e.target.value)} />
+                <label className={labelCls}>Description</label>
+                <textarea className={`${inputCls} resize-none`} rows={3} placeholder="Optional details..." value={form.description} onChange={e => set('description', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Visibility</label>
+                  <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+                    <option value="ANYONE">Anyone</option>
+                    <option value="STUDENTS_ONLY">Students Only</option>
+                    <option value="PAID_ONLY">Paid Only</option>
+                    <option value="PRIVATE">Private</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Max Participants</label>
+                  <input type="number" min={1} className={inputCls} placeholder="e.g. 100" value={form.maxParticipants} onChange={e => set('maxParticipants', e.target.value)} />
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Max Participants + Status */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Max Participants</label>
-              <input type="number" min={1} className={inputCls} placeholder="e.g. 100" value={form.maxParticipants} onChange={e => set('maxParticipants', e.target.value)} />
+            {/* Schedule */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Schedule</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Start Time <span className="text-red-500">*</span></label>
+                  <input type="datetime-local" className={inputCls} value={form.startTime} onChange={e => set('startTime', e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>End Time <span className="text-red-500">*</span></label>
+                  <input type="datetime-local" className={inputCls} value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Visibility</label>
-              <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
-                <option value="ANYONE">Anyone</option>
-                <option value="STUDENTS_ONLY">Students Only</option>
-                <option value="PAID_ONLY">Paid Only</option>
-                <option value="PRIVATE">Private</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
+
+            {/* Session */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Session</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Mode <span className="text-red-500">*</span></label>
+                  <select className={inputCls} value={form.mode} onChange={e => set('mode', e.target.value)}>
+                    <option value="ONLINE">Online</option>
+                    <option value="OFFLINE">Offline</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Platform</label>
+                  <input className={inputCls} placeholder="Zoom, Meet, etc." value={form.platform} onChange={e => set('platform', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Session Link</label>
+                <input className={inputCls} placeholder="https://zoom.us/j/..." value={form.sessionLink} onChange={e => set('sessionLink', e.target.value)} />
+              </div>
+              {form.mode === 'ONLINE' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Meeting ID</label>
+                    <input className={inputCls} placeholder="123 456 7890" value={form.meetingId} onChange={e => set('meetingId', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Password</label>
+                    <input className={inputCls} placeholder="abc123" value={form.meetingPassword} onChange={e => set('meetingPassword', e.target.value)} />
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Welcome Message */}
-          <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+            {/* Welcome Message */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Welcome Message</p>
+              <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+            </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
-            <button type="button" onClick={onClose} className="px-6 py-3 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="px-7 py-3 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition flex items-center gap-2 shadow-lg shadow-violet-500/20">
-              {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
-              {saving ? 'Creating...' : 'Create Lesson'}
-            </button>
+            {/* Footer */}
+            <div className="flex gap-3 pt-2 pb-2">
+              <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {saving ? 'Creating...' : 'Create Lesson'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

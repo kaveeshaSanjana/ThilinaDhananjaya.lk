@@ -20,6 +20,9 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Copy prisma CLI so we can run migrate deploy on startup
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY prisma ./prisma
 
 ENV NODE_ENV=production
@@ -27,4 +30,5 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["node", "dist/main"]
+# Run pending migrations then start the app
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/main"]

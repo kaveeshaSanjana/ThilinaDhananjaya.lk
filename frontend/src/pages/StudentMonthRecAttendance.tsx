@@ -36,7 +36,6 @@ interface RecordingRow {
   sessionCount: number;
   totalWatchedSec: number;
   lastWatchedAt: string | null;
-  sessions: Session[];
 }
 
 interface MonthAttendanceResponse {
@@ -114,8 +113,22 @@ function StatusBadge({ rec }: { rec: RecordingRow }) {
 
 function RecordingCard({ rec }: { rec: RecordingRow }) {
   const [showSessions, setShowSessions] = useState(false);
+  const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [loadingSessions, setLoadingSessions] = useState(false);
   const pct = watchProgress(rec);
-  const hasSessions = rec.sessions.length > 0;
+  const hasSessions = rec.sessionCount > 0;
+
+  const toggleSessions = async () => {
+    if (showSessions) { setShowSessions(false); return; }
+    setShowSessions(true);
+    if (sessions !== null) return; // already fetched
+    setLoadingSessions(true);
+    try {
+      const res = await api.get(`/attendance/my/recording/${rec.id}/sessions`);
+      setSessions(res.data);
+    } catch { setSessions([]); }
+    finally { setLoadingSessions(false); }
+  };
 
   const cardBorder =
     rec.attendance?.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50/30' :
@@ -211,19 +224,24 @@ function RecordingCard({ rec }: { rec: RecordingRow }) {
         <>
           <div className="px-4 pb-3">
             <button
-              onClick={() => setShowSessions(v => !v)}
+              onClick={toggleSessions}
               className="flex items-center gap-1.5 text-xs font-semibold text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition"
             >
               <svg className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
-              {showSessions ? 'Hide' : 'Show'} watch sessions ({rec.sessions.length})
+              {showSessions ? 'Hide' : 'Show'} watch sessions ({rec.sessionCount})
             </button>
           </div>
 
           {showSessions && (
             <div className="border-t border-[hsl(var(--border))] px-4 py-3 bg-[hsl(var(--muted)/0.2)] space-y-2">
-              {rec.sessions.map((sess, i) => (
+              {loadingSessions && (
+                <div className="flex items-center justify-center py-3">
+                  <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--primary))] border-t-transparent animate-spin" />
+                </div>
+              )}
+              {sessions && sessions.map((sess, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 text-[11px] py-1.5 border-b border-[hsl(var(--border))/0.5] last:border-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${

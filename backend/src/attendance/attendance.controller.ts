@@ -112,6 +112,19 @@ export class AttendanceController {
   }
 
   /**
+   * Student: get my watch sessions for a single recording (lazy-loaded).
+   * GET /attendance/my/recording/:recordingId/sessions
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('my/recording/:recordingId/sessions')
+  getMyRecordingSessions(
+    @Request() req: any,
+    @Param('recordingId') recordingId: string,
+  ) {
+    return this.attendanceService.getMyRecordingSessions(req.user.sub, recordingId);
+  }
+
+  /**
    * Admin: get all students' attendance for selected recordings, grouped by month + user.
    * GET /attendance/recordings/users?ids=id1,id2,id3,...
    */

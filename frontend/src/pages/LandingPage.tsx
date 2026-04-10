@@ -170,27 +170,6 @@ function WhatsAppFAB() {
 }
 
 /* ───────── Dot pattern decoration ───────── */
-function DotPattern({ className = '' }: { className?: string }) {
-  return (
-    <div className={`pointer-events-none ${className}`}>
-      <div className="grid grid-cols-5 gap-2">
-        {Array.from({ length: 15 }).map((_, i) => (
-          <div key={i} className="w-2 h-2 rounded-full bg-white/20" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ───────── Sparkle decoration ───────── */
-function Sparkle({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={`${className}`} viewBox="0 0 24 24" fill="none" style={style}>
-      <path d="M12 2L14 10L22 12L14 14L12 22L10 14L2 12L10 10L12 2Z" fill="currentColor" />
-    </svg>
-  );
-}
-
 /* ───────── Education-themed floating icons ───────── */
 function EduDecoration({ className = '' }: { className?: string }) {
   return (
@@ -205,21 +184,17 @@ function EduDecoration({ className = '' }: { className?: string }) {
 }
 
 /* ───────── Section heading (malithkodagoda style with star + spaced text) ───────── */
-function SectionHeading({ badge, badgeColor = 'primary', title, highlight, subtitle }: {
-  badge: string; badgeColor?: 'primary' | 'accent'; title: string; highlight: string; subtitle?: string;
+function SectionHeading({ badgeColor = 'primary', title, highlight, subtitle }: {
+  badge?: string; badgeColor?: 'primary' | 'accent'; title: string; highlight: string; subtitle?: string;
 }) {
   const colorMap = {
-    primary: { badge: 'text-[hsl(var(--primary))]', bg: 'bg-[hsl(var(--primary)/0.06)]', border: 'border-[hsl(var(--primary)/0.1)]', highlight: 'from-[hsl(var(--primary))] to-[hsl(var(--accent))]' },
-    accent: { badge: 'text-[hsl(var(--accent))]', bg: 'bg-[hsl(var(--accent)/0.08)]', border: 'border-[hsl(var(--accent)/0.12)]', highlight: 'from-[hsl(var(--accent))] to-[hsl(var(--primary))]' },
+    primary: { highlight: 'from-[hsl(var(--primary))] to-[hsl(var(--accent))]' },
+    accent: { highlight: 'from-[hsl(var(--accent))] to-[hsl(var(--primary))]' },
   };
   const c = colorMap[badgeColor];
   return (
     <div className="text-center mb-16 sm:mb-20">
-      <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full ${c.bg} border ${c.border} mb-6`}>
-        <span className="text-[hsl(var(--primary))]">⭐</span>
-        <span className={`${c.badge} text-xs font-bold tracking-wider uppercase`}>{badge}</span>
-      </div>
-      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[hsl(var(--foreground))] tracking-[0.08em] sm:tracking-[0.12em]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[hsl(var(--foreground))] tracking-tight">
         {title} <span className={`bg-gradient-to-r ${c.highlight} bg-clip-text`} style={{ WebkitTextFillColor: 'transparent', WebkitBackgroundClip: 'text' }}>{highlight}</span>
       </h2>
       {subtitle && <p className="text-[hsl(var(--muted-foreground))] text-base sm:text-lg mt-4 max-w-2xl mx-auto">{subtitle}</p>}
@@ -253,12 +228,6 @@ const platformFeatures = [
   { icon: '🛡️', title: 'Secure LMS', desc: 'Enterprise-grade learning management system with encrypted data and role-based access.', gradient: 'from-cyan-500 to-sky-600' },
 ];
 
-const testimonials = [
-  { name: 'Kasun Perera', grade: 'Grade 11 Student', text: 'My English grades jumped from C to A+ in just one term. The live classes feel like a private tuition!', avatar: 'KP' },
-  { name: 'Nethmi Silva', grade: 'A/L Student', text: 'Teacher Thilina explains grammar so clearly. The recordings saved me before my final exam.', avatar: 'NS' },
-  { name: 'Dinesh Rajapaksa', grade: 'Grade 10 Student', text: 'Best English class in Sri Lanka! The platform is super easy to use and I can study anytime.', avatar: 'DR' },
-  { name: 'Amaya Fernando', grade: 'O/L Student', text: 'I was struggling with essay writing. After joining Eazy English, I got the highest mark in my school!', avatar: 'AF' },
-];
 
 const faqs = [
   { q: 'How do I join a class?', a: 'Simply register on the platform, browse available classes, and enroll. You can attend live sessions immediately or watch recordings at your own pace.' },
@@ -281,66 +250,7 @@ const galleryImages = [
   { src: studentCrowdImg, alt: 'Student crowd at educational event' },
 ];
 
-/* ───────── Testimonial Carousel ───────── */
-function TestimonialCarousel() {
-  const [active, setActive] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setActive(p => (p + 1) % testimonials.length), 5000);
-    return () => clearInterval(timer);
-  }, []);
-  const t = testimonials[active];
-  return (
-    <div className="relative">
-      <div className="flex items-center gap-8 lg:gap-12">
-        <div className="hidden md:block w-72 lg:w-80 flex-shrink-0 relative">
-          <div className="aspect-[4/5] rounded-3xl overflow-hidden border-4 border-white/10 shadow-2xl">
-            <img src={studentCrowdImg} alt="Students" className="w-full h-full object-cover" loading="lazy" />
-          </div>
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex gap-3">
-            <button onClick={() => setActive(p => (p - 1 + testimonials.length) % testimonials.length)}
-              className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all text-white/70">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-            </button>
-            <button onClick={() => setActive(p => (p + 1) % testimonials.length)}
-              className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all text-white/70">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-            </button>
-          </div>
-        </div>
 
-        <div className="flex-1">
-          <div className="bg-[hsl(var(--card))] rounded-3xl p-8 lg:p-10 relative shadow-2xl border border-[hsl(var(--border))]">
-            <div className="flex gap-1 mb-4">
-              {[1, 2, 3, 4, 5].map(s => (
-                <svg key={s} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-              ))}
-            </div>
-            <div className="absolute top-6 right-8 text-7xl font-serif text-[hsl(var(--primary)/0.15)] leading-none select-none">"</div>
-            <p className="text-[hsl(var(--foreground))] text-lg lg:text-xl font-medium leading-relaxed mb-6 relative z-10 transition-all duration-500">
-              {t.text}
-            </p>
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${gradients[active % gradients.length]} flex items-center justify-center shadow-lg`}>
-                <span className="text-white text-sm font-bold">{t.avatar}</span>
-              </div>
-              <div>
-                <p className="text-[hsl(var(--foreground))] font-bold">{t.name}</p>
-                <p className="text-[hsl(var(--muted-foreground))] text-sm">{t.grade}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 mt-6 md:hidden justify-center">
-            {testimonials.map((_, i) => (
-              <button key={i} onClick={() => setActive(i)}
-                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${i === active ? 'bg-white w-8' : 'bg-white/30'}`} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function LandingPage() {
   const { user } = useAuth();
@@ -476,77 +386,56 @@ export default function LandingPage() {
       </nav>
 
       {/* ═══════════ HERO ═══════════ */}
-      <section id="home" className="relative min-h-[90vh] lg:min-h-screen flex items-center overflow-hidden">
+      <section id="home" className="relative min-h-[88vh] flex items-center overflow-hidden">
+        {/* Background */}
         <div className="absolute inset-0" ref={heroParallax.ref}>
           <img src={heroBg} alt="" className="w-full h-full object-cover" width={1920} height={1080}
             style={{ transform: `translateY(${heroParallax.offset}px)` }} />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/95 via-slate-900/80 to-slate-900/50" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/92 via-slate-900/75 to-slate-900/40" />
         </div>
 
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <Sparkle className="absolute top-24 right-[18%] w-8 h-8 text-white/15 animate-pulse" />
-          <Sparkle className="absolute bottom-40 right-[25%] w-6 h-6 text-[hsl(var(--accent)/0.3)] animate-pulse" style={{ animationDelay: '1s' }} />
-          <Sparkle className="absolute top-1/2 right-[10%] w-10 h-10 text-white/10 animate-pulse" style={{ animationDelay: '2s' }} />
-          <DotPattern className="absolute top-20 right-[8%]" />
-          <DotPattern className="absolute bottom-32 right-[12%]" />
-          <svg className="absolute bottom-0 left-0 right-0 w-full h-32 text-[hsl(var(--background))]" viewBox="0 0 1440 120" fill="currentColor" preserveAspectRatio="none">
-            <path d="M0,80 C360,120 720,40 1080,80 C1260,100 1380,60 1440,80 L1440,120 L0,120 Z" />
-          </svg>
-        </div>
+        {/* Wave divider */}
+        <svg className="absolute bottom-0 left-0 right-0 w-full h-20 text-[hsl(var(--background))] pointer-events-none" viewBox="0 0 1440 80" fill="currentColor" preserveAspectRatio="none">
+          <path d="M0,40 C480,80 960,0 1440,40 L1440,80 L0,80 Z" />
+        </svg>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-32 w-full">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className={`transition-all duration-1000 ${heroLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-              <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 mb-8">
-                <span className="text-[hsl(var(--accent))] text-xs font-bold">⭐ Beyond The Traditional Art Of Teaching</span>
-              </div>
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-28 w-full">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
 
-              <h2 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-[1.05] tracking-[0.06em]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                <span className="block text-white">Best and first</span>
-                <span className="block text-white">online platform</span>
-                <span className="block text-white">in Sri Lanka for</span>
-                <span className="block">
-                  <span className="bg-gradient-to-r from-[hsl(var(--primary))] via-[hsl(var(--accent))] to-[hsl(var(--primary-glow))] bg-clip-text animate-gradient bg-[length:200%_auto]" style={{ WebkitTextFillColor: 'transparent', WebkitBackgroundClip: 'text' }}>English learners</span>
-                </span>
-              </h2>
+            {/* Left: Text */}
+            <div className={`transition-all duration-700 ${heroLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+              <p className="text-white/50 text-sm font-semibold tracking-widest uppercase mb-5">Thilina Dhananjaya · English Academy</p>
 
-              <p className="text-white/50 text-base sm:text-lg mt-6 max-w-lg leading-relaxed">
-                නව පන්ති පිළිබද විස්තර සදහා Whatsapp පණිවිඩයක් යොමු කරන්න.
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.1] tracking-tight">
+                Learn English<br />
+                <span className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--primary-glow))] bg-clip-text" style={{ WebkitTextFillColor: 'transparent', WebkitBackgroundClip: 'text' }}>with Confidence</span>
+              </h1>
+
+              <p className="text-white/55 text-base mt-5 max-w-md leading-relaxed">
+                නව පන්ති පිළිබද විස්තර සදහා WhatsApp පණිවිඩයක් යොමු කරන්න.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 mt-10">
-                <a href="https://wa.me/94770000000" target="_blank" rel="noopener noreferrer" className="group px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-base shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-[1.03]">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>
-                  WHATSAPP NOW
+              <div className="flex flex-col sm:flex-row gap-3 mt-9">
+                <a href="https://wa.me/94770000000" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>
+                  WhatsApp Us
                 </a>
-                <Link to="/register" className="group relative px-8 py-4 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 text-white font-bold text-base hover:bg-white/20 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-[1.03]">
-                  Start Learning Free
-                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                <Link to="/login"
+                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-white/10 border border-white/15 text-white font-semibold text-sm hover:bg-white/18 transition-all duration-200">
+                  Student Login
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </Link>
               </div>
             </div>
 
-            <div className={`hidden lg:flex justify-center items-center relative transition-all duration-1000 delay-300 ${heroLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
-              <div className="relative">
-                <div className="absolute -inset-4 rounded-full border-2 border-dashed border-white/10 animate-[spin_30s_linear_infinite]" />
-                <div className="w-[340px] h-[340px] xl:w-[400px] xl:h-[400px] rounded-full overflow-hidden border-4 border-white/10 shadow-2xl shadow-black/30 relative">
-                  <img src={teacherImg} alt="Thilina Dhananjaya" className="w-full h-full object-cover object-top" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--primary)/0.3)] to-transparent" />
-                </div>
-
-                <div className="absolute -bottom-3 -left-6 bg-white rounded-2xl p-3 shadow-2xl animate-float" style={{ animationDelay: '1.5s' }}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
-                      <span className="text-white text-sm">🏆</span>
-                    </div>
-                    <div>
-                      <p className="text-slate-900 text-sm font-black" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>95%</p>
-                      <p className="text-slate-500 text-[9px] font-medium">Pass Rate</p>
-                    </div>
-                  </div>
-                </div>
+            {/* Right: Teacher photo */}
+            <div className={`hidden lg:flex justify-center items-end relative transition-all duration-700 delay-200 ${heroLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+              <div className="w-[320px] xl:w-[380px] aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl shadow-black/40 border border-white/10">
+                <img src={teacherImg} alt="Thilina Dhananjaya" className="w-full h-full object-cover object-top" />
               </div>
             </div>
+
           </div>
         </div>
       </section>
@@ -638,7 +527,7 @@ export default function LandingPage() {
         <EduDecoration />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <SectionHeading badge="YOUR ACADEMIC PATHWAY" title="Your Journey to" highlight="Academic Excellence" subtitle="A proven 4-step process designed to take you from beginner to confident English speaker" />
+            <SectionHeading title="Your Journey to" highlight="Academic Excellence" subtitle="A proven 4-step process designed to take you from beginner to confident English speaker" />
           </Reveal>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-4">
@@ -668,7 +557,7 @@ export default function LandingPage() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[hsl(var(--primary)/0.04)] rounded-full blur-[150px]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <SectionHeading badge="📚 ACADEMIC PROGRAMS" title="Explore Our" highlight="Courses" subtitle="Expert-crafted academic programs for every level — from Grade 6 to Advanced Level" />
+            <SectionHeading title="Explore Our" highlight="Courses" subtitle="Expert-crafted academic programs for every level — from Grade 6 to Advanced Level" />
           </Reveal>
 
           {loadingClasses ? (
@@ -728,7 +617,7 @@ export default function LandingPage() {
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-[hsl(var(--accent)/0.04)] rounded-full blur-[120px]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <SectionHeading badge="🎓 LEARNING MANAGEMENT SYSTEM" badgeColor="accent" title="Your Complete" highlight="Academic Toolkit" subtitle="A powerful learning ecosystem built for students who aim for academic excellence" />
+            <SectionHeading title="Our" highlight="Platform Features" subtitle="A powerful learning ecosystem built for students who aim for academic excellence" />
           </Reveal>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -753,7 +642,7 @@ export default function LandingPage() {
       <section id="gallery" className="py-24 sm:py-32 relative overflow-hidden bg-[hsl(var(--muted))]">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <SectionHeading badge="📸 CAMPUS LIFE" badgeColor="accent" title="Moments at" highlight="Eazy English" />
+            <SectionHeading title="Campus" highlight="Gallery" />
           </Reveal>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -881,70 +770,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ═══════════ STUDENT RANKS / ACHIEVEMENTS ═══════════ */}
-      <section className="py-24 sm:py-32 relative bg-[hsl(var(--muted))]">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <SectionHeading badge="🏅 ACADEMIC HONOURS" badgeColor="accent" title="Top" highlight="Scholars" />
-          </Reveal>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {[
-              { rank: '🥇', name: 'Sanduni Perera', score: 'A+', grade: '2025 O/L', gradient: 'from-amber-400 via-yellow-400 to-amber-500' },
-              { rank: '🥈', name: 'Kavindu Silva', score: 'A', grade: '2025 O/L', gradient: 'from-slate-300 via-gray-300 to-slate-400' },
-              { rank: '🥉', name: 'Nethmi Fernando', score: 'A', grade: '2025 A/L', gradient: 'from-orange-400 via-amber-500 to-orange-600' },
-              { rank: '⭐', name: 'Dilshan Kumara', score: 'A', grade: '2025 O/L', gradient: 'from-blue-400 via-indigo-400 to-blue-500' },
-            ].map((student, idx) => (
-              <Reveal key={student.name} delay={idx * 0.12} direction="up">
-                <TiltCard>
-                  <div className="relative rounded-3xl overflow-hidden border border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:shadow-xl transition-all duration-500">
-                    <div className={`h-1.5 bg-gradient-to-r ${student.gradient}`} />
-                    <div className="p-6 text-center">
-                      <span className="text-4xl block mb-3">{student.rank}</span>
-                      <div className={`inline-flex px-4 py-1.5 rounded-full bg-gradient-to-r ${student.gradient} shadow-lg mb-3`}>
-                        <span className="text-white font-black text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{student.score}</span>
-                      </div>
-                      <p className="text-[hsl(var(--foreground))] font-bold text-base" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{student.name}</p>
-                      <p className="text-[hsl(var(--muted-foreground))] text-xs mt-1">{student.grade}</p>
-                    </div>
-                  </div>
-                </TiltCard>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════ TESTIMONIALS — Dark section ═══════════ */}
-      <section className="py-24 sm:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Reveal className="mb-14">
-            <div className="lg:flex lg:items-end lg:justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 mb-6">
-                  <span className="text-[hsl(var(--primary))]">⭐</span>
-                  <span className="text-amber-400 text-xs font-bold tracking-wider uppercase">Voices Of Our Learners</span>
-                </div>
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-[0.08em]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  What Our Students<br />Are <span className="text-[hsl(var(--accent))]">Saying?</span>
-                </h2>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal direction="up" delay={0.2}>
-            <TestimonialCarousel />
-          </Reveal>
-        </div>
-      </section>
 
       {/* ═══════════ FAQ ═══════════ */}
       <section id="faq" className="py-24 sm:py-32 relative bg-[hsl(var(--muted))]">
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <SectionHeading badge="❓ Student Support" title="Have Questions? Find" highlight="Answers Here" subtitle="We don't just teach — we guide you every step of your academic journey" />
+            <SectionHeading title="Frequently Asked" highlight="Questions" subtitle="Everything you need to know about our platform and classes" />
           </Reveal>
 
           <div className="space-y-3">
