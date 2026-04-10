@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
 
@@ -228,6 +228,13 @@ export class LecturesService {
       });
     }
 
+    // Upsert LectureAttendance for per-lecture tracking
+    await this.db.lectureAttendance.upsert({
+      where: { lectureId_userId: { lectureId: lecture.id, userId } },
+      create: { lectureId: lecture.id, userId },
+      update: { joinedAt: new Date() },
+    });
+
     return {
       lectureId: lecture.id,
       title: lecture.title,
@@ -237,6 +244,83 @@ export class LecturesService {
       startTime: lecture.startTime,
       endTime: lecture.endTime,
       platform: lecture.platform,
+    };
+  }
+
+  /** Public: guest join for ANYONE lectures (no auth required) */
+  async joinByLiveTokenGuest(token: string, data: {
+    fullName: string;
+    phone: string;
+    email?: string;
+    note?: string;
+  }) {
+    const lecture = await this.db.lecture.findUnique({
+      where: { liveToken: token },
+    });
+    if (!lecture) throw new NotFoundException('Invalid or expired live link.');
+    if (lecture.status !== 'ANYONE') {
+      throw new ForbiddenException('This lecture requires an account to join.');
+    }
+
+    await this.db.guestLectureJoin.create({
+      data: {
+        lectureId: lecture.id,
+        fullName: data.fullName,
+        phone: data.phone,
+        email: data.email ?? null,
+        note: data.note ?? null,
+      },
+    });
+
+    return {
+      lectureId: lecture.id,
+      title: lecture.title,
+      sessionLink: lecture.sessionLink,
+      meetingId: lecture.meetingId,
+      meetingPassword: lecture.meetingPassword,
+      startTime: lecture.startTime,
+      endTime: lecture.endTime,
+      platform: lecture.platform,
+    };
+  }
+
+  /** Admin: get join statistics for a lecture */
+  async getLectureStats(lectureId: string) {
+    const lecture = await this.findOne(lectureId);
+
+    const [registeredJoins, guestJoins] = await Promise.all([
+      this.db.lectureAttendance.findMany({
+        where: { lectureId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { fullName: true, phone: true, instituteId: true, avatarUrl: true } },
+            },
+          },
+        },
+        orderBy: { joinedAt: 'asc' },
+      }),
+      this.db.guestLectureJoin.findMany({
+        where: { lectureId },
+        orderBy: { joinedAt: 'asc' },
+      }),
+    ]);
+
+    return {
+      lecture: {
+        id: lecture.id,
+        title: lecture.title,
+        startTime: lecture.startTime,
+        endTime: lecture.endTime,
+        status: lecture.status,
+      },
+      registeredCount: registeredJoins.length,
+      guestCount: guestJoins.length,
+      totalCount: registeredJoins.length + guestJoins.length,
+      registeredJoins,
+      guestJoins,
     };
   }
 }

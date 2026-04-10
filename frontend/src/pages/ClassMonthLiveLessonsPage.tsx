@@ -60,12 +60,14 @@ function LectureLessonCard({
   welcomeVars,
   onEdit,
   onDelete,
+  onStats,
 }: {
   lec: Lecture;
   isAdmin?: boolean;
   welcomeVars?: Record<string, string>;
   onEdit?: (lec: Lecture) => void;
   onDelete?: (lec: Lecture) => void;
+  onStats?: (lec: Lecture) => void;
 }) {
   const [copied, setCopied] = useState('');
   const [localToken, setLocalToken] = useState<string | null>(lec.liveToken ?? null);
@@ -372,6 +374,16 @@ function LectureLessonCard({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Edit
+              </button>
+              <button
+                onClick={() => onStats?.(lec)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition"
+                title="View join statistics"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Stats
               </button>
               <button
                 onClick={() => onDelete?.(lec)}
@@ -808,6 +820,150 @@ function DeleteConfirmModal({
 }
 
 /* ───────────────────────────────────────────────────────── */
+/*              LECTURE STATS MODAL                        */
+/* ═══════════════════════════════════════════════════════ */
+
+function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void }) {
+  const [data, setData]       = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    api.get(`/lectures/${lec.id}/stats`)
+      .then(r => setData(r.data))
+      .catch(() => setError('Failed to load statistics'))
+      .finally(() => setLoading(false));
+  }, [lec.id]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 my-8">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Join Statistics</h2>
+              <p className="text-xs text-slate-500 truncate max-w-xs">{lec.title}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          {loading && (
+            <div className="flex items-center justify-center py-10">
+              <svg className="w-7 h-7 animate-spin text-sky-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+            </div>
+          )}
+          {error && <p className="text-sm text-red-600 text-center py-6">{error}</p>}
+          {!loading && !error && data && (
+            <div className="space-y-6">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                  <p className="text-2xl font-bold text-slate-800">{data.totalCount}</p>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">Total Joined</p>
+                </div>
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
+                  <p className="text-2xl font-bold text-blue-700">{data.registeredCount}</p>
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">Registered Students</p>
+                </div>
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">{data.guestCount}</p>
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5">Public Guests</p>
+                </div>
+              </div>
+
+              {/* Registered students table */}
+              {data.registeredJoins.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    Registered Students ({data.registeredCount})
+                  </h3>
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Name</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">ID</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Phone</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Joined At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {data.registeredJoins.map((j: any) => (
+                          <tr key={j.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-medium text-slate-800">{j.user?.profile?.fullName || j.user?.email || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{j.user?.profile?.instituteId || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{j.user?.profile?.phone || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{new Date(j.joinedAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Public guests table */}
+              {data.guestJoins.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Public Guests ({data.guestCount})
+                  </h3>
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Name</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Phone</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Email</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Note</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Joined At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {data.guestJoins.map((g: any) => (
+                          <tr key={g.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-medium text-slate-800">{g.fullName}</td>
+                            <td className="px-4 py-2.5 text-slate-600">{g.phone}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{g.email || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{g.note || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{new Date(g.joinedAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {data.totalCount === 0 && (
+                <div className="text-center py-8 text-slate-400">
+                  <svg className="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  <p className="text-sm font-medium">No one has joined yet</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ───────────────────────────────────────────────────────── */
 /*              CLASS MONTH LIVE LESSONS PAGE             */
 /* ═══════════════════════════════════════════════════════ */
 
@@ -824,6 +980,7 @@ export default function ClassMonthLiveLessonsPage() {
   const [showCreate, setShowCreate]   = useState(false);
   const [editingLec, setEditingLec]     = useState<Lecture | null>(null);
   const [deletingLec, setDeletingLec]   = useState<Lecture | null>(null);
+  const [statsLec, setStatsLec]         = useState<Lecture | null>(null);
 
   const welcomeVars = useMemo(() => ({
     '{{studentName}}': (user as any)?.profile?.fullName || user?.email?.split('@')[0] || 'Student',
@@ -947,7 +1104,7 @@ export default function ClassMonthLiveLessonsPage() {
                 Live Now
               </h2>
               <div className="grid gap-4">
-                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}
@@ -956,7 +1113,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-blue-600 uppercase tracking-widest">Upcoming</h2>
               <div className="grid gap-4">
-                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}
@@ -965,7 +1122,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Past</h2>
               <div className="grid gap-4">
-                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} />)}
+                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}
@@ -997,6 +1154,12 @@ export default function ClassMonthLiveLessonsPage() {
             setLectures(prev => prev.filter(l => l.id !== id));
             setDeletingLec(null);
           }}
+        />
+      )}
+      {statsLec && (
+        <LectureStatsModal
+          lec={statsLec}
+          onClose={() => setStatsLec(null)}
         />
       )}
     </div>

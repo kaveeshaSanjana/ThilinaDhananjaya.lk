@@ -44,10 +44,19 @@ export default function LectureLiveJoinPage() {
   const [lecture, setLecture]       = useState<LectureInfo | null>(null);
   const [fetchError, setFetchError] = useState('');
 
+  // 'guest' = public guest form, 'account' = login with credentials
+  const [joinMode, setJoinMode] = useState<'guest' | 'account'>('guest');
+
   // Login form
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword]     = useState('');
   const [showPw, setShowPw]         = useState(false);
+
+  // Guest form
+  const [guestName,  setGuestName]  = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestNote,  setGuestNote]  = useState('');
 
   // Single error surface for both login and join errors
   const [stepError, setStepError] = useState('');
@@ -69,17 +78,49 @@ export default function LectureLiveJoinPage() {
   useEffect(() => {
     if (!token) return;
     api.get(`/lectures/live/${token}`)
-      .then(r => setLecture(r.data))
+      .then(r => {
+        setLecture(r.data);
+        // Default to guest mode for public lectures, account mode otherwise
+        if (r.data.status === 'ANYONE') {
+          setJoinMode('guest');
+        } else {
+          setJoinMode('account');
+        }
+      })
       .catch(() => setFetchError('This live lecture link is invalid or has expired.'));
   }, [token]);
 
-  // â”€â”€ Core join call (token must already be in sessionStorage) â”€
+  // ── Core join call (token must already be in sessionStorage) ──
   const doJoin = async () => {
     if (!token) return;
     setStep('joining');
     setStepError('');
     try {
       const res = await api.post(`/lectures/live/${token}/join`);
+      setJoinResult(res.data);
+      setStep('done');
+      if (res.data.sessionLink) {
+        setTimeout(() => window.open(res.data.sessionLink, '_blank'), 1400);
+      }
+    } catch (err: any) {
+      setStepError(err.response?.data?.message || 'Failed to join. Please try again.');
+      setStep('idle');
+    }
+  };
+
+  // ── Guest join (no auth) ──
+  const handleGuestJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setStepError('');
+    setStep('joining');
+    try {
+      const res = await api.post(`/lectures/live/${token}/join-guest`, {
+        fullName: guestName.trim(),
+        phone: guestPhone.trim(),
+        email: guestEmail.trim() || undefined,
+        note: guestNote.trim() || undefined,
+      });
       setJoinResult(res.data);
       setStep('done');
       if (res.data.sessionLink) {
@@ -223,36 +264,73 @@ export default function LectureLiveJoinPage() {
         {/* ── Right panel: action area ── */}
         <div className="p-8 lg:p-10 flex flex-col justify-center">
 
+          {/* ─── Mode switcher (only for public ANYONE lectures) ─── */}
+          {step === 'idle' && lecture.status === 'ANYONE' && (
+            <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden mb-6">
+              <button
+                type="button"
+                onClick={() => { setJoinMode('guest'); setStepError(''); setUseOtherAccount(false); }}
+                className={`flex-1 py-2.5 text-sm font-semibold transition flex items-center justify-center gap-1.5 ${
+                  joinMode === 'guest'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Join as Guest
+              </button>
+              <button
+                type="button"
+                onClick={() => { setJoinMode('account'); setStepError(''); }}
+                className={`flex-1 py-2.5 text-sm font-semibold transition flex items-center justify-center gap-1.5 ${
+                  joinMode === 'account'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                Sign in with Account
+              </button>
+            </div>
+          )}
+
           {/* ─── Processing step indicator ─── */}
           {isProcessing && (
             <div className="flex flex-col items-center py-6 gap-6">
               <div className="flex flex-col items-center gap-3 w-full max-w-xs mx-auto">
-                {/* Step 1 */}
-                <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
-                  step === 'signing-in' ? 'bg-blue-50 border-blue-300' : 'bg-green-50 border-green-200'
-                }`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    step === 'signing-in' ? 'bg-blue-100' : 'bg-green-100'
-                  }`}>
-                    {step === 'signing-in' ? (
-                      <svg className="w-4 h-4 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    )}
-                  </div>
-                  <div>
-                    <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-blue-700' : 'text-green-700'}`}>
-                      {step === 'signing-in' ? 'Signing in…' : 'Signed in ✓'}
-                    </p>
-                    {step === 'signing-in' && <p className="text-xs text-blue-500">Verifying your credentials</p>}
-                  </div>
-                </div>
-
-                {/* Connector */}
-                <div className="w-0.5 h-4 bg-slate-200 rounded-full" />
+                {/* Step 1 — only shown for account login flow */}
+                {joinMode === 'account' && (
+                  <>
+                    <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                      step === 'signing-in' ? 'bg-blue-50 border-blue-300' : 'bg-green-50 border-green-200'
+                    }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        step === 'signing-in' ? 'bg-blue-100' : 'bg-green-100'
+                      }`}>
+                        {step === 'signing-in' ? (
+                          <svg className="w-4 h-4 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        )}
+                      </div>
+                      <div>
+                        <p className={`text-sm font-semibold ${step === 'signing-in' ? 'text-blue-700' : 'text-green-700'}`}>
+                          {step === 'signing-in' ? 'Signing in…' : 'Signed in ✓'}
+                        </p>
+                        {step === 'signing-in' && <p className="text-xs text-blue-500">Verifying your credentials</p>}
+                      </div>
+                    </div>
+                    {/* Connector */}
+                    <div className="w-0.5 h-4 bg-slate-200 rounded-full" />
+                  </>
+                )}
 
                 {/* Step 2 */}
                 <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
@@ -344,8 +422,8 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Idle: logged in → confirm identity ─── */}
-          {step === 'idle' && user && !useOtherAccount && (
+          {/* ─── Idle: logged in → confirm identity (account mode) ─── */}
+          {step === 'idle' && joinMode === 'account' && user && !useOtherAccount && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 mb-1">Is this you?</h2>
@@ -396,8 +474,8 @@ export default function LectureLiveJoinPage() {
             </div>
           )}
 
-          {/* ─── Idle: not logged in (or chose different account) → login form ─── */}
-          {step === 'idle' && (!user || useOtherAccount) && (
+          {/* ─── Idle: not logged in (or chose different account) → login form (account mode) ─── */}
+          {step === 'idle' && joinMode === 'account' && (!user || useOtherAccount) && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 mb-1">Sign in to join</h2>
@@ -473,6 +551,80 @@ export default function LectureLiveJoinPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                   Sign in & Join Lecture
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* ─── Idle: guest mode form ─── */}
+          {step === 'idle' && joinMode === 'guest' && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Join as Guest</h2>
+                <p className="text-slate-500 text-sm">Enter your details to join this public lecture. No account needed.</p>
+              </div>
+
+              {stepError && (
+                <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 flex items-center gap-2">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {stepError}
+                </div>
+              )}
+
+              <form onSubmit={handleGuestJoin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={e => setGuestName(e.target.value)}
+                    required
+                    placeholder="e.g. Kamal Perera"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number <span className="text-red-500">*</span></label>
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={e => setGuestPhone(e.target.value)}
+                    required
+                    placeholder="e.g. 0771234567"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email <span className="text-slate-400 font-normal">(optional)</span></label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={e => setGuestEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Note <span className="text-slate-400 font-normal">(optional)</span></label>
+                  <input
+                    type="text"
+                    value={guestNote}
+                    onChange={e => setGuestNote(e.target.value)}
+                    placeholder="e.g. School, grade, or any message"
+                    className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:bg-white transition"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-bold text-base hover:from-emerald-700 hover:to-emerald-800 transition shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2.5"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                  Join Lecture
                 </button>
               </form>
             </div>

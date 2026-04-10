@@ -159,15 +159,16 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  org              Institute?        @relation("UserOrg", fields: [orgId], references: [id])
-  adminAccess      AdminInstitute[]  @relation("AdminAccess")
-  profile          Profile?
-  enrollments      Enrollment[]
-  payments         PaymentSlip[]
-  attendances      Attendance[]
-  watchSessions    WatchSession[]
-  refreshTokens    RefreshToken[]
-  classAttendances ClassAttendance[]
+  org                Institute?          @relation("UserOrg", fields: [orgId], references: [id])
+  adminAccess        AdminInstitute[]    @relation("AdminAccess")
+  profile            Profile?
+  enrollments        Enrollment[]
+  payments           PaymentSlip[]
+  attendances        Attendance[]
+  watchSessions      WatchSession[]
+  refreshTokens      RefreshToken[]
+  classAttendances   ClassAttendance[]
+  lectureAttendances LectureAttendance[]
 
   @@index([orgId])
 }
@@ -282,7 +283,9 @@ model Lecture {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  month Month @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  month               Month                @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  lectureAttendances   LectureAttendance[]
+  guestJoins           GuestLectureJoin[]
 
   @@index([monthId])
   @@index([status])
@@ -462,4 +465,36 @@ enum ClassAttendanceStatus {
   ABSENT
   LATE
   EXCUSED
+}
+
+// ─── Lecture Attendance (Registered users joining via live link) ─
+
+model LectureAttendance {
+  id        String   @id @default(uuid())
+  lectureId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lectureId, userId])
+  @@index([lectureId])
+  @@index([userId])
+}
+
+// ─── Guest Lecture Join (Public visitors joining ANYONE lectures) ─
+
+model GuestLectureJoin {
+  id        String   @id @default(uuid())
+  lectureId String
+  fullName  String
+  phone     String
+  email     String?
+  note      String?
+  joinedAt  DateTime @default(now())
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@index([lectureId])
 }

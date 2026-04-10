@@ -3,7 +3,7 @@ import {
   Param, Body, Query, UseGuards, Request,
 } from '@nestjs/common';
 import { LecturesService } from './lectures.service';
-import { CreateLectureDto, UpdateLectureDto } from './dto/lecture.dto';
+import { CreateLectureDto, UpdateLectureDto, JoinGuestDto } from './dto/lecture.dto';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -75,6 +75,17 @@ export class LecturesController {
   @Post('live/:token/join')
   joinByLiveToken(@Param('token') token: string, @Request() req: any) {
     return this.lecturesService.joinByLiveToken(token, req.user.sub);
+  }
+
+  @Post('live/:token/join-guest')
+  joinByLiveTokenGuest(@Param('token') token: string, @Body() body: JoinGuestDto) {
+    return this.lecturesService.joinByLiveTokenGuest(token, body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('ADMIN')
+  @Get(':id/stats')
+  getLectureStats(@Param('id') id: string) {
+    return this.lecturesService.getLectureStats(id);
   }
 
   /** Admin: generate or regenerate the shareable liveToken for a lecture */

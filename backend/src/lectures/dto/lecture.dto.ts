@@ -1,6 +1,6 @@
 import {
   IsString, IsNotEmpty, IsOptional, IsEnum,
-  IsDateString, IsInt, IsPositive, IsUrl,
+  IsDateString, IsInt, IsPositive, IsUrl, IsEmail,
 } from 'class-validator';
 
 export enum LectureStatusDto {
@@ -115,4 +115,22 @@ export class UpdateLectureDto {
   @IsOptional()
   @IsString()
   welcomeMessage?: string;
+}
+
+export class JoinGuestDto {
+  @IsString()
+  @IsNotEmpty()
+  fullName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

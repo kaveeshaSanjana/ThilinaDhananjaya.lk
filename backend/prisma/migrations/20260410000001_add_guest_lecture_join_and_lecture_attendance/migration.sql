@@ -1,0 +1,1 @@
+-- GuestLectureJoin and LectureAttendance tables (applied via db push)
