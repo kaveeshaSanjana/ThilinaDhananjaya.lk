@@ -279,6 +279,8 @@ model Lecture {
   maxParticipants Int?
   welcomeMessage  String?       @db.Text  // Rich text HTML with variable placeholders e.g. {{studentName}}
   liveToken       String?       @unique   // Shareable join token e.g. /lecture-live/{token}
+  cardImageUrl    String?       @db.Text  // Optional image shown on the join-page info panel
+  bgMediaUrl      String?       @db.Text  // Optional background image or looping video URL for join page
   status          LectureStatus @default(STUDENTS_ONLY)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

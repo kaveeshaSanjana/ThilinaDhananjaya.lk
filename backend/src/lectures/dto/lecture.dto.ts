@@ -63,6 +63,14 @@ export class CreateLectureDto {
   @IsOptional()
   @IsString()
   welcomeMessage?: string;
+
+  @IsOptional()
+  @IsString()
+  cardImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  bgMediaUrl?: string;
 }
 
 export class UpdateLectureDto {
@@ -115,6 +123,14 @@ export class UpdateLectureDto {
   @IsOptional()
   @IsString()
   welcomeMessage?: string;
+
+  @IsOptional()
+  @IsString()
+  cardImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  bgMediaUrl?: string;
 }
 
 export class JoinGuestDto {

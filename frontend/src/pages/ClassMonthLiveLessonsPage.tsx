@@ -39,6 +39,8 @@ interface Lecture {
   maxParticipants?: number | null;
   welcomeMessage?: string | null;
   liveToken?: string | null;
+  cardImageUrl?: string | null;
+  bgMediaUrl?: string | null;
   status: string;
   createdAt: string;
 }
@@ -427,6 +429,8 @@ const EMPTY_FORM = {
   maxParticipants: '',
   welcomeMessage: '',
   status: 'STUDENTS_ONLY',
+  cardImageUrl: '',
+  bgMediaUrl: '',
 };
 
 function CreateLectureModal({
@@ -465,6 +469,8 @@ function CreateLectureModal({
       if (form.meetingPassword.trim()) body.meetingPassword = form.meetingPassword.trim();
       if (form.maxParticipants)   body.maxParticipants = Number(form.maxParticipants);
       if (form.welcomeMessage.trim()) body.welcomeMessage = form.welcomeMessage.trim();
+      if (form.cardImageUrl.trim()) body.cardImageUrl = form.cardImageUrl.trim();
+      if (form.bgMediaUrl.trim()) body.bgMediaUrl = form.bgMediaUrl.trim();
       const res = await api.post(`/lectures/month/${monthId}`, body);
       onCreated(res.data?.lecture ?? res.data);
     } catch (e: any) {
@@ -588,6 +594,24 @@ function CreateLectureModal({
               <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
             </div>
 
+            {/* Appearance */}
+            <div className={sectionCls}>
+              <p className={sectionLabelCls}>Join Page Appearance</p>
+              <div>
+                <label className={labelCls}>Card Image URL</label>
+                <input className={inputCls} placeholder="https://... (image shown on join page panel)" value={form.cardImageUrl} onChange={e => set('cardImageUrl', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Background Image / Video URL</label>
+                <input className={inputCls} placeholder="https://... (.jpg, .png or .mp4 — video loops automatically)" value={form.bgMediaUrl} onChange={e => set('bgMediaUrl', e.target.value)} />
+                {form.bgMediaUrl && (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                    {/\.(mp4|webm|ogg)$/i.test(form.bgMediaUrl) ? '🎬 Video detected — will loop silently' : '🖼️ Image detected'}
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Footer */}
             <div className="flex gap-3 pt-2 pb-2">
               <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
@@ -634,6 +658,8 @@ function EditLectureModal({
     maxParticipants: lec.maxParticipants ? String(lec.maxParticipants) : '',
     welcomeMessage: lec.welcomeMessage ?? '',
     status: lec.status,
+    cardImageUrl: lec.cardImageUrl ?? '',
+    bgMediaUrl: lec.bgMediaUrl ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -660,6 +686,8 @@ function EditLectureModal({
         meetingPassword: form.meetingPassword.trim() || null,
         maxParticipants: form.maxParticipants ? Number(form.maxParticipants) : null,
         welcomeMessage: form.welcomeMessage.trim() || null,
+        cardImageUrl: form.cardImageUrl.trim() || null,
+        bgMediaUrl: form.bgMediaUrl.trim() || null,
       };
       const res = await api.patch(`/lectures/${lec.id}`, body);
       onUpdated(res.data?.lecture ?? res.data);
@@ -749,6 +777,22 @@ function EditLectureModal({
             </div>
           </div>
           <WelcomeMessageEditor value={form.welcomeMessage} onChange={v => set('welcomeMessage', v)} />
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Join Page Appearance</p>
+            <div>
+              <label className={labelCls}>Card Image URL</label>
+              <input className={inputCls} placeholder="https://... (image shown on join page panel)" value={form.cardImageUrl} onChange={e => set('cardImageUrl', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Background Image / Video URL</label>
+              <input className={inputCls} placeholder="https://... (.jpg, .png or .mp4 — video loops automatically)" value={form.bgMediaUrl} onChange={e => set('bgMediaUrl', e.target.value)} />
+              {form.bgMediaUrl && (
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                  {/\.(mp4|webm|ogg)$/i.test(form.bgMediaUrl) ? '🎬 Video — will loop silently' : '🖼️ Image'}
+                </p>
+              )}
+            </div>
+          </div>
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
             <button type="button" onClick={onClose} className="px-6 py-3 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition">
               Cancel
