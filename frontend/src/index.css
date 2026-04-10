@@ -1,51 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Space+Grotesk:wght@300..700&display=swap');
-
 @import "tailwindcss";
 
 :root {
-  --primary: 0 78% 47%;
+  --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
-  --primary-glow: 8 85% 55%;
-  --accent: 43 96% 52%;
+  --primary-glow: 217 91% 62%;
+  --accent: 160 72% 38%;
   --accent-foreground: 0 0% 100%;
-  --background: 30 25% 97%;
-  --foreground: 0 10% 12%;
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
   --card: 0 0% 100%;
-  --card-foreground: 0 10% 12%;
-  --muted: 30 14% 95%;
-  --muted-foreground: 0 5% 45%;
-  --border: 30 13% 90%;
-  --ring: 0 78% 47%;
+  --card-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --border: 214 32% 91%;
+  --ring: 221 83% 53%;
   --success: 142 71% 45%;
   --warning: 38 92% 50%;
   --danger: 0 84% 60%;
 }
 
 .dark {
-  --primary: 0 78% 55%;
+  --primary: 217 91% 62%;
   --primary-foreground: 0 0% 100%;
-  --primary-glow: 8 85% 62%;
-  --accent: 43 96% 58%;
+  --primary-glow: 214 100% 70%;
+  --accent: 160 72% 45%;
   --accent-foreground: 0 0% 100%;
-  --background: 0 15% 7%;
-  --foreground: 30 30% 96%;
-  --card: 0 12% 11%;
-  --card-foreground: 30 30% 96%;
-  --muted: 0 10% 17%;
-  --muted-foreground: 15 15% 60%;
-  --border: 0 10% 20%;
-  --ring: 0 78% 55%;
+  --background: 222 47% 6%;
+  --foreground: 210 40% 96%;
+  --card: 222 47% 10%;
+  --card-foreground: 210 40% 96%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 60%;
+  --border: 217 33% 20%;
+  --ring: 217 91% 62%;
   --success: 142 71% 50%;
   --warning: 38 92% 55%;
   --danger: 0 84% 65%;
 }
 
 * {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 @keyframes fade-in {

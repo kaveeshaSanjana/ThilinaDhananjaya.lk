@@ -6,7 +6,6 @@ import { InstituteProvider, useInstitute } from './context/InstituteContext';
 // Pages
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ClassesPage from './pages/ClassesPage';
 import ClassDetailPage from './pages/ClassDetailPage';
@@ -103,7 +102,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
-      <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <RegisterPage />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
 
       {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
       <Route path="recording/:id" element={<RecordingPlayerPage />} />

@@ -13,9 +13,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://thilinadhananjayalk-825437021775.us-central1.run.app',
+        target: 'http://localhost:3001',
         changeOrigin: true,
-        secure: true,
       },
     },
   },
