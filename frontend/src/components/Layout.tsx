@@ -54,6 +54,7 @@ const icons = {
   bell: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
   menu: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>,
   login: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>,
+  lock: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.5a4.5 4.5 0 10-9 0v3m-1.5 0h12a1.5 1.5 0 011.5 1.5v7.5A1.5 1.5 0 0118 21H6a1.5 1.5 0 01-1.5-1.5V12A1.5 1.5 0 016 10.5z" /></svg>,
   sun: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   moon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
   materials: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
@@ -136,7 +137,7 @@ export default function Layout() {
 
   // ---------- PUBLIC LAYOUT (no sidebar) ----------
   if (!user) {
-    const isLandingPage = location.pathname === '/';
+    const isLandingPage = location.pathname === '/' || location.pathname === '/landing';
     if (isLandingPage) {
       return <Outlet />;
     }
@@ -146,7 +147,7 @@ export default function Layout() {
         <header className="sticky top-0 z-30 bg-[hsl(var(--card)/0.85)] backdrop-blur-xl border-b border-[hsl(var(--border))] transition-colors duration-300">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
             {/* Brand */}
-            <Link to="/" className="flex items-center gap-2.5">
+            <Link to="/landing" className="flex items-center gap-2.5">
               <img src={logoImg} alt="Eazy English" className="h-10 w-10 object-contain" />
               <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
             </Link>
@@ -347,6 +348,10 @@ export default function Layout() {
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/institute')} icon={icons.admin} label="Institute Settings" />
               </SideSection>
             )}
+
+            <SideSection label="Account">
+              <NavItem to={getInstitutePath(scopedInstituteId, '/change-password')} icon={icons.lock} label="Change Password" />
+            </SideSection>
           </>
         )}
           </>

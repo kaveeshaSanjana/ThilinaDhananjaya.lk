@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors, Request, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UsersService } from './users.service';
@@ -7,6 +7,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import * as bcrypt from 'bcrypt';
+import { CreateStudentDto } from './dto/create-student.dto';
+import { UpdateStudentPasswordDto } from './dto/update-student-password.dto';
 
 @Controller('users')
 export class UsersController {
@@ -49,13 +51,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post('students')
-  async createStudent(@Request() req: any, @Headers('x-institute-id') orgId: string | undefined, @Body() body: {
-    email: string; password: string; fullName: string;
-    phone?: string; whatsappPhone?: string; address?: string; school?: string;
-    dateOfBirth?: string; guardianName?: string; guardianPhone?: string;
-    relationship?: string; occupation?: string; avatarUrl?: string;
-    gender?: 'MALE' | 'FEMALE' | 'OTHER';
-  }) {
+  async createStudent(@Headers('x-institute-id') orgId: string | undefined, @Body() body: CreateStudentDto) {
     const hashed = await bcrypt.hash(body.password, 12);
     return this.usersService.create({
       email: body.email, password: hashed, fullName: body.fullName,
@@ -65,6 +61,15 @@ export class UsersController {
       occupation: body.occupation, avatarUrl: body.avatarUrl, gender: body.gender,
       orgId: orgId || undefined,
     });
+  }
+
+  /** Admin: assign/reset a student's password */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch('students/:id/password')
+  @HttpCode(HttpStatus.OK)
+  setStudentPassword(@Param('id') id: string, @Body() body: UpdateStudentPasswordDto) {
+    return this.usersService.setStudentPassword(id, body.newPassword);
   }
 
   /** Admin: delete a student */

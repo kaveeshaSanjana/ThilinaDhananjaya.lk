@@ -139,7 +139,20 @@ export default function AdminStudents() {
   };
 
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(''); setSaving(true);
+    e.preventDefault();
+    setError('');
+
+    const trimmedPassword = form.password.trim();
+    if (!editingStudent && trimmedPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (editingStudent && trimmedPassword && trimmedPassword.length < 6) {
+      setError('Assigned password must be at least 6 characters');
+      return;
+    }
+
+    setSaving(true);
     try {
       if (editingStudent) {
         const payload: any = {
@@ -151,9 +164,12 @@ export default function AdminStudents() {
           avatarUrl: form.avatarUrl || undefined,
         };
         await api.patch(`/users/students/${editingStudent.id}/profile`, payload);
+        if (trimmedPassword) {
+          await api.patch(`/users/students/${editingStudent.id}/password`, { newPassword: trimmedPassword });
+        }
       } else {
         await api.post('/users/students', {
-          fullName: form.fullName, email: form.email, password: form.password,
+          fullName: form.fullName, email: form.email, password: trimmedPassword,
           phone: form.phone || undefined, whatsappPhone: form.whatsappPhone || undefined,
           address: form.address || undefined, school: form.school || undefined,
           occupation: form.occupation || undefined, gender: form.gender || undefined,
@@ -163,7 +179,10 @@ export default function AdminStudents() {
         });
       }
       setShowForm(false); setForm({ ...emptyForm }); load(search);
-    } catch (err: any) { setError(err.response?.data?.message || 'Failed to save student'); }
+    } catch (err: any) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to save student'));
+    }
     finally { setSaving(false); }
   };
 
@@ -486,9 +505,26 @@ export default function AdminStudents() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-600 mb-1.5">Password <span className="text-red-500">*</span></label>
-                      <input type="password" name="student-password-create" autoComplete="new-password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 chars" required
+                      <input type="password" name="student-password-create" autoComplete="new-password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 chars" minLength={6} required
                         className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
+                  </div>
+                )}
+
+                {editingStudent && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Assign New Password <span className="text-slate-400 font-normal text-xs">(optional)</span></label>
+                    <input
+                      type="password"
+                      name="student-password-edit"
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                      placeholder="Leave blank to keep current password"
+                      minLength={6}
+                      className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                    <p className="text-xs text-slate-400 mt-1.5">If provided, this replaces the student's password and signs them out from existing sessions.</p>
                   </div>
                 )}
               </div>

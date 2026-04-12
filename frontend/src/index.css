@@ -1,9 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap');
 @import "tailwindcss";
 
 :root {
   --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
   --primary-glow: 217 91% 62%;
+  --secondary: 210 60% 95%;
+  --secondary-foreground: 213 80% 40%;
   --accent: 160 72% 38%;
   --accent-foreground: 0 0% 100%;
   --background: 210 40% 98%;
@@ -12,17 +15,25 @@
   --card-foreground: 222 47% 11%;
   --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
   --border: 214 32% 91%;
   --ring: 221 83% 53%;
   --success: 142 71% 45%;
   --warning: 38 92% 50%;
   --danger: 0 84% 60%;
+  --hero-gradient: linear-gradient(135deg, hsl(210 60% 98%) 0%, hsl(213 80% 94%) 40%, hsl(200 70% 90%) 100%);
+  --hero-gradient-end: hsl(200 70% 90%);
+  --font-heading: 'Playfair Display', serif;
+  --font-body: 'Poppins', sans-serif;
 }
 
 .dark {
   --primary: 217 91% 62%;
   --primary-foreground: 0 0% 100%;
   --primary-glow: 214 100% 70%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
   --accent: 160 72% 45%;
   --accent-foreground: 0 0% 100%;
   --background: 222 47% 6%;
@@ -31,6 +42,8 @@
   --card-foreground: 210 40% 96%;
   --muted: 217 33% 17%;
   --muted-foreground: 215 20% 60%;
+  --destructive: 0 84% 65%;
+  --destructive-foreground: 210 40% 98%;
   --border: 217 33% 20%;
   --ring: 217 91% 62%;
   --success: 142 71% 50%;
@@ -44,6 +57,69 @@
 
 h1, h2, h3, h4, h5, h6 {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.landing-shell {
+  --background: 210 50% 98%;
+  --foreground: 215 30% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 30% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 30% 15%;
+  --primary: 213 80% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 60% 95%;
+  --secondary-foreground: 213 80% 40%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 200 90% 55%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 213 80% 50%;
+  --hero-gradient: linear-gradient(135deg, hsl(210 60% 98%) 0%, hsl(213 80% 94%) 40%, hsl(200 70% 90%) 100%);
+  --hero-gradient-end: hsl(200 70% 90%);
+  --font-heading: 'Playfair Display', serif;
+  --font-body: 'Poppins', sans-serif;
+  font-family: var(--font-body);
+}
+
+.landing-shell,
+.landing-shell * {
+  font-family: var(--font-body);
+}
+
+.dark .landing-shell {
+  --background: 210 50% 98%;
+  --foreground: 215 30% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 30% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 30% 15%;
+  --primary: 213 80% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 60% 95%;
+  --secondary-foreground: 213 80% 40%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 200 90% 55%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 213 80% 50%;
+}
+
+.landing-shell h1,
+.landing-shell h2,
+.landing-shell h3,
+.landing-shell h4,
+.landing-shell h5,
+.landing-shell h6 {
+  font-family: var(--font-heading);
 }
 
 @keyframes fade-in {
@@ -94,6 +170,21 @@ h1, h2, h3, h4, h5, h6 {
   100% { transform: translateX(-50%); }
 }
 .animate-marquee { animation: marquee var(--marquee-speed, 25s) linear infinite; }
+
+@keyframes scroll-rtl-custom {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--scroll-pct, -50%)); }
+}
+
+@keyframes scroll-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
+@keyframes scroll-down {
+  from { transform: translateY(-50%); }
+  to { transform: translateY(0); }
+}
 
 .skeleton {
   background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--background)) 50%, hsl(var(--muted)) 75%);

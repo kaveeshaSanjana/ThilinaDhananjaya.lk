@@ -1,8 +1,9 @@
-import { Controller, Post, Body, Get, UseGuards, Request, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, UseGuards, Request, Res, HttpCode, HttpStatus } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
@@ -71,5 +72,12 @@ export class AuthController {
   @Get('me')
   getMe(@Request() req: any) {
     return this.authService.getMe(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  @HttpCode(HttpStatus.OK)
+  changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.sub, dto);
   }
 }

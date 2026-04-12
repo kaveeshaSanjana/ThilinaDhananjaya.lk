@@ -1,6 +1,7 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
 
 interface CreateUserData {
   email: string;
@@ -158,6 +159,29 @@ export class UsersService {
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
       this.prisma.user.delete({ where: { id: userId } }),
     ]);
+  }
+
+  async setStudentPassword(userId: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashedPassword },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+    ]);
+
+    return { message: 'Student password updated successfully' };
   }
 
   /**

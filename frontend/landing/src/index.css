@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Right-to-left infinite scroll for VideoGallerySection ── */
+@keyframes scroll-rtl {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes scroll-rtl-custom {
+  from { transform: translateX(0); }
+  to   { transform: translateX(var(--scroll-pct, -50%)); }
+}
+/* ── Vertical infinite scroll for ReviewSection ── */
+@keyframes scroll-up {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+@keyframes scroll-down {
+  from { transform: translateY(-50%); }
+  to   { transform: translateY(0); }
+}
+
+@layer base {
+  :root {
+    --background: 206 78% 97%;
+    --foreground: 216 38% 18%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 216 38% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 38% 18%;
+
+    --primary: 206 88% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 205 80% 92%;
+    --secondary-foreground: 210 70% 32%;
+
+    --muted: 206 60% 94%;
+    --muted-foreground: 214 22% 44%;
+
+    --accent: 192 88% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 206 38% 86%;
+    --input: 206 38% 86%;
+    --ring: 206 88% 56%;
+
+    --radius: 0.75rem;
+
+    --hero-gradient: linear-gradient(135deg, hsl(206 90% 98%) 0%, hsl(205 88% 92%) 45%, hsl(193 82% 88%) 100%);
+    --hero-gradient-end: hsl(193 82% 88%);
+    --hero-accent: 206 88% 56%;
+    --hero-glow: 192 88% 45%;
+
+    --font-heading: 'Playfair Display', serif;
+    --font-body: 'Poppins', sans-serif;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 215 30% 8%;
+    --foreground: 210 40% 98%;
+    --card: 215 30% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 215 30% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 213 80% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 200 85% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 213 80% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+}

@@ -37,6 +37,7 @@ import ClassMonthMediaPage from './pages/ClassMonthMediaPage';
 import ClassPhysicalAttendancePage from './pages/ClassPhysicalAttendancePage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 
 import Layout from './components/Layout';
 import { getInstituteAdminPath } from './lib/instituteRoutes';
@@ -105,6 +106,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
+      <Route path="/landing" element={<LandingPage />} />
 
       {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
       <Route path="recording/:id" element={<RecordingPlayerPage />} />
@@ -114,7 +116,7 @@ function AppRoutes() {
       <Route path="lecture-live/:token" element={<LectureLiveJoinPage />} />
 
       <Route path="/" element={<Layout />}>
-        <Route index element={user ? <ClassesPage /> : <LandingPage />} />
+        <Route index element={user ? <ClassesPage /> : <Navigate to="/landing" replace />} />
         <Route path="institute/:instituteId" element={<ClassesPage />} />
         <Route path="classes" element={<ClassesPage />} />
         <Route path="institute/:instituteId/classes" element={<ClassesPage />} />
@@ -144,6 +146,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/watch-history" element={<ProtectedRoute><WatchHistoryPage /></ProtectedRoute>} />
         <Route path="my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />
+        <Route path="change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
 
         <Route path="admin/select-institute" element={<ProtectedRoute role="ADMIN"><AdminInstituteSelect /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin" element={<ProtectedRoute role="ADMIN"><AdminDashboard /></ProtectedRoute>} />
