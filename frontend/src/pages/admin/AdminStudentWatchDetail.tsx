@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../lib/api';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
+import { exportStudentWatchDetailPdf } from '../../lib/studentWatchDetailPdf';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,19 +137,33 @@ export default function AdminStudentWatchDetail() {
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-12 animate-fade-in">
       {/* Back breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 hover:text-indigo-600 transition font-medium">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-          Back
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-sm text-slate-400 min-w-0">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 hover:text-indigo-600 transition font-medium">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            Back
+          </button>
+          <span>/</span>
+          <Link to={getInstituteAdminPath(instituteId, '/recordings')} className="hover:text-indigo-600 transition">Recordings</Link>
+          <span>/</span>
+          <span className="text-slate-600 font-medium truncate max-w-[200px]">{recording.title}</span>
+          <span>/</span>
+          <span className="text-slate-800 font-semibold truncate max-w-[160px]">
+            {student.user?.profile?.fullName || student.user?.email || 'Student'}
+          </span>
+        </div>
+
+        <button
+          onClick={() => {
+            void exportStudentWatchDetailPdf(data);
+          }}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+          </svg>
+          Export A4 PDF
         </button>
-        <span>/</span>
-        <Link to={getInstituteAdminPath(instituteId, '/recordings')} className="hover:text-indigo-600 transition">Recordings</Link>
-        <span>/</span>
-        <span className="text-slate-600 font-medium truncate max-w-[200px]">{recording.title}</span>
-        <span>/</span>
-        <span className="text-slate-800 font-semibold truncate max-w-[160px]">
-          {student.user?.profile?.fullName || student.user?.email || 'Student'}
-        </span>
       </div>
 
       {/* Student header card */}

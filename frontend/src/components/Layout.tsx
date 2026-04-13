@@ -6,6 +6,7 @@ import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
 import { getInstituteAdminPath, getInstitutePath, replaceInstituteAdminPath } from '../lib/instituteRoutes';
 import logoImg from '../assets/logo.png';
+import LandingStyleLoading from './LandingStyleLoading';
 
 /* -------- Sidebar Nav Item -------- */
 function NavItem({ to, icon, label, badge, onClick, exact }: { to: string; icon: React.ReactNode; label: string; badge?: number; onClick?: () => void; exact?: boolean }) {
@@ -59,6 +60,7 @@ const icons = {
   moon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
   materials: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
   physAttend: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  qrAttend: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 4.5h6v6h-6v-6zm9 0h6v6h-6v-6zm-9 9h6v6h-6v-6zm12 0h3m-3 3h3m-7 3h6" /></svg>,
   live: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.361a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /><circle cx="9" cy="5" r="1.5" fill="currentColor" stroke="none" /><circle cx="9" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth={1.2} /></svg>,
   folder: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
 };
@@ -114,6 +116,20 @@ export default function Layout() {
   const adminInstituteId = routeInstituteId || selected?.id || null;
   const adminBasePath = getInstituteAdminPath(adminInstituteId);
   const scopedInstituteId = routeInstituteId || selected?.id || null;
+  const selectedInstitute = selected as (typeof selected & {
+    shortName?: string;
+    code?: string;
+    logo?: string;
+    image?: string;
+    imgUrl?: string;
+  }) | null;
+
+  const selectedInstituteImage =
+    selectedInstitute?.logoUrl ||
+    selectedInstitute?.logo ||
+    selectedInstitute?.image ||
+    selectedInstitute?.imgUrl ||
+    '';
 
   const isClassDetail = !isMonthDetail && /^\/classes\/[^/]+(\/class-recordings)?$/.test(scopedPathname);
   const classId = isClassDetail ? scopedPathname.split('/')[2] : (isMonthDetail ? monthDetailClassId : null);
@@ -177,11 +193,7 @@ export default function Layout() {
   }
 
   if (user.role === 'ADMIN' && instituteLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[hsl(var(--background))]">
-        <div className="w-8 h-8 rounded-full border-[3px] border-[hsl(var(--primary))] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LandingStyleLoading />;
   }
 
   if (
@@ -218,59 +230,116 @@ export default function Layout() {
           </SideSection>
         ) : (
           <>
-        {/* Institute switcher — admin only, shown when in main nav */}
+        {/* Institute selector card */}
         {user?.role === 'ADMIN' && institutes.length > 0 && !isClassDetail && !isMonthDetail && (
-          <div className="mt-3 mb-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] overflow-hidden">
-            {institutes.length === 1 ? (
-              <div className="flex items-center gap-2.5 px-3 py-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[hsl(var(--primary))] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {selected?.logoUrl
-                    ? <img src={selected.logoUrl} alt="" className="w-7 h-7 object-cover" />
-                    : <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate">{selected?.name}</p>
-                  <p className="text-[10px] text-[hsl(var(--muted-foreground))]">Institute</p>
+          <div className="mt-3 space-y-3">
+            {selectedInstitute && (
+              <div className="mx-2 rounded-2xl p-[1px] bg-gradient-to-br from-[hsl(var(--primary)/0.35)] via-[hsl(var(--primary-glow)/0.28)] to-[hsl(var(--border))] shadow-[0_10px_28px_hsl(var(--primary)/0.15)]">
+                <div className="rounded-[15px] p-4 bg-[linear-gradient(145deg,hsl(var(--card))_0%,hsl(var(--card)/0.94)_68%,hsl(var(--primary)/0.06)_100%)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {selectedInstituteImage ? (
+                        <img
+                          src={selectedInstituteImage}
+                          alt={selectedInstitute.name}
+                          className="w-12 h-12 rounded-xl object-cover ring-1 ring-[hsl(var(--border))] shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(var(--primary)/0.2)] to-[hsl(var(--primary)/0.08)] flex items-center justify-center shrink-0 ring-1 ring-[hsl(var(--primary)/0.25)]">
+                          <svg className="h-6 w-6 text-[hsl(var(--primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.9}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-[15px] font-extrabold text-[hsl(var(--foreground))] truncate leading-tight">{selectedInstitute.name}</h2>
+                        {selectedInstitute.shortName && (
+                          <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5 truncate">{selectedInstitute.shortName}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)] border border-[hsl(var(--primary)/0.2)]">
+                      Active
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    {selectedInstitute.code && (
+                      <span className="text-[10px] text-[hsl(var(--foreground))] bg-[hsl(var(--background)/0.7)] border border-[hsl(var(--border))] px-2 py-0.5 rounded-full font-mono">
+                        {selectedInstitute.code}
+                      </span>
+                    )}
+                    {selectedInstitute.slug && (
+                      <span className="text-[10px] text-[hsl(var(--foreground))] bg-[hsl(var(--background)/0.7)] border border-[hsl(var(--border))] px-2 py-0.5 rounded-full font-mono truncate max-w-[130px]">
+                        {selectedInstitute.slug}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="px-2 py-2">
-                <p className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5 px-1">Institute</p>
-                <select value={selected?.id || ''} onChange={e => {
-                  const nextInstituteId = e.target.value;
-                  select(nextInstituteId);
-                  navigate(adminInstituteId ? replaceInstituteAdminPath(location.pathname, nextInstituteId) : getInstituteAdminPath(nextInstituteId));
-                }}
-                  className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] outline-none">
+            )}
+
+            {institutes.length > 1 && (
+              <div className="mx-2 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card)/0.88)] backdrop-blur-sm p-3 shadow-[0_6px_20px_hsl(var(--foreground)/0.05)]">
+                <p className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">Switch Institute</p>
+                <select
+                  value={selected?.id || ''}
+                  onChange={e => {
+                    const nextInstituteId = e.target.value;
+                    select(nextInstituteId);
+                    navigate(adminInstituteId ? replaceInstituteAdminPath(location.pathname, nextInstituteId) : getInstituteAdminPath(nextInstituteId));
+                  }}
+                  className="w-full text-[12px] font-semibold bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-xl px-2.5 py-2 text-[hsl(var(--foreground))] focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] outline-none transition"
+                >
                   {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
               </div>
             )}
           </div>
         )}
+
+        {/* Class/month selector card */}
         {(isClassDetail || isMonthDetail) && (
-          <div className="mt-3 rounded-xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.05)] overflow-hidden">
-            <div className="px-3 py-2 border-b border-[hsl(var(--primary)/0.1)]">
-              <p className="text-[10px] font-bold text-[hsl(var(--primary))] uppercase tracking-[0.14em]">Current Selection</p>
-            </div>
-            <div className="px-3 py-2 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-[16px] h-[16px] text-[hsl(var(--primary))] flex-shrink-0">{icons.classes}</span>
-                <p className="text-[13px] font-semibold text-[hsl(var(--foreground))] truncate flex-1">{selectedClassName || 'Loading...'}</p>
-                <Link to={getInstitutePath(scopedInstituteId, '/classes')} className="text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-glow))] transition" aria-label="Back to classes">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                </Link>
-              </div>
-              {isMonthDetail && (
-                <div className="flex items-center gap-2">
-                  <span className="w-[16px] h-[16px] text-[hsl(var(--muted-foreground)/0.6)] flex-shrink-0">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  </span>
-                  <p className="text-[12px] font-medium text-[hsl(var(--muted-foreground))] truncate flex-1">{selectedMonthName || 'Loading...'}</p>
-                  <Link to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}`)} className="text-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--primary))] transition" aria-label="Back to months">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                  </Link>
+          <div className="mt-3 space-y-3">
+            <div className="mx-2 rounded-2xl p-[1px] bg-gradient-to-br from-[hsl(var(--primary)/0.28)] to-[hsl(var(--border))] shadow-[0_8px_24px_hsl(var(--primary)/0.12)]">
+              <div className="rounded-[15px] p-4 bg-[linear-gradient(145deg,hsl(var(--card))_0%,hsl(var(--card)/0.95)_100%)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(var(--primary)/0.2)] to-[hsl(var(--primary)/0.06)] flex items-center justify-center shrink-0 ring-1 ring-[hsl(var(--primary)/0.2)]">
+                    <span className="w-6 h-6 text-[hsl(var(--primary))]">{icons.classes}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-[15px] font-extrabold text-[hsl(var(--foreground))] truncate">{selectedClassName || 'Selected Class'}</h2>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[11px] text-[hsl(var(--muted-foreground))]">Class</span>
+                      {isMonthDetail && (
+                        <span className="text-[10px] text-[hsl(var(--foreground))] bg-[hsl(var(--background)/0.72)] border border-[hsl(var(--border))] px-2 py-0.5 rounded-full font-medium">{selectedMonthName || 'Selected Month'}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="mx-2 flex items-center gap-2 flex-wrap">
+              <Link
+                to={getInstitutePath(scopedInstituteId, '/classes')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                All Classes
+              </Link>
+
+              {isMonthDetail && (
+                <Link
+                  to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}`)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  Back To Months
+                </Link>
               )}
             </div>
           </div>
@@ -293,6 +362,9 @@ export default function Layout() {
             {user?.role === 'ADMIN' && (
               <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" />
             )}
+            {user?.role === 'ADMIN' && (
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/physical-attendance/qr`)} icon={icons.qrAttend} label="QR Attendance" />
+            )}
           </SideSection>
           <SideSection label="Payments">
             {user?.role === 'STUDENT' && (
@@ -311,6 +383,9 @@ export default function Layout() {
             <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}`)} icon={icons.classes} label="Months" exact />
             {user?.role === 'ADMIN' && (
               <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}/physical-attendance`)} icon={icons.physAttend} label="Physical Attendance" />
+            )}
+            {user?.role === 'ADMIN' && (
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${classId}/physical-attendance/qr`)} icon={icons.qrAttend} label="QR Attendance" />
             )}
           </SideSection>
         ) : (
@@ -342,7 +417,9 @@ export default function Layout() {
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/classes')} icon={icons.classes} label="Manage Classes" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/slips')} icon={icons.slips} label="Payment" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/attendance')} icon={icons.attend} label="Recording Attendance" />
-                <NavItem to={getInstituteAdminPath(adminInstituteId, '/class-attendance')} icon={icons.attend} label="Class Attendance" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/mark-attendance')} icon={icons.qrAttend} label="Mark Attendance" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/mark-attendance/external-device')} icon={icons.physAttend} label="Mark Attendance - External Device" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/class-attendance')} icon={icons.attend} label="Advanced Attendance" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/recordings')} icon={icons.recordings} label="Recordings" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/id-cards')} icon={icons.students} label="ID Cards" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/institute')} icon={icons.admin} label="Institute Settings" />

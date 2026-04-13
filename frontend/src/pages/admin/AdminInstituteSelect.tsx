@@ -240,13 +240,13 @@ export default function AdminInstituteSelect() {
                 select(institute.id);
                 navigate(redirect && redirect.startsWith('/') ? redirect : getInstituteAdminPath(institute.id));
               }}
-              className={`group relative w-full flex flex-col rounded-2xl bg-[hsl(var(--card))] ring-1 ring-[hsl(var(--border))] shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl text-left ${
+              className={`group relative w-full flex flex-col overflow-hidden rounded-2xl bg-[hsl(var(--card))] ring-1 ring-[hsl(var(--border))] shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl text-left ${
                 selected?.id === institute.id
                   ? 'ring-2 ring-indigo-500/40'
                   : 'hover:ring-[hsl(var(--ring))]/30'
               }`}
             >
-              <div className={`relative mx-3 mt-3 h-32 overflow-hidden rounded-xl text-white shadow-lg bg-gradient-to-r ${gradients[idx % gradients.length]}`}>
+              <div className={`relative h-36 overflow-hidden rounded-t-2xl text-white bg-gradient-to-r ${gradients[idx % gradients.length]}`}>
                 {institute.logoUrl ? (
                   <img src={institute.logoUrl} alt={institute.name} className="w-full h-full object-cover" />
                 ) : (
@@ -254,6 +254,7 @@ export default function AdminInstituteSelect() {
                     <span className="text-white/20 text-6xl font-black">{institute.name?.[0]?.toUpperCase() || 'I'}</span>
                   </div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
                 {institute.isOwner && (
                   <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide bg-white/90 text-indigo-700 backdrop-blur-sm">
                     Owner
@@ -266,8 +267,8 @@ export default function AdminInstituteSelect() {
                 )}
               </div>
 
-              <div className="p-4 flex-1 flex flex-col">
-                <h5 className="mb-1 text-base font-bold text-[hsl(var(--foreground))] truncate">
+              <div className="p-4 flex-1 flex flex-col bg-[linear-gradient(160deg,hsl(var(--card))_0%,hsl(var(--card)/0.97)_100%)]">
+                <h5 className="mb-1 text-base font-extrabold text-[hsl(var(--foreground))] truncate">
                   {institute.name}
                 </h5>
                 <p className="text-sm text-[hsl(var(--muted-foreground))] line-clamp-2 min-h-[36px]">

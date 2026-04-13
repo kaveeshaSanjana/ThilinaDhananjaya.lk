@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
 
 export enum StudentGender {
   MALE = 'MALE',
@@ -17,6 +17,19 @@ export class CreateStudentDto {
   @IsString()
   @IsNotEmpty()
   fullName: string;
+
+  @ValidateIf((o: CreateStudentDto) => !o.instituteId)
+  @IsString()
+  @IsNotEmpty()
+  instituteUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  instituteId?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  barcodeId: string;
 
   @IsOptional()
   @IsString()

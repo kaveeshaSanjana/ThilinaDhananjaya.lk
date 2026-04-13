@@ -46,7 +46,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.usersService.findByLoginIdentifier(dto.identifier);
+    const identifier = (dto.identifier ?? dto.email ?? '').trim();
+    const user = await this.usersService.findByLoginIdentifier(identifier);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }

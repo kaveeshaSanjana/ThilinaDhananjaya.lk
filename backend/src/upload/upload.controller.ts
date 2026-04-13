@@ -36,4 +36,25 @@ export class UploadController {
     const url = await this.uploadService.uploadImage(file, folder);
     return { url };
   }
+
+  /**
+   * POST /upload/file?folder=media|general|classes|recordings|avatars
+   * Upload a study material file (PDF, docs, images, etc.) to S3.
+   * Requires JWT authentication.
+   * Returns: { url: string }
+   */
+  @Post('file')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 25 * 1024 * 1024 },
+    }),
+  )
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('folder') folder: 'classes' | 'recordings' | 'avatars' | 'general' | 'media' = 'media',
+  ) {
+    const url = await this.uploadService.uploadFile(file, folder);
+    return { url };
+  }
 }

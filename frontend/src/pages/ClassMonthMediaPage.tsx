@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { getInstitutePath } from '../lib/instituteRoutes';
+import { uploadMediaFile } from '../lib/imageUpload';
 
 /* ─── Types ────────────────────────────────────────────── */
 
@@ -30,6 +31,33 @@ function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MEDIA_UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.jpg,.jpeg,.png,.webp,.gif';
+
+function inferMediaTypeFromFile(file: File): MediaType {
+  const mime = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+
+  if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)) {
+    return 'IMAGE';
+  }
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) {
+    return 'PDF';
+  }
+  if (
+    mime.includes('msword') ||
+    mime.includes('wordprocessingml') ||
+    mime.includes('ms-excel') ||
+    mime.includes('spreadsheetml') ||
+    mime.includes('ms-powerpoint') ||
+    mime.includes('presentationml') ||
+    /\.(doc|docx|xls|xlsx|ppt|pptx|txt)$/i.test(name)
+  ) {
+    return 'DOCUMENT';
+  }
+
+  return 'OTHER';
 }
 
 const MEDIA_TYPE_META: Record<MediaType, { label: string; icon: React.ReactNode; colorCls: string; bgCls: string }> = {
@@ -176,19 +204,60 @@ function CreateMediaModal({
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setErr('');
+    try {
+      const url = await uploadMediaFile(file, 'media');
+      const inferredType = inferMediaTypeFromFile(file);
+      const titleFromName = file.name.replace(/\.[^/.]+$/, '');
+
+      setForm((prev) => ({
+        ...prev,
+        title: prev.title.trim() ? prev.title : titleFromName,
+        fileUrl: url,
+        mediaType: inferredType,
+        size: String(file.size),
+        thumbnail: inferredType === 'IMAGE' ? (prev.thumbnail || url) : prev.thumbnail,
+      }));
+      setUploadedFileUrl(url);
+      setUploadName(file.name);
+    } catch (error: any) {
+      setErr(error?.message || 'Failed to upload file');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) { setErr('Title is required'); return; }
-    if (!form.fileUrl.trim()) { setErr('File URL is required'); return; }
+    const isLinkType = form.mediaType === 'LINK';
+    const finalFileUrl = isLinkType
+      ? (form.fileUrl || '').trim()
+      : (uploadedFileUrl || '').trim();
+
+    if (!finalFileUrl) {
+      setErr(isLinkType ? 'URL is required for Link type' : 'Please upload a file first');
+      return;
+    }
+
     setSaving(true); setErr('');
     try {
       const body: Record<string, unknown> = {
         monthId,
         title: form.title.trim(),
-        fileUrl: form.fileUrl.trim(),
+        fileUrl: finalFileUrl,
         mediaType: form.mediaType,
         status: form.status,
         order: Number(form.order) || 0,
@@ -243,7 +312,18 @@ function CreateMediaModal({
               </div>
               <div>
                 <label className={labelCls}>Type</label>
-                <select className={inputCls} value={form.mediaType} onChange={e => set('mediaType', e.target.value)}>
+                <select
+                  className={inputCls}
+                  value={form.mediaType}
+                  onChange={e => {
+                    const nextType = e.target.value;
+                    set('mediaType', nextType);
+                    if (nextType === 'LINK') {
+                      setUploadedFileUrl('');
+                      setUploadName('');
+                    }
+                  }}
+                >
                   <option value="PDF">PDF</option>
                   <option value="IMAGE">Image</option>
                   <option value="LINK">Link / URL</option>
@@ -256,17 +336,44 @@ function CreateMediaModal({
             {/* File */}
             <div className={sectionCls}>
               <p className={sectionLabelCls}>File / URL</p>
-              <div>
-                <label className={labelCls}>
-                  {form.mediaType === 'LINK' ? 'URL' : 'File URL'} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  className={inputCls}
-                  placeholder={form.mediaType === 'LINK' ? 'https://example.com/resource' : 'https://files.example.com/paper.pdf'}
-                  value={form.fileUrl}
-                  onChange={e => set('fileUrl', e.target.value)}
-                />
-              </div>
+              {form.mediaType !== 'LINK' ? (
+                <>
+                  <div className="rounded-xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 space-y-2">
+                    <label className={labelCls}>Upload File <span className="text-red-500">*</span></label>
+                    <input
+                      type="file"
+                      accept={MEDIA_UPLOAD_ACCEPT}
+                      onChange={handleFileUpload}
+                      disabled={uploading || saving}
+                      className="w-full text-xs text-[hsl(var(--muted-foreground))] file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[hsl(var(--primary)/0.12)] file:text-[hsl(var(--primary))] file:font-semibold hover:file:bg-[hsl(var(--primary)/0.18)]"
+                    />
+                    <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                      Allowed: PDF, Word, Excel, PowerPoint, text, zip/rar, image files up to 25 MB.
+                    </p>
+                    {uploading && <p className="text-[11px] text-indigo-600 font-semibold">Uploading file...</p>}
+                    {uploadName && !uploading && <p className="text-[11px] text-emerald-600 font-semibold">Uploaded: {uploadName}</p>}
+                    {uploadedFileUrl && !uploading && (
+                      <p className="text-[11px] text-emerald-600">Uploaded backend URL is locked and will be used when saving.</p>
+                    )}
+                  </div>
+                  {uploadedFileUrl && (
+                    <div>
+                      <label className={labelCls}>Uploaded URL</label>
+                      <input className={`${inputCls} opacity-80`} value={uploadedFileUrl} readOnly />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <label className={labelCls}>URL <span className="text-red-500">*</span></label>
+                  <input
+                    className={inputCls}
+                    placeholder="https://example.com/resource"
+                    value={form.fileUrl}
+                    onChange={e => set('fileUrl', e.target.value)}
+                  />
+                </div>
+              )}
               <div>
                 <label className={labelCls}>Thumbnail URL</label>
                 <input className={inputCls} placeholder="https://example.com/thumbnail.jpg (optional)" value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
@@ -301,9 +408,9 @@ function CreateMediaModal({
             {/* Footer */}
             <div className="flex gap-3 pt-2 pb-2">
               <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
-              <button type="submit" disabled={saving} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                {saving ? 'Adding...' : 'Add Material'}
+              <button type="submit" disabled={saving || uploading} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                {(saving || uploading) && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {uploading ? 'Uploading...' : saving ? 'Adding...' : 'Add Material'}
               </button>
             </div>
           </div>
@@ -337,18 +444,57 @@ function EditMediaModal({
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadedFileUrl, setUploadedFileUrl] = useState('');
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setErr('');
+    try {
+      const url = await uploadMediaFile(file, 'media');
+      const inferredType = inferMediaTypeFromFile(file);
+
+      setForm((prev) => ({
+        ...prev,
+        fileUrl: url,
+        mediaType: inferredType,
+        size: String(file.size),
+        thumbnail: inferredType === 'IMAGE' ? (prev.thumbnail || url) : prev.thumbnail,
+      }));
+      setUploadedFileUrl(url);
+      setUploadName(file.name);
+    } catch (error: any) {
+      setErr(error?.message || 'Failed to upload file');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) { setErr('Title is required'); return; }
-    if (!form.fileUrl.trim()) { setErr('File URL is required'); return; }
+    const isLinkType = form.mediaType === 'LINK';
+    const finalFileUrl = isLinkType
+      ? (form.fileUrl || '').trim()
+      : (uploadedFileUrl || form.fileUrl || '').trim();
+
+    if (!finalFileUrl) {
+      setErr(isLinkType ? 'URL is required for Link type' : 'Please upload a file first');
+      return;
+    }
+
     setSaving(true); setErr('');
     try {
       const body: Record<string, unknown> = {
         title: form.title.trim(),
-        fileUrl: form.fileUrl.trim(),
+        fileUrl: finalFileUrl,
         mediaType: form.mediaType,
         status: form.status,
         order: Number(form.order) || 0,
@@ -403,7 +549,18 @@ function EditMediaModal({
               </div>
               <div>
                 <label className={labelCls}>Type</label>
-                <select className={inputCls} value={form.mediaType} onChange={e => set('mediaType', e.target.value)}>
+                <select
+                  className={inputCls}
+                  value={form.mediaType}
+                  onChange={e => {
+                    const nextType = e.target.value;
+                    set('mediaType', nextType);
+                    if (nextType === 'LINK') {
+                      setUploadedFileUrl('');
+                      setUploadName('');
+                    }
+                  }}
+                >
                   <option value="PDF">PDF</option>
                   <option value="IMAGE">Image</option>
                   <option value="LINK">Link / URL</option>
@@ -416,12 +573,39 @@ function EditMediaModal({
             {/* File */}
             <div className={sectionCls}>
               <p className={sectionLabelCls}>File / URL</p>
-              <div>
-                <label className={labelCls}>
-                  {form.mediaType === 'LINK' ? 'URL' : 'File URL'} <span className="text-red-500">*</span>
-                </label>
-                <input className={inputCls} value={form.fileUrl} onChange={e => set('fileUrl', e.target.value)} />
-              </div>
+              {form.mediaType !== 'LINK' ? (
+                <>
+                  <div className="rounded-xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 space-y-2">
+                    <label className={labelCls}>Replace File</label>
+                    <input
+                      type="file"
+                      accept={MEDIA_UPLOAD_ACCEPT}
+                      onChange={handleFileUpload}
+                      disabled={uploading || saving}
+                      className="w-full text-xs text-[hsl(var(--muted-foreground))] file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[hsl(var(--primary)/0.12)] file:text-[hsl(var(--primary))] file:font-semibold hover:file:bg-[hsl(var(--primary)/0.18)]"
+                    />
+                    {uploading && <p className="text-[11px] text-indigo-600 font-semibold">Uploading file...</p>}
+                    {uploadName && !uploading && <p className="text-[11px] text-emerald-600 font-semibold">Uploaded: {uploadName}</p>}
+                    {uploadedFileUrl && !uploading && (
+                      <p className="text-[11px] text-emerald-600">Uploaded backend URL will replace the current file.</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelCls}>{uploadedFileUrl ? 'Uploaded URL' : 'Current File URL'}</label>
+                    <input className={`${inputCls} opacity-80`} value={uploadedFileUrl || form.fileUrl} readOnly />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className={labelCls}>URL <span className="text-red-500">*</span></label>
+                  <input
+                    className={inputCls}
+                    placeholder="https://example.com/resource"
+                    value={form.fileUrl}
+                    onChange={e => set('fileUrl', e.target.value)}
+                  />
+                </div>
+              )}
               <div>
                 <label className={labelCls}>Thumbnail URL</label>
                 <input className={inputCls} placeholder="Optional" value={form.thumbnail} onChange={e => set('thumbnail', e.target.value)} />
@@ -456,9 +640,9 @@ function EditMediaModal({
             {/* Footer */}
             <div className="flex gap-3 pt-2 pb-2">
               <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--foreground))] text-sm font-semibold hover:bg-[hsl(var(--muted))] transition">Cancel</button>
-              <button type="submit" disabled={saving} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                {saving ? 'Saving...' : 'Save Changes'}
+              <button type="submit" disabled={saving || uploading} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm font-semibold hover:from-purple-600 hover:to-indigo-700 transition shadow-lg shadow-purple-500/25 disabled:opacity-50 flex items-center justify-center gap-2">
+                {(saving || uploading) && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

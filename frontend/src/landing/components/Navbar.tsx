@@ -91,13 +91,10 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Desktop buttons */}
+          {/* Desktop button */}
           <div className="hidden md:flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm" className="rounded-full">
-              <Link to="/login">Login</Link>
-            </Button>
             <Button asChild size="sm" className="rounded-full px-6">
-              <Link to="/register">Register</Link>
+              <Link to="/login">Student Login</Link>
             </Button>
           </div>
 
@@ -135,12 +132,9 @@ const Navbar = () => {
                 {item.label}
               </a>
             ))}
-            <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-              <Button asChild variant="ghost" size="sm" className="flex-1 rounded-full">
-                <Link to="/login">Login</Link>
-              </Button>
-              <Button asChild size="sm" className="flex-1 rounded-full">
-                <Link to="/register">Register</Link>
+            <div className="mt-3 pt-3 border-t border-border">
+              <Button asChild size="sm" className="w-full rounded-full">
+                <Link to="/login">Student Login</Link>
               </Button>
             </div>
           </div>

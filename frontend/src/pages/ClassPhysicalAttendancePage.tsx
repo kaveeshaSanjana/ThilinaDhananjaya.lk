@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { getInstitutePath } from '../lib/instituteRoutes';
+import { getInstituteAdminPath, getInstitutePath } from '../lib/instituteRoutes';
 
 /* ─── Types ─────────────────────────────────────────── */
 type AttStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
@@ -307,6 +307,7 @@ export default function ClassPhysicalAttendancePage() {
   /* ─── Helpers ────────────────────────────────────── */
   const resolvedInstId = instituteId || classData?.instituteId || classData?.institute?.id || null;
   const mkPath = (suffix: string) => getInstitutePath(resolvedInstId, suffix);
+  const adminDashboardPath = getInstituteAdminPath(resolvedInstId);
   const markedDatesSet = new Set(allDates);
 
   const getStudentRecord = (userId: string) => dayRecords.find(r => r.userId === userId);
@@ -336,15 +337,26 @@ export default function ClassPhysicalAttendancePage() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Back */}
-      <Link
-        to={mkPath(`/classes/${classId}`)}
-        className="inline-flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium group"
-      >
-        <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to class
-      </Link>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Link
+          to={mkPath(`/classes/${classId}`)}
+          className="inline-flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium group"
+        >
+          <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to class
+        </Link>
+
+        {isAdmin && (
+          <Link
+            to={adminDashboardPath}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition"
+          >
+            Institute Dashboard
+          </Link>
+        )}
+      </div>
 
       <div className="flex gap-6 mt-6">
         {/* Sidebar */}
@@ -364,6 +376,12 @@ export default function ClassPhysicalAttendancePage() {
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold bg-purple-50 text-purple-700 ring-1 ring-purple-200 transition-all"
               >
                 <span className="text-base">📅</span> Attendance
+              </Link>
+              <Link
+                to={mkPath(`/classes/${classId}/physical-attendance/qr`)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-all"
+              >
+                <span className="text-base">📷</span> QR Scan
               </Link>
             </div>
           </div>
@@ -405,6 +423,15 @@ export default function ClassPhysicalAttendancePage() {
                 {allDates.length} date{allDates.length !== 1 ? 's' : ''} recorded · {totalEnrolled} enrolled
               </p>
             </div>
+            <Link
+              to={mkPath(`/classes/${classId}/physical-attendance/qr`)}
+              className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h2m-2 3h6m-6 3h6" />
+              </svg>
+              QR Attendance
+            </Link>
           </div>
 
           {error && (

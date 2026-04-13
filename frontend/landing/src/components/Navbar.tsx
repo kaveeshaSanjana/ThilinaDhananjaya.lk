@@ -108,13 +108,10 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Desktop buttons */}
+          {/* Desktop button */}
           <div className="hidden md:flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm" className="rounded-full">
-              <a href={getMainAppLink("/login")} target="_top" rel="noreferrer">Login</a>
-            </Button>
             <Button asChild size="sm" className="rounded-full px-6">
-              <a href={getMainAppLink("/register")} target="_top" rel="noreferrer">Register</a>
+              <a href={getMainAppLink("/login")} target="_top" rel="noreferrer">Student Login</a>
             </Button>
           </div>
 
@@ -153,12 +150,9 @@ const Navbar = () => {
                 {item}
               </a>
             ))}
-            <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-              <Button asChild variant="ghost" size="sm" className="flex-1 rounded-full">
-                <a href={getMainAppLink("/login")} target="_top" rel="noreferrer">Login</a>
-              </Button>
-              <Button asChild size="sm" className="flex-1 rounded-full">
-                <a href={getMainAppLink("/register")} target="_top" rel="noreferrer">Register</a>
+            <div className="mt-3 pt-3 border-t border-border">
+              <Button asChild size="sm" className="w-full rounded-full">
+                <a href={getMainAppLink("/login")} target="_top" rel="noreferrer">Student Login</a>
               </Button>
             </div>
           </div>

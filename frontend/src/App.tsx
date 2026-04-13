@@ -26,6 +26,8 @@ import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
 import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
 import AdminClassAttendance from './pages/admin/AdminClassAttendance';
+import AdminMarkAttendance from './pages/admin/AdminMarkAttendance';
+import AdminMarkAttendanceExternalDevice from './pages/admin/AdminMarkAttendanceExternalDevice';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
 import AdminMonthManage from './pages/admin/AdminMonthManage';
 import AdminIdCards from './pages/admin/AdminIdCards';
@@ -35,16 +37,18 @@ import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
 import ClassMonthMediaPage from './pages/ClassMonthMediaPage';
 import ClassPhysicalAttendancePage from './pages/ClassPhysicalAttendancePage';
+import ClassPhysicalAttendanceQrPage from './pages/ClassPhysicalAttendanceQrPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 
 import Layout from './components/Layout';
+import LandingStyleLoading from './components/LandingStyleLoading';
 import { getInstituteAdminPath } from './lib/instituteRoutes';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: string }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  if (loading) return <LandingStyleLoading />;
   if (!user) return <Navigate to="/login" />;
   if (role && user.role !== role) return <Navigate to="/dashboard" />;
   return <>{children}</>;
@@ -55,7 +59,7 @@ function LoginRoute() {
   const { selected, loading: instituteLoading } = useInstitute();
   const [searchParams] = useSearchParams();
   if (user?.role === 'ADMIN' && instituteLoading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    return <LandingStyleLoading />;
   }
   if (user) {
     const redirect = searchParams.get('redirect');
@@ -79,7 +83,7 @@ function AdminLegacyRedirect() {
   const suffix = params['*'] ? `/${params['*']}` : '';
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    return <LandingStyleLoading />;
   }
 
   if (!selected) {
@@ -93,14 +97,7 @@ function AdminLegacyRedirect() {
 function AppRoutes() {
   const { user, loading } = useAuth();
 
-  if (loading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4" />
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    </div>
-  );
+  if (loading) return <LandingStyleLoading />;
 
   return (
     <Routes>
@@ -136,6 +133,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
         <Route path="classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
+        <Route path="classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendanceQrPage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendanceQrPage /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
@@ -157,6 +156,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/admin/classes/:classId/months/:monthId/manage" element={<ProtectedRoute role="ADMIN"><AdminMonthManage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/slips" element={<ProtectedRoute role="ADMIN"><AdminSlips /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/admin/mark-attendance" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendance /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/admin/mark-attendance/external-device" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendanceExternalDevice /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminClassAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/recordings" element={<ProtectedRoute role="ADMIN"><AdminRecordingHistory /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/id-cards" element={<ProtectedRoute role="ADMIN"><AdminIdCards /></ProtectedRoute>} />

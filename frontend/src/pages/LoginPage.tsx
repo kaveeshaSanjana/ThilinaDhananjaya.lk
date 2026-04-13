@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import logoImg from '../assets/logo.png';
-import heroBg from '../assets/students-learning.jpg';
+import loginImage from '../assets/login-image.jpeg';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -171,7 +171,7 @@ export default function LoginPage() {
       <div className="hidden lg:block flex-1 relative overflow-hidden">
         {/* Background image */}
         <img
-          src={heroBg}
+          src={loginImage}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           aria-hidden="true"

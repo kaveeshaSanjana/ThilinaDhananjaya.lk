@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import api from '../../lib/api';
 import StickyDataTable, { type StickyColumn } from '../../components/StickyDataTable';
+import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
 /* ─── Types ──────────────────────────────────────────── */
 
@@ -10,7 +12,7 @@ interface AttendanceRecord {
   id: string; userId: string; classId: string; date: string;
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
   method?: string; note?: string;
-  user?: { profile?: { fullName?: string; instituteId?: string; barcodeId?: string; phone?: string } };
+  user?: { profile?: { fullName?: string; instituteId?: string; barcodeId?: string; phone?: string; avatarUrl?: string | null } };
 }
 interface PaymentMonth {
   id: string;
@@ -71,15 +73,51 @@ function fmtDate(d: string) { return new Date(d + 'T00:00:00').toLocaleDateStrin
 function monthLabel(y: number, m: number) { return new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); }
 function shortMonth(m: number) { return new Date(2000, m - 1).toLocaleDateString('en-GB', { month: 'short' }); }
 
+function normalizeScannedIdentifier(raw: string) {
+  const value = raw.trim();
+  if (!value) return '';
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') {
+      const keys = ['barcode', 'barcodeId', 'identifier', 'studentId', 'instituteId', 'id', 'code'];
+      for (const key of keys) {
+        const candidate = parsed[key];
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    }
+  } catch {
+    // Not JSON payload.
+  }
+
+  try {
+    const url = new URL(value);
+    const keys = ['barcode', 'barcodeId', 'identifier', 'studentId', 'instituteId', 'id', 'code'];
+    for (const key of keys) {
+      const candidate = url.searchParams.get(key);
+      if (candidate && candidate.trim()) return candidate.trim();
+    }
+    const lastPathPart = url.pathname.split('/').filter(Boolean).pop();
+    if (lastPathPart) return decodeURIComponent(lastPathPart).trim();
+  } catch {
+    // Not URL payload.
+  }
+
+  return value;
+}
+
 /* ─── Barcode Scanner Hook ───────────────────────────── */
 
 function useBarcodeScanner(onScan: (code: string) => void) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const detectorRef = useRef<any>(null);
+  const rafRef = useRef<number | null>(null);
   const [active, setActive] = useState(false);
   const [error, setError] = useState('');
   const bufferRef = useRef('');
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastScanRef = useRef<{ value: string; at: number }>({ value: '', at: 0 });
 
   // Keyboard barcode scanner (USB scanners type fast + Enter)
   useEffect(() => {
@@ -100,20 +138,69 @@ function useBarcodeScanner(onScan: (code: string) => void) {
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(timerRef.current); };
   }, [onScan]);
 
+  const detectFrame = useCallback(async () => {
+    const video = videoRef.current;
+    if (video && detectorRef.current && video.readyState >= 2) {
+      try {
+        const detected = await detectorRef.current.detect(video);
+        const raw = detected?.find((item: any) => typeof item?.rawValue === 'string' && item.rawValue.trim())?.rawValue;
+        if (typeof raw === 'string') {
+          const normalized = raw.trim();
+          const now = Date.now();
+          if (normalized && (normalized !== lastScanRef.current.value || now - lastScanRef.current.at > 900)) {
+            lastScanRef.current = { value: normalized, at: now };
+            onScan(normalized);
+          }
+        }
+      } catch {
+        // Continue scanning on decode frame errors.
+      }
+    }
+
+    rafRef.current = window.requestAnimationFrame(() => {
+      void detectFrame();
+    });
+  }, [onScan]);
+
   const startCamera = useCallback(async () => {
+    const BarcodeDetectorCtor = (window as any).BarcodeDetector;
+    if (!BarcodeDetectorCtor) {
+      setError('Camera auto-detect requires Chrome/Edge (BarcodeDetector support). USB scanner still works.');
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      detectorRef.current = new BarcodeDetectorCtor({
+        formats: ['qr_code', 'code_128', 'code_39', 'code_93', 'codabar', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'],
+      });
+      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = window.requestAnimationFrame(() => {
+        void detectFrame();
+      });
       setActive(true); setError('');
     } catch { setError('Camera access denied'); }
-  }, []);
+  }, [detectFrame]);
 
   const stopCamera = useCallback(() => {
+    if (rafRef.current != null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    detectorRef.current = null;
     setActive(false);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      clearTimeout(timerRef.current);
+    };
+  }, [stopCamera]);
 
   return { videoRef, active, error, startCamera, stopCamera };
 }
@@ -123,6 +210,8 @@ function useBarcodeScanner(onScan: (code: string) => void) {
 /* ═══════════════════════════════════════════════════════ */
 
 export default function AdminClassAttendance() {
+  const { instituteId } = useParams<{ instituteId: string }>();
+
   /* ─── State ──────────────────────────────────── */
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -140,7 +229,7 @@ export default function AdminClassAttendance() {
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
 
-  const [tab, setTab] = useState<TabKey>('mark');
+  const [tab, setTab] = useState<TabKey>('monthly');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [scanInput, setScanInput] = useState('');
@@ -152,25 +241,79 @@ export default function AdminClassAttendance() {
   const [localStatuses, setLocalStatuses] = useState<Record<string, string>>({});
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
   const [recentScans, setRecentScans] = useState<Array<{ name: string; time: string; id: string }>>([]);
+  const [scanState, setScanState] = useState<'ready' | 'waiting' | 'success' | 'error'>('ready');
+  const [scanStudent, setScanStudent] = useState<{ name: string; identifier: string; avatarUrl?: string } | null>(null);
+  const [lastMarkedId, setLastMarkedId] = useState('');
 
   const scanRef = useRef<HTMLInputElement>(null);
+  const scanResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkedStorageKey = useMemo(
+    () => (selectedClassId ? `class-attendance:last-marked:${selectedClassId}:${selectedDate}` : ''),
+    [selectedClassId, selectedDate],
+  );
 
   /* ─── Barcode scanner ─────────────────────────── */
 
-  const handleBarcodeScan = useCallback((code: string) => {
-    if (!selectedClassId) return;
-    api.post('/attendance/class-attendance/mark', {
-      classId: selectedClassId, identifier: code.trim(), date: selectedDate,
-      status: 'PRESENT', method: 'barcode',
-    }).then(res => {
-      const name = res.data?.user?.profile?.fullName || code;
-      setToast({ type: 'success', msg: `✓ ${name} — Present` });
-      setRecentScans(prev => [{ name, time: new Date().toLocaleTimeString(), id: code }, ...prev.slice(0, 19)]);
+  const submitAttendanceScan = useCallback(async (rawCode: string, method: string) => {
+    const normalized = normalizeScannedIdentifier(rawCode);
+    if (!normalized || !selectedClassId) return;
+
+    setScanInput(normalized);
+
+    if (scanState === 'waiting') return;
+
+    if (normalized === lastMarkedId) {
+      setToast({ type: 'error', msg: `Duplicate ignored: ${normalized}` });
+      return;
+    }
+
+    setScanState('waiting');
+    setScanStudent(null);
+
+    try {
+      const res = await api.post('/attendance/class-attendance/mark', {
+        classId: selectedClassId,
+        identifier: normalized,
+        date: selectedDate,
+        status: 'PRESENT',
+        method,
+      });
+
+      const profile = res.data?.user?.profile;
+      const name = profile?.fullName || normalized;
+
       setLocalStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
-    }).catch((err: any) => {
-      setToast({ type: 'error', msg: err.response?.data?.message || `Not found: ${code}` });
-    });
-  }, [selectedClassId, selectedDate]);
+      setRecentScans(prev => [{ name, time: new Date().toLocaleTimeString(), id: normalized }, ...prev.slice(0, 19)]);
+      setLastMarkedId(normalized);
+      setScanStudent({
+        name,
+        identifier: normalized,
+        avatarUrl: profile?.avatarUrl || undefined,
+      });
+      setScanState('success');
+      setToast({ type: 'success', msg: `✓ ${name} — Present` });
+
+      if (scanResultTimerRef.current) clearTimeout(scanResultTimerRef.current);
+      scanResultTimerRef.current = setTimeout(() => {
+        setScanStudent(null);
+        setScanInput('');
+        setScanState('ready');
+        scanRef.current?.focus();
+      }, 1800);
+    } catch (err: any) {
+      setScanState('error');
+      setToast({ type: 'error', msg: err.response?.data?.message || 'Student not found' });
+      if (scanResultTimerRef.current) clearTimeout(scanResultTimerRef.current);
+      scanResultTimerRef.current = setTimeout(() => {
+        setScanState('ready');
+        scanRef.current?.focus();
+      }, 1200);
+    }
+  }, [lastMarkedId, scanState, selectedClassId, selectedDate]);
+
+  const handleBarcodeScan = useCallback((code: string) => {
+    void submitAttendanceScan(code, 'scan');
+  }, [submitAttendanceScan]);
 
   const scanner = useBarcodeScanner(handleBarcodeScan);
 
@@ -274,6 +417,26 @@ export default function AdminClassAttendance() {
     if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }
   }, [toast]);
 
+  useEffect(() => {
+    if (!lastMarkedStorageKey) {
+      setLastMarkedId('');
+      return;
+    }
+    setLastMarkedId(localStorage.getItem(lastMarkedStorageKey) || '');
+  }, [lastMarkedStorageKey]);
+
+  useEffect(() => {
+    if (!lastMarkedStorageKey) return;
+    if (lastMarkedId) localStorage.setItem(lastMarkedStorageKey, lastMarkedId);
+    else localStorage.removeItem(lastMarkedStorageKey);
+  }, [lastMarkedStorageKey, lastMarkedId]);
+
+  useEffect(() => {
+    return () => {
+      if (scanResultTimerRef.current) clearTimeout(scanResultTimerRef.current);
+    };
+  }, []);
+
   /* ─── Handlers ─────────────────────────────────── */
 
   const setStudentStatus = useCallback((userId: string, status: string) => {
@@ -281,22 +444,9 @@ export default function AdminClassAttendance() {
   }, []);
 
   const handleScanMark = useCallback(async () => {
-    if (!scanInput.trim() || !selectedClassId) return;
-    try {
-      const res = await api.post('/attendance/class-attendance/mark', {
-        classId: selectedClassId, identifier: scanInput.trim(), date: selectedDate,
-        status: 'PRESENT', method: 'scan',
-      });
-      const name = res.data?.user?.profile?.fullName || scanInput;
-      setToast({ type: 'success', msg: `✓ ${name} — Present` });
-      setRecentScans(prev => [{ name, time: new Date().toLocaleTimeString(), id: scanInput.trim() }, ...prev.slice(0, 19)]);
-      setScanInput('');
-      scanRef.current?.focus();
-      setLocalStatuses(prev => ({ ...prev, [res.data.userId]: 'PRESENT' }));
-    } catch (err: any) {
-      setToast({ type: 'error', msg: err.response?.data?.message || 'Student not found' });
-    }
-  }, [scanInput, selectedClassId, selectedDate]);
+    if (!scanInput.trim()) return;
+    await submitAttendanceScan(scanInput, 'manual');
+  }, [scanInput, submitAttendanceScan]);
 
   const handleBulkSave = useCallback(async () => {
     if (!selectedClassId) return;
@@ -709,6 +859,7 @@ export default function AdminClassAttendance() {
   const cardCls = 'bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))]';
   const selectCls = 'px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))]';
   const inputCls = 'px-3 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))]';
+  const adminBasePath = getInstituteAdminPath(instituteId);
 
   function Initials({ name, size = 9 }: { name: string; size?: number }) {
     const ini = name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
@@ -734,6 +885,29 @@ export default function AdminClassAttendance() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">Class Attendance</h1>
         <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Mark & track physical class attendance • Barcode scanning</p>
+      </div>
+
+      <div className={`${cardCls} p-2 mb-5`}>
+        <div className="flex flex-wrap gap-1.5">
+          <Link
+            to={adminBasePath}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:text-slate-800 hover:bg-slate-50 transition"
+          >
+            Dashboard
+          </Link>
+          <Link
+            to={getInstituteAdminPath(instituteId, '/classes')}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:text-slate-800 hover:bg-slate-50 transition"
+          >
+            Manage Classes
+          </Link>
+          <Link
+            to={getInstituteAdminPath(instituteId, '/class-attendance')}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700"
+          >
+            Advanced Attendance
+          </Link>
+        </div>
       </div>
 
       {/* Class Selector + Date Controls */}
@@ -766,7 +940,6 @@ export default function AdminClassAttendance() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1 border border-slate-200 w-full">
         {([
-          { key: 'mark' as TabKey, label: 'Mark Attendance' },
           { key: 'monthly' as TabKey, label: 'Monthly' },
           { key: 'yearly' as TabKey, label: 'Yearly' },
         ]).map(t => (
@@ -789,7 +962,7 @@ export default function AdminClassAttendance() {
       ) : tab === 'mark' ? (
         /* ═══════ MARK ATTENDANCE TAB ═══════ */
         <div className="space-y-4">
-          <div className={`${cardCls} p-4`}> 
+          <div className={`${cardCls} p-4`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{selectedClass?.name}</p>
@@ -798,165 +971,119 @@ export default function AdminClassAttendance() {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">Total: {students.length}</span>
                 <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Marked: {students.length - stats.unmarked}</span>
-                <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Unmarked: {stats.unmarked}</span>
+                <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">Last ID: {lastMarkedId || '—'}</span>
               </div>
             </div>
           </div>
 
-          {/* Scan Bar with Camera */}
-          <div className={`${cardCls} p-4`}>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[250px] relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-                </span>
-                <input ref={scanRef} type="text" value={scanInput} onChange={e => setScanInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleScanMark()}
-                  placeholder="Scan barcode / Institute ID / Barcode ID (e.g. TD-2026-0001)..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)]"
-                />
+          <div className={`${cardCls} p-4 space-y-4`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-[hsl(var(--foreground))]">Live Camera Scanner</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">QR and line barcodes are auto-detected and auto-submitted.</p>
               </div>
-              <button onClick={handleScanMark} disabled={!scanInput.trim()}
-                className="px-4 py-2.5 rounded-xl bg-[hsl(var(--primary))] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-all">
-                Mark Present
-              </button>
-              <button onClick={scanner.active ? scanner.stopCamera : scanner.startCamera}
-                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+              <button
+                onClick={scanner.active ? scanner.stopCamera : scanner.startCamera}
+                className={`px-3 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
                   scanner.active
                     ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                    : 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border-[hsl(var(--border))] hover:bg-[hsl(var(--muted)/0.3)]'
-                }`}>
-                {scanner.active ? '■ Stop Camera' : '📷 Camera Scan'}
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                {scanner.active ? 'Stop Camera' : 'Open Camera'}
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-              <span className="px-2 py-1 rounded-full bg-[hsl(var(--muted)/0.35)] text-[hsl(var(--muted-foreground))]">Tip: USB scanner auto-submits on Enter</span>
-              <span className="px-2 py-1 rounded-full bg-[hsl(var(--muted)/0.35)] text-[hsl(var(--muted-foreground))]">You can use barcode, institute ID, email, or user ID</span>
-            </div>
-            {scanner.error && <p className="text-[11px] text-red-500 mt-1">{scanner.error}</p>}
 
-            {/* Camera preview */}
-            {scanner.active && (
-              <div className="mt-3 rounded-xl overflow-hidden border border-[hsl(var(--border))] max-w-sm">
-                <video ref={scanner.videoRef} className="w-full" muted playsInline />
-                <p className="text-[11px] text-center py-1 bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))]">
-                  Point camera at barcode — detection automatic
-                </p>
+            <div className="relative rounded-2xl overflow-hidden border border-[hsl(var(--border))] bg-black/90 min-h-[320px]">
+              {scanner.active ? (
+                <video ref={scanner.videoRef} className="w-full h-[360px] object-cover" muted playsInline />
+              ) : (
+                <div className="h-[320px] flex items-center justify-center text-sm text-slate-300">
+                  Camera is off. Click Open Camera to begin continuous scanning.
+                </div>
+              )}
+
+              {scanner.active && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="w-64 h-64 max-w-[80%] max-h-[80%] rounded-2xl border-2 border-emerald-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.18)] relative overflow-hidden">
+                    <div className="absolute left-4 right-4 top-1/2 h-[2px] bg-emerald-300/95 animate-pulse" />
+                    <div className="absolute top-4 bottom-4 left-1/2 w-[2px] bg-emerald-300/70" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <input
+                ref={scanRef}
+                type="text"
+                value={scanInput}
+                onChange={e => setScanInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleScanMark()}
+                placeholder="Barcode / QR value appears here. Press Enter to submit manually."
+                className="w-full px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
+              />
+              <button
+                onClick={handleScanMark}
+                disabled={!scanInput.trim() || scanState === 'waiting'}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition"
+              >
+                {scanState === 'waiting' ? 'Submitting...' : 'Submit Barcode'}
+              </button>
+            </div>
+
+            {scanner.error && <p className="text-xs text-red-500">{scanner.error}</p>}
+
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="px-2 py-1 rounded-full bg-[hsl(var(--muted)/0.35)] text-[hsl(var(--muted-foreground))]">Flow: camera detect → auto-fill → auto-submit → show student → ready for next</span>
+              <span className="px-2 py-1 rounded-full bg-[hsl(var(--muted)/0.35)] text-[hsl(var(--muted-foreground))]">USB scanner also works (fast typing + Enter)</span>
+            </div>
+
+            <div className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+              scanState === 'waiting' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+              scanState === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+              scanState === 'error' ? 'border-red-200 bg-red-50 text-red-700' :
+              'border-slate-200 bg-slate-50 text-slate-600'
+            }`}>
+              {scanState === 'waiting' && 'Waiting for server response...'}
+              {scanState === 'success' && 'Attendance marked successfully. Ready for next student...'}
+              {scanState === 'error' && 'Scan failed. Try scanning again.'}
+              {scanState === 'ready' && 'Ready to scan next student.'}
+            </div>
+
+            {scanStudent && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
+                {scanStudent.avatarUrl ? (
+                  <img src={scanStudent.avatarUrl} alt={scanStudent.name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-emerald-200 text-emerald-800 font-bold text-lg flex items-center justify-center shrink-0">
+                    {(scanStudent.name || '?')[0]?.toUpperCase() || '?'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-emerald-900 truncate">{scanStudent.name}</p>
+                  <p className="text-xs text-emerald-700 font-mono truncate">{scanStudent.identifier}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-lg font-black shrink-0">✓</div>
               </div>
             )}
 
-            {/* Recent scans log */}
             {recentScans.length > 0 && (
-              <div className="mt-3 max-h-32 overflow-y-auto">
-                <p className="text-[11px] font-semibold text-[hsl(var(--muted-foreground))] mb-1">Recent Scans</p>
-                <div className="space-y-1">
-                  {recentScans.map((s, i) => (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3">
+                <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-2">Recent scans</p>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {recentScans.slice(0, 8).map((s, i) => (
                     <div key={i} className="flex items-center gap-2 text-[11px]">
                       <span className="text-emerald-500 font-bold">✓</span>
-                      <span className="font-medium text-[hsl(var(--foreground))]">{s.name}</span>
-                      <span className="text-[hsl(var(--muted-foreground))] font-mono">{s.id}</span>
-                      <span className="text-[hsl(var(--muted-foreground))] ml-auto">{s.time}</span>
+                      <span className="font-medium text-[hsl(var(--foreground))] truncate">{s.name}</span>
+                      <span className="text-[hsl(var(--muted-foreground))] font-mono truncate">{s.id}</span>
+                      <span className="text-[hsl(var(--muted-foreground))] ml-auto shrink-0">{s.time}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-
-          {/* Stats Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {([
-              { label: 'Present', count: stats.present, bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', sub: 'text-emerald-500' },
-              { label: 'Absent', count: stats.absent, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', sub: 'text-red-500' },
-              { label: 'Late', count: stats.late, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', sub: 'text-amber-500' },
-              { label: 'Excused', count: stats.excused, bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', sub: 'text-blue-500' },
-              { label: 'Unmarked', count: stats.unmarked, bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', sub: 'text-slate-500' },
-            ] as const).map(s => (
-              <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl px-3 py-2 text-center`}>
-                <p className={`text-lg font-bold ${s.text}`}>{s.count}</p>
-                <p className={`text-[11px] ${s.sub} font-medium`}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Bulk Actions */}
-          <div className={`${cardCls} p-4 flex flex-wrap items-center justify-between gap-3`}>
-            <div className="flex items-center gap-2">
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students..."
-                className={`${inputCls} w-52`} />
-              <select value={markFilter} onChange={e => setMarkFilter(e.target.value as MarkFilter)} className={selectCls}>
-                <option value="all">All Statuses</option>
-                <option value="unmarked">Unmarked Only</option>
-                <option value="PRESENT">Present Only</option>
-                <option value="ABSENT">Absent Only</option>
-                <option value="LATE">Late Only</option>
-                <option value="EXCUSED">Excused Only</option>
-              </select>
-              {search && (
-                <button onClick={() => setSearch('')} className="px-3 py-1.5 rounded-lg text-xs border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
-                  Clear Search
-                </button>
-              )}
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">{filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { const m: Record<string, string> = {}; filteredStudents.forEach(s => { m[s.userId] = 'PRESENT'; }); setLocalStatuses(prev => ({ ...prev, ...m })); }}
-                className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 hover:bg-emerald-100 transition-colors">All Present</button>
-              <button onClick={() => { const m: Record<string, string> = {}; filteredStudents.forEach(s => { m[s.userId] = 'ABSENT'; }); setLocalStatuses(prev => ({ ...prev, ...m })); }}
-                className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-medium border border-red-200 hover:bg-red-100 transition-colors">All Absent</button>
-              <button onClick={() => {
-                const m: Record<string, string> = {};
-                filteredStudents.forEach(s => {
-                  if (!localStatuses[s.userId]) m[s.userId] = 'ABSENT';
-                });
-                if (Object.keys(m).length === 0) {
-                  setToast({ type: 'error', msg: 'No unmarked students in current filter' });
-                  return;
-                }
-                setLocalStatuses(prev => ({ ...prev, ...m }));
-              }}
-                className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200 hover:bg-amber-100 transition-colors">Unmarked to Absent</button>
-              <button onClick={handleBulkSave} disabled={saving || !hasUnsavedChanges}
-                className="px-4 py-1.5 rounded-lg bg-[hsl(var(--primary))] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all flex items-center gap-1.5">
-                {saving && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-
-          {/* Student List */}
-          <div className={`${cardCls} overflow-hidden`}>
-            {filteredStudents.length === 0 ? (
-              <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-                <p className="font-medium">No enrolled students found</p>
-                <p className="text-xs mt-1">Enroll students to this class first</p>
-              </div>
-            ) : (
-              <StickyDataTable
-                columns={markColumns}
-                rows={filteredStudents}
-                getRowId={(row) => row.userId}
-                tableHeight="calc(100vh - 560px)"
-              />
-            )}
-          </div>
-          <div className={`${cardCls} p-3 flex flex-wrap items-center justify-between gap-2`}>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              {hasUnsavedChanges
-                ? `${changedCount} student${changedCount !== 1 ? 's' : ''} have unsaved attendance updates`
-                : 'All attendance changes are saved'}
-            </p>
-            <button
-              onClick={handleBulkSave}
-              disabled={saving || !hasUnsavedChanges}
-              className="px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all"
-            >
-              {saving ? 'Saving...' : 'Save Attendance'}
-            </button>
-          </div>
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2 text-center">
-            Attendance for <strong>{fmtDate(selectedDate)}</strong> • {selectedClass?.name}
-          </p>
         </div>
 
       ) : tab === 'monthly' ? (

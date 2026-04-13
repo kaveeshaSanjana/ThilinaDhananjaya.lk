@@ -78,13 +78,10 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Desktop buttons */}
+          {/* Desktop button */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="rounded-full">
-              Login
-            </Button>
-            <Button size="sm" className="rounded-full px-6">
-              Register
+            <Button asChild size="sm" className="rounded-full px-6">
+              <a href="/login">Student Login</a>
             </Button>
           </div>
 
@@ -122,9 +119,10 @@ const Navbar = () => {
                 {item}
               </a>
             ))}
-            <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-              <Button variant="ghost" size="sm" className="flex-1 rounded-full">Login</Button>
-              <Button size="sm" className="flex-1 rounded-full">Register</Button>
+            <div className="mt-3 pt-3 border-t border-border">
+              <Button asChild size="sm" className="w-full rounded-full">
+                <a href="/login">Student Login</a>
+              </Button>
             </div>
           </div>
         </motion.div>

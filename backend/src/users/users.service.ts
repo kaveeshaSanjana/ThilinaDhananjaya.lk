@@ -1,12 +1,15 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 interface CreateUserData {
   email: string;
   password: string;
   fullName: string;
+  instituteUserId?: string;
+  barcodeId?: string;
   phone?: string;
   whatsappPhone?: string;
   address?: string;
@@ -36,34 +39,75 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
-    const instituteId = await this.generateInstituteId();
+    const requestedInstituteUserId = (data.instituteUserId || '').trim();
+    const requestedBarcodeId = (data.barcodeId || '').trim();
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: data.email,
-        password: data.password,
-        role: 'STUDENT',
-        orgId: data.orgId || null,
-        profile: {
-          create: {
-            instituteId,
-            fullName: data.fullName,
-            avatarUrl: data.avatarUrl,
-            phone: data.phone,
-            whatsappPhone: data.whatsappPhone,
-            address: data.address,
-            school: data.school,
-            occupation: data.occupation,
-            gender: data.gender as any,
-            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-            guardianName: data.guardianName,
-            guardianPhone: data.guardianPhone,
-            relationship: data.relationship,
+    if (requestedInstituteUserId) {
+      const existingByInstituteUserId = await this.prisma.profile.findUnique({
+        where: { instituteId: requestedInstituteUserId },
+        select: { id: true },
+      });
+      if (existingByInstituteUserId) {
+        throw new ConflictException('Institute user ID already exists');
+      }
+    }
+
+    if (requestedBarcodeId) {
+      const existingByBarcodeId = await this.prisma.profile.findUnique({
+        where: { barcodeId: requestedBarcodeId },
+        select: { id: true },
+      });
+      if (existingByBarcodeId) {
+        throw new ConflictException('Barcode ID already exists');
+      }
+    }
+
+    const instituteId = requestedInstituteUserId || await this.generateInstituteId();
+
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: data.email,
+          password: data.password,
+          role: 'STUDENT',
+          orgId: data.orgId || null,
+          profile: {
+            create: {
+              instituteId,
+              barcodeId: requestedBarcodeId || null,
+              fullName: data.fullName,
+              avatarUrl: data.avatarUrl,
+              phone: data.phone,
+              whatsappPhone: data.whatsappPhone,
+              address: data.address,
+              school: data.school,
+              occupation: data.occupation,
+              gender: data.gender as any,
+              dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+              guardianName: data.guardianName,
+              guardianPhone: data.guardianPhone,
+              relationship: data.relationship,
+            },
           },
         },
-      },
-      include: { profile: true },
-    });
+        include: { profile: true },
+      });
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = String((error as any)?.meta?.target || '');
+        if (target.includes('instituteId')) {
+          throw new ConflictException('Institute user ID already exists');
+        }
+        if (target.includes('barcodeId')) {
+          throw new ConflictException('Barcode ID already exists');
+        }
+        if (target.includes('email')) {
+          throw new ConflictException('Email already registered');
+        }
+      }
+      throw error;
+    }
 
     return user;
   }
@@ -127,17 +171,32 @@ export class UsersService {
     });
   }
 
-  async findAllStudents(search?: string, page?: number, limit?: number, orgId?: string) {
+  async findAllStudents(search?: string, page?: number, limit?: number, orgId?: string, instituteUserId?: string) {
     const where: any = { role: 'STUDENT' };
     if (orgId) where.orgId = orgId;
 
+    const exactInstituteUserId = (instituteUserId || '').trim();
+    if (exactInstituteUserId) {
+      where.profile = {
+        ...(where.profile || {}),
+        instituteId: exactInstituteUserId,
+      };
+    }
+
     if (search) {
-      where.OR = [
-        { profile: { instituteId: { contains: search } } },
-        { profile: { fullName: { contains: search } } },
-        { profile: { school: { contains: search } } },
-        { email: { contains: search } },
-      ];
+      const query = search.trim();
+      if (query) {
+        where.OR = [
+          { id: { contains: query } },
+          { profile: { instituteId: { contains: query } } },
+          { profile: { barcodeId: { contains: query } } },
+          { profile: { fullName: { contains: query } } },
+          { profile: { school: { contains: query } } },
+          { profile: { phone: { contains: query } } },
+          { profile: { whatsappPhone: { contains: query } } },
+          { email: { contains: query } },
+        ];
+      }
     }
 
     const take = limit && limit > 0 ? Math.min(limit, 200) : 50;
@@ -154,11 +213,27 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return { data, total, page: page || 1, limit: take, totalPages: Math.ceil(total / take) };
+    const dataWithAliases = data.map((student: any) => ({
+      ...student,
+      instituteUserId: student.profile?.instituteId || null,
+      institute_user_id: student.profile?.instituteId || null,
+      barcodeId: student.profile?.barcodeId || null,
+      barcode_id: student.profile?.barcodeId || null,
+    }));
+
+    return {
+      data: dataWithAliases,
+      total,
+      page: page || 1,
+      limit: take,
+      totalPages: Math.ceil(total / take),
+    };
   }
 
   async updateProfile(userId: string, data: Partial<{
     fullName: string;
+    instituteId: string;
+    barcodeId: string | null;
     avatarUrl: string;
     phone: string;
     whatsappPhone: string;
@@ -173,14 +248,33 @@ export class UsersService {
     status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'OLD';
   }>) {
     const updateData: any = { ...data };
+    if (typeof data.instituteId === 'string') {
+      updateData.instituteId = data.instituteId.trim();
+    }
+    if (data.barcodeId !== undefined) {
+      updateData.barcodeId = data.barcodeId ? String(data.barcodeId).trim() : null;
+    }
     if (data.dateOfBirth) {
       updateData.dateOfBirth = new Date(data.dateOfBirth);
     }
 
-    return this.prisma.profile.update({
-      where: { userId },
-      data: updateData,
-    });
+    try {
+      return this.prisma.profile.update({
+        where: { userId },
+        data: updateData,
+      });
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = String((error as any)?.meta?.target || '');
+        if (target.includes('instituteId')) {
+          throw new ConflictException('Institute user ID already exists');
+        }
+        if (target.includes('barcodeId')) {
+          throw new ConflictException('Barcode ID already exists');
+        }
+      }
+      throw error;
+    }
   }
 
   async updatePhone(userId: string, phone: string, whatsappPhone?: string) {
@@ -292,7 +386,10 @@ export class UsersService {
         userId: s.id,
         fullName: s.profile!.fullName,
         instituteId: s.profile!.instituteId,
+        instituteUserId: s.profile!.instituteId,
+        institute_user_id: s.profile!.instituteId,
         barcodeId: s.profile!.barcodeId,
+        barcode_id: s.profile!.barcodeId,
         avatarUrl: s.profile!.avatarUrl,
         school: s.profile!.school,
         phone: s.profile!.phone,

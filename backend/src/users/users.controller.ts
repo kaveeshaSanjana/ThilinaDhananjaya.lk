@@ -25,12 +25,25 @@ export class UsersController {
     return this.usersService.findAllStudents(undefined, page ? +page : undefined, limit ? +limit : undefined, orgId);
   }
 
-  /** Admin: list all students, searchable by instituteId/school/name */
+  /** Admin: list all students, searchable by instituteId/barcodeId/name/email */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('students')
-  findAllStudents(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string, @Headers('x-institute-id') orgId?: string) {
-    return this.usersService.findAllStudents(search, page ? +page : undefined, limit ? +limit : undefined, orgId);
+  findAllStudents(
+    @Query('search') search?: string,
+    @Query('instituteUserId') instituteUserId?: string,
+    @Query('institute_user_id') instituteUserIdSnake?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Headers('x-institute-id') orgId?: string,
+  ) {
+    return this.usersService.findAllStudents(
+      search,
+      page ? +page : undefined,
+      limit ? +limit : undefined,
+      orgId,
+      instituteUserId || instituteUserIdSnake,
+    );
   }
 
   /** Admin: get student data for ID card generation */
@@ -53,8 +66,12 @@ export class UsersController {
   @Post('students')
   async createStudent(@Headers('x-institute-id') orgId: string | undefined, @Body() body: CreateStudentDto) {
     const hashed = await bcrypt.hash(body.password, 12);
+    const instituteUserId = body.instituteUserId || body.instituteId;
+
     return this.usersService.create({
       email: body.email, password: hashed, fullName: body.fullName,
+      instituteUserId,
+      barcodeId: body.barcodeId,
       phone: body.phone, whatsappPhone: body.whatsappPhone, address: body.address,
       school: body.school, dateOfBirth: body.dateOfBirth, guardianName: body.guardianName,
       guardianPhone: body.guardianPhone, relationship: body.relationship,
