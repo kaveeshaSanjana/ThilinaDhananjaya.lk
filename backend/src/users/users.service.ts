@@ -75,6 +75,51 @@ export class UsersService {
     });
   }
 
+  async findByLoginIdentifier(identifier: string) {
+    const trimmed = identifier.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const normalizedEmail = trimmed.toLowerCase();
+
+    const byEmail = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: normalizedEmail }, { email: trimmed }],
+      },
+      include: { profile: true },
+    });
+    if (byEmail) {
+      return byEmail;
+    }
+
+    const byInstituteId = await this.prisma.user.findFirst({
+      where: { profile: { instituteId: trimmed } },
+      include: { profile: true },
+    });
+    if (byInstituteId) {
+      return byInstituteId;
+    }
+
+    const byBarcodeId = await this.prisma.user.findFirst({
+      where: { profile: { barcodeId: trimmed } },
+      include: { profile: true },
+    });
+    if (byBarcodeId) {
+      return byBarcodeId;
+    }
+
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { profile: { phone: trimmed } },
+          { profile: { whatsappPhone: trimmed } },
+        ],
+      },
+      include: { profile: true },
+    });
+  }
+
   async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
