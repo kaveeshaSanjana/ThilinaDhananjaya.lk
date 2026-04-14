@@ -39,10 +39,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-white relative overflow-hidden">
+
+      {/* Mobile background image */}
+      <div className="absolute inset-0 lg:hidden" aria-hidden="true">
+        <img
+          src={loginImage}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(135deg, rgba(10,20,60,0.7) 0%, rgba(15,40,100,0.58) 45%, rgba(20,80,180,0.42) 100%)' }}
+        />
+      </div>
 
       {/* ═══════ LEFT: Form panel ═══════ */}
-      <div className="flex-1 lg:flex-none lg:w-[46%] xl:w-[42%] flex items-center justify-center px-6 py-12 bg-white">
+      <div className="relative z-10 flex-1 lg:flex-none lg:w-[46%] xl:w-[42%] flex items-center justify-center px-6 py-12 bg-white/92 lg:bg-white">
         <div className={`w-full max-w-[400px] transition-all duration-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}>
 
           {/* Logo + branding */}
