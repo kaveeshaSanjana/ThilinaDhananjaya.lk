@@ -117,7 +117,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
-      <Route path="/landing" element={<LandingPage />} />
+      <Route path="/landing" element={<Navigate to="/" replace />} />
 
       {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
       <Route path="recording/:id" element={<RecordingPlayerPage />} />
@@ -127,7 +127,7 @@ function AppRoutes() {
       <Route path="lecture-live/:token" element={<LectureLiveJoinPage />} />
 
       <Route path="/" element={<Layout />}>
-        <Route index element={<Navigate to="/landing" replace />} />
+        <Route index element={<LandingPage />} />
         <Route path="institute/:instituteId" element={<ClassesPage />} />
         <Route path="classes" element={<ClassesPage />} />
         <Route path="institute/:instituteId/classes" element={<ClassesPage />} />

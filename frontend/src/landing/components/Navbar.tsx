@@ -44,7 +44,7 @@ const Navbar = () => {
         >
           {/* Logo */}
           <Link
-            to="/landing"
+            to="/"
             aria-label="Go to landing"
             className="flex items-center gap-3"
           >

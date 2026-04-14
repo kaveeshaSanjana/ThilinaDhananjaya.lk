@@ -151,19 +151,21 @@ export default function Layout() {
       .catch(() => setSelectedMonthName('Selected Month'));
   }, [monthDetailClassId, monthDetailMonthId]);
 
+  const isLandingPage = location.pathname === '/';
+
+  if (isLandingPage) {
+    return <Outlet />;
+  }
+
   // ---------- PUBLIC LAYOUT (no sidebar) ----------
   if (!user) {
-    const isLandingPage = location.pathname === '/' || location.pathname === '/landing';
-    if (isLandingPage) {
-      return <Outlet />;
-    }
     return (
       <div className="min-h-screen bg-[hsl(var(--background))] transition-colors duration-300">
         {/* Top navbar for public */}
         <header className="sticky top-0 z-30 bg-[hsl(var(--card)/0.85)] backdrop-blur-xl border-b border-[hsl(var(--border))] transition-colors duration-300">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
             {/* Brand */}
-            <Link to="/landing" className="flex items-center gap-2.5">
+            <Link to="/" className="flex items-center gap-2.5">
               <img src={logoImg} alt="Eazy English" className="h-10 w-10 object-contain" />
               <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Eazy English</span>
             </Link>

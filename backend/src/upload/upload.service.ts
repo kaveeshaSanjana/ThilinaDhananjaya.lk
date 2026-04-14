@@ -67,11 +67,27 @@ export class UploadService {
   private buildUploadUrls(key: string): UploadUrlResult {
     const normalizedKey = key.replace(/^\/+/, '');
     const incomingUrl = `${this.getIncomingPrefix()}${normalizedKey}`;
-    const responseUrl = this.responseBaseUrl
-      ? `${this.responseBaseUrl}/${normalizedKey}`
-      : incomingUrl;
+    const responseUrl = this.toResponseUrl(incomingUrl);
 
     return { incomingUrl, responseUrl };
+  }
+
+  // Keep custom/non-S3 URLs exactly as-is; only remap known incoming S3 URLs.
+  private toResponseUrl(url: string) {
+    const value = (url || '').trim();
+    if (!value) return value;
+
+    const incomingPrefix = this.getIncomingPrefix();
+    if (!value.startsWith(incomingPrefix)) {
+      return value;
+    }
+
+    if (!this.responseBaseUrl) {
+      return value;
+    }
+
+    const key = value.slice(incomingPrefix.length).replace(/^\/+/, '');
+    return key ? `${this.responseBaseUrl}/${key}` : value;
   }
 
   private async uploadToS3(file: Express.Multer.File, folder: UploadFolder): Promise<UploadUrlResult> {
