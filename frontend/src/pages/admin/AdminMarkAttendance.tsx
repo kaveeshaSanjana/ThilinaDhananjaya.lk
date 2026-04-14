@@ -110,6 +110,11 @@ const BARCODE_ROUTE_MODE_STORAGE_KEY = 'mark-attendance:barcode-route-mode';
 const VIRTUAL_CAMERA_HINTS = ['virtual', 'obs', 'snap camera', 'manycam', 'xsplit', 'ndi'];
 
 function getDefaultFacingMode(): 'environment' | 'user' {
+  if (typeof navigator !== 'undefined') {
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobile = /android|iphone|ipad|ipod|mobile/.test(ua);
+    return isMobile ? 'environment' : 'user';
+  }
   return 'user';
 }
 
@@ -212,6 +217,17 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     detectorRef.current = null;
+
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.pause();
+      } catch {
+        // Ignore pause errors.
+      }
+      video.srcObject = null;
+    }
+
     setActive(false);
   }, []);
 
@@ -273,6 +289,21 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
 
       video.addEventListener('loadeddata', onReady);
       video.addEventListener('canplay', onReady);
+    });
+  }, []);
+
+  const attachStreamToVideo = useCallback(async (stream: MediaStream) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.srcObject = stream;
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    (video as any).webkitPlaysInline = true;
+
+    await video.play().catch(() => {
+      // Ignore play race errors (notably on mobile browsers).
     });
   }, []);
 
@@ -375,6 +406,17 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
     streamRef.current = null;
     detectorRef.current = null;
     zxingControlsRef.current = null;
+
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.pause();
+      } catch {
+        // Ignore pause errors.
+      }
+      video.srcObject = null;
+    }
+
     setActive(false);
 
     const desiredFacingMode = requestedFacingMode ?? facingMode;
@@ -438,6 +480,8 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
         }
       }
 
+      await attachStreamToVideo(stream);
+
       const previewReadyInitially = await waitForPreviewReady(videoRef.current, 1200);
       if (!previewReadyInitially) {
         const cameraList = await refreshVideoDevices();
@@ -460,14 +504,7 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
               return;
             }
 
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.muted = true;
-              videoRef.current.playsInline = true;
-              await videoRef.current.play().catch(() => {
-                // Ignore autoplay/pause race errors.
-              });
-            }
+            await attachStreamToVideo(stream);
 
             const ready = await waitForPreviewReady(videoRef.current, 900);
             if (ready) break;
@@ -478,14 +515,7 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
       }
 
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-        videoRef.current.playsInline = true;
-        await videoRef.current.play().catch(() => {
-          // Ignore autoplay/pause race errors.
-        });
-      }
+      await attachStreamToVideo(stream);
 
       if (requestId !== openRequestRef.current) {
         stream.getTracks().forEach((track) => track.stop());
@@ -560,7 +590,7 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
         setStarting(false);
       }
     }
-  }, [detectLoop, emitScan, facingMode, findPreferredDeviceId, preferredDeviceId, refreshVideoDevices, stopCamera, waitForPreviewReady]);
+  }, [attachStreamToVideo, detectLoop, emitScan, facingMode, findPreferredDeviceId, preferredDeviceId, refreshVideoDevices, stopCamera, waitForPreviewReady]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1036,9 +1066,15 @@ export default function AdminMarkAttendance() {
           ref={cameraShellRef}
           className={`relative bg-black overflow-hidden ${isCameraFullscreen ? 'h-screen' : 'h-[62vh] md:h-[72vh]'}`}
         >
-          {cameraActive ? (
-            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-          ) : (
+          <video
+            ref={videoRef}
+            className={`w-full h-full object-cover transition-opacity duration-200 ${cameraActive ? 'opacity-100' : 'opacity-0'}`}
+            muted
+            playsInline
+            autoPlay
+          />
+
+          {!cameraActive && (
             <div className="w-full h-full flex items-center justify-center text-slate-300 text-sm">
               {cameraStarting ? 'Opening camera...' : 'Camera is stopped. Click Open Camera.'}
             </div>

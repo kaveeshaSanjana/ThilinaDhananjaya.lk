@@ -78,7 +78,12 @@ const Footer = () => (
       </div>
 
       <div className="border-t border-border mt-8 pt-6 text-center">
-        <p className="text-muted-foreground/80 text-xs">© 2026 Eazy English with Thilina Dhananjaya. All rights reserved.</p>
+        <p className="text-muted-foreground/80 text-xs">
+          © 2026 Eazy English with Thilina Dhananjaya. All rights reserved.{' '}
+          <a href="https://suraksha.lk" target="_blank" rel="noreferrer" className="font-semibold hover:underline">
+            Powered by Suraksha LMS
+          </a>
+        </p>
       </div>
     </div>
   </motion.footer>

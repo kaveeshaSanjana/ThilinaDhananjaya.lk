@@ -22,14 +22,14 @@ const features = [
     titleEn: "Speaking Practice", 
     titleSi: "කතා කිරීමේ පුහුණුව",
     descEn: "Build fluency through guided conversation exercises.", 
-    descSi: "මගපෙන්වන සංවාද ව්‍යায়ාම හරහා සරළතා ගොඩනගන්න"
+    descSi: "මඟපෙන්වන සංවාද අභ්‍යාස හරහා කතා කිරීමේ දක්ෂතාවය සහ ස්වයංවිශ්වාසය වර්ධනය කරගන්න"
   },
   { 
     icon: GraduationCap, 
     titleEn: "Exam Strategy", 
     titleSi: "පරීක්‍ෂණ උපක්‍රමය",
     descEn: "Proven techniques to maximize marks in every paper.", 
-    descSi: "සෑම පත්‍රයකම ලකුණු උපරිම කිරීමට ඔප්‍රවිධි තාක්ෂණ"
+    descSi: "සෑම පත්‍රයකම ලකුණු උපරිම කිරීම"
   },
   { 
     icon: BookOpen, 
