@@ -47,8 +47,8 @@ export default function LoginPage() {
 
           {/* Logo + branding */}
           <div className="flex flex-col items-center mb-7">
-            <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mb-4 shadow-sm">
-              <img src={logoImg} alt="logo" className="w-8 h-8 object-contain" />
+            <div className="mb-4 sm:mb-5">
+              <img src={logoImg} alt="logo" className="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Eazy English</h1>
             <p className="text-gray-600 font-medium mt-1">Welcome back</p>

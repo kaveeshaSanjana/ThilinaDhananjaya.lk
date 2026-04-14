@@ -14,6 +14,18 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  instituteUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  instituteId?: string;
+
+  @IsOptional()
+  @IsString()
+  barcodeId?: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
 
   @IsOptional()

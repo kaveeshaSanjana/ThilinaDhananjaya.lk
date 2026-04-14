@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 
@@ -21,6 +21,19 @@ class PublicRegisterDto {
   @IsString()
   @IsNotEmpty()
   fullName: string;
+
+  @ValidateIf((o: PublicRegisterDto) => !o.instituteId)
+  @IsString()
+  @IsNotEmpty()
+  instituteUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  instituteId?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  barcodeId: string;
 
   @IsOptional()
   @IsString()
@@ -89,10 +102,14 @@ export class PublicController {
     @Headers('x-institute-id') headerOrgId?: string,
   ) {
     const hashed = await bcrypt.hash(body.password, 12);
+    const instituteUserId = body.instituteUserId || body.instituteId;
+
     const user = await this.usersService.create({
       email: body.email,
       password: hashed,
       fullName: body.fullName,
+      instituteUserId,
+      barcodeId: body.barcodeId,
       phone: body.phone,
       whatsappPhone: body.whatsappPhone,
       address: body.address,
@@ -113,7 +130,10 @@ export class PublicController {
         id: user.id,
         email: user.email,
         instituteId: user.profile?.instituteId,
+        instituteUserId: user.profile?.instituteId,
+        institute_user_id: user.profile?.instituteId,
         barcodeId: user.profile?.barcodeId,
+        barcode_id: user.profile?.barcodeId,
         fullName: user.profile?.fullName,
         phone: user.profile?.phone,
         whatsappPhone: user.profile?.whatsappPhone,

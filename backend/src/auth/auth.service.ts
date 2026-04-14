@@ -20,10 +20,14 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     const hashedPassword = await bcrypt.hash(dto.password, 12);
+    const instituteUserId = dto.instituteUserId || dto.instituteId;
+
     const user = await this.usersService.create({
       email: dto.email,
       password: hashedPassword,
       fullName: dto.fullName,
+      instituteUserId,
+      barcodeId: dto.barcodeId,
       phone: dto.phone,
       whatsappPhone: dto.whatsappPhone,
       address: dto.address,
