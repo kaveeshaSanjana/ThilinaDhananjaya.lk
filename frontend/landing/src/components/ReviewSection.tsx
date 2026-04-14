@@ -144,6 +144,7 @@ const ReviewSection = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [columnCount, setColumnCount] = useState(4);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -155,8 +156,22 @@ const ReviewSection = () => {
     return () => { clearTimeout(timer); controller.abort(); };
   }, []);
 
-  const cols = 4;
-  const columns = splitIntoColumns(reviews, cols);
+  useEffect(() => {
+    const updateColumns = () => {
+      const width = window.innerWidth;
+      if (width < 640) setColumnCount(1);
+      else if (width < 1024) setColumnCount(2);
+      else if (width < 1280) setColumnCount(3);
+      else setColumnCount(4);
+    };
+
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
+
+  const isMobile = columnCount === 1;
+  const columns = splitIntoColumns(reviews, columnCount);
   const baseDuration = Math.max(18, reviews.length * 3);
 
   return (
@@ -191,44 +206,69 @@ const ReviewSection = () => {
       {!loading && !error && reviews.length === 0 && <p className="text-center text-muted-foreground py-12">No reviews found.</p>}
 
       {!loading && !error && reviews.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 60 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="relative h-[600px] md:h-[680px] overflow-hidden"
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
-          onTouchStart={() => setPaused(true)}
-          onTouchEnd={() => setPaused(false)}
-        >
-          {/* Top + bottom fades */}
-          <div className="pointer-events-none absolute top-0 left-0 right-0 h-20 z-10 bg-gradient-to-b from-muted/30 to-transparent" />
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 z-10 bg-gradient-to-t from-muted/30 to-transparent" />
+        <>
+          {isMobile ? (
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.6 }}
+              className="relative"
+            >
+              <div className="pointer-events-none absolute top-0 bottom-0 left-0 w-8 z-10 bg-gradient-to-r from-muted/30 to-transparent" />
+              <div className="pointer-events-none absolute top-0 bottom-0 right-0 w-8 z-10 bg-gradient-to-l from-muted/30 to-transparent" />
 
-          {/* Columns side by side — each column staggered fade-in */}
-          <div className="flex justify-center gap-3 h-full px-4">
-            {columns.map((col, ci) => (
-              col.length > 0 && (
-                <motion.div
-                  key={ci}
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-40px" }}
-                  transition={{ duration: 0.7, delay: ci * 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
-                >
-                  <ScrollColumn
-                    reviews={col}
-                    duration={baseDuration + ci * 4}
-                    delay={ci % 2 === 0 ? -(ci * 3) : -(ci * 3)}
-                    paused={paused}
-                    direction={ci % 2 === 0 ? "down" : "up"}
-                  />
-                </motion.div>
-              )
-            ))}
-          </div>
-        </motion.div>
+              <div className="overflow-x-auto px-4 pb-2 [scrollbar-width:none] [-ms-overflow-style:none]">
+                <div className="flex gap-3 w-max snap-x snap-mandatory pr-4">
+                  {reviews.map((review, i) => (
+                    <div key={`${review.name}-${i}`} className="w-[84vw] max-w-[340px] snap-center shrink-0">
+                      <ReviewCard review={review} i={i} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 60 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="relative h-[560px] md:h-[680px] overflow-hidden"
+              onMouseEnter={() => setPaused(true)}
+              onMouseLeave={() => setPaused(false)}
+              onTouchStart={() => setPaused(true)}
+              onTouchEnd={() => setPaused(false)}
+            >
+              {/* Top + bottom fades */}
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-20 z-10 bg-gradient-to-b from-muted/30 to-transparent" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 z-10 bg-gradient-to-t from-muted/30 to-transparent" />
+
+              {/* Columns side by side — each column staggered fade-in */}
+              <div className="flex justify-center gap-3 h-full px-4">
+                {columns.map((col, ci) => (
+                  col.length > 0 && (
+                    <motion.div
+                      key={ci}
+                      initial={{ opacity: 0, y: 40 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-40px" }}
+                      transition={{ duration: 0.7, delay: ci * 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    >
+                      <ScrollColumn
+                        reviews={col}
+                        duration={baseDuration + ci * 4}
+                        delay={-(ci * 3)}
+                        paused={paused}
+                        direction={ci % 2 === 0 ? "down" : "up"}
+                      />
+                    </motion.div>
+                  )
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </>
       )}
     </section>
   );

@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { getInstitutePath } from '../lib/instituteRoutes';
-import WelcomeMessageEditor, { resolveWelcomeMessage } from '../components/WelcomeMessageEditor';
+import WelcomeMessageEditor from '../components/WelcomeMessageEditor';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -59,14 +59,12 @@ function lectureTiming(lec: Lecture): 'upcoming' | 'ongoing' | 'ended' {
 function LectureLessonCard({
   lec,
   isAdmin,
-  welcomeVars,
   onEdit,
   onDelete,
   onStats,
 }: {
   lec: Lecture;
   isAdmin?: boolean;
-  welcomeVars?: Record<string, string>;
   onEdit?: (lec: Lecture) => void;
   onDelete?: (lec: Lecture) => void;
   onStats?: (lec: Lecture) => void;
@@ -74,7 +72,24 @@ function LectureLessonCard({
   const [copied, setCopied] = useState('');
   const [localToken, setLocalToken] = useState<string | null>(lec.liveToken ?? null);
   const [generatingToken, setGeneratingToken] = useState(false);
+  const [thumbBroken, setThumbBroken] = useState(false);
   const timing = lectureTiming(lec);
+  const studentJoinPath = !isAdmin && localToken
+    ? (timing === 'ended' ? `/lecture-live/${localToken}` : `/lecture-live/${localToken}?autoJoin=1`)
+    : null;
+  const listThumbUrl = useMemo(() => {
+    const cardImage = (lec.cardImageUrl ?? '').trim();
+    if (cardImage) return cardImage;
+
+    const bgMedia = (lec.bgMediaUrl ?? '').trim();
+    if (!bgMedia) return null;
+    if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(bgMedia)) return null;
+    return bgMedia;
+  }, [lec.cardImageUrl, lec.bgMediaUrl]);
+
+  useEffect(() => {
+    setThumbBroken(false);
+  }, [listThumbUrl]);
 
   const copyText = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -186,32 +201,32 @@ function LectureLessonCard({
           </span>
         </div>
 
-        {/* Row 2: title + description */}
-        <h3 className={`text-base font-bold leading-snug mb-0.5 ${timing === 'ended' ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--foreground))]'}`}>
-          {lec.title}
-        </h3>
-        {lec.description && (
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3 leading-relaxed">{lec.description}</p>
-        )}
+        {/* Row 2: thumbnail + title + description */}
+        <div className="mb-3 flex items-start gap-3">
+          {listThumbUrl && !thumbBroken && (
+            <div className="w-20 h-14 sm:w-24 sm:h-16 rounded-xl overflow-hidden border border-[hsl(var(--border))] bg-[hsl(var(--muted))] shrink-0">
+              <img
+                src={listThumbUrl}
+                alt={`${lec.title} thumbnail`}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover"
+                onError={() => setThumbBroken(true)}
+              />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h3 className={`text-base font-bold leading-snug mb-0.5 ${timing === 'ended' ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--foreground))]'}`}>
+              {lec.title}
+            </h3>
+            {lec.description && (
+              <p className="text-xs text-[hsl(var(--muted-foreground))] leading-relaxed">{lec.description}</p>
+            )}
+          </div>
+        </div>
 
-        {/* Welcome message (resolved for current user) */}
-        {lec.welcomeMessage && welcomeVars && (() => {
-          const resolved = resolveWelcomeMessage(lec.welcomeMessage, welcomeVars);
-          return (
-            <div
-              className={`mt-2 mb-2 rounded-xl border px-4 py-3 text-sm leading-relaxed ${
-                timing === 'ongoing'
-                  ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200 text-red-900'
-                  : timing === 'upcoming'
-                  ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-900'
-                  : 'bg-[hsl(var(--muted))] border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'
-              }`}
-              dangerouslySetInnerHTML={{ __html: resolved }}
-            />
-          );
-        })()}
         {/* Admin preview: show indicator if welcome message is set but no vars */}
-        {lec.welcomeMessage && !welcomeVars && isAdmin && (
+        {lec.welcomeMessage && isAdmin && (
           <div className="mt-2 mb-2 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-600">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -307,13 +322,13 @@ function LectureLessonCard({
 
         {/* Row 5: action buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          {lec.sessionLink && timing !== 'ended' && (
-            <a
-              href={lec.sessionLink}
-              target="_blank"
-              rel="noopener noreferrer"
+          {!isAdmin && studentJoinPath && (
+            <Link
+              to={studentJoinPath}
               className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
-                timing === 'ongoing'
+                timing === 'ended'
+                  ? 'text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] hover:bg-[hsl(var(--border))] border border-[hsl(var(--border))]'
+                  : timing === 'ongoing'
                   ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200'
                   : 'bg-[hsl(var(--primary))] text-white hover:opacity-90 shadow-[hsl(var(--primary)/0.25)]'
               }`}
@@ -327,20 +342,25 @@ function LectureLessonCard({
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              {timing === 'ongoing' ? 'Join Live Session' : 'Join Lecture'}
-            </a>
+              {timing === 'ongoing' ? 'Join Live Session' : timing === 'ended' ? 'Open Lecture Page' : 'Join Lecture'}
+            </Link>
           )}
-          {lec.sessionLink && timing === 'ended' && (
+          {!isAdmin && !studentJoinPath && lec.sessionLink && (
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] border border-[hsl(var(--border))]">
+              Preparing secure join link...
+            </span>
+          )}
+          {isAdmin && localToken && (
             <a
-              href={lec.sessionLink}
+              href={`/lecture-live/${localToken}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] hover:bg-[hsl(var(--border))] transition border border-[hsl(var(--border))]"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)] hover:bg-[hsl(var(--primary)/0.16)] border border-[hsl(var(--primary)/0.25)] transition"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              View Link
+              Open Join Page
             </a>
           )}
           {isAdmin && (
@@ -1026,15 +1046,6 @@ export default function ClassMonthLiveLessonsPage() {
   const [deletingLec, setDeletingLec]   = useState<Lecture | null>(null);
   const [statsLec, setStatsLec]         = useState<Lecture | null>(null);
 
-  const welcomeVars = useMemo(() => ({
-    '{{studentName}}': (user as any)?.profile?.fullName || user?.email?.split('@')[0] || 'Student',
-    '{{month}}': monthName,
-    '{{date}}': new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-    '{{className}}': className,
-    '{{teacherName}}': 'Sir',
-    '{{recordingTitle}}': '',
-  }), [user, monthName, className]);
-
   useEffect(() => {
     if (!classId || !monthId) return;
     const load = async () => {
@@ -1148,7 +1159,7 @@ export default function ClassMonthLiveLessonsPage() {
                 Live Now
               </h2>
               <div className="grid gap-4">
-                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
+                {ongoingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}
@@ -1157,7 +1168,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-blue-600 uppercase tracking-widest">Upcoming</h2>
               <div className="grid gap-4">
-                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
+                {upcomingLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}
@@ -1166,7 +1177,7 @@ export default function ClassMonthLiveLessonsPage() {
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest">Past</h2>
               <div className="grid gap-4">
-                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} welcomeVars={welcomeVars} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
+                {endedLectures.map(lec => <LectureLessonCard key={lec.id} lec={lec} isAdmin={isAdmin} onEdit={setEditingLec} onDelete={setDeletingLec} onStats={setStatsLec} />)}
               </div>
             </div>
           )}

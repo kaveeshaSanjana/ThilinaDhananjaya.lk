@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import teacherImg from "@/assets/teacher.png";
 import { BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
@@ -25,6 +25,8 @@ const HandDrawnUnderline = () => (
 );
 
 const HeroSection = () => {
+  const [heroImageReady, setHeroImageReady] = useState(false);
+
   return (
     <section
       className="relative min-h-screen flex items-start md:items-center overflow-hidden pt-4 md:pt-0 pb-0"
@@ -120,11 +122,22 @@ const HeroSection = () => {
               className="lg:hidden absolute bottom-24 -left-6 w-6 h-6 rounded-full bg-muted-foreground/12 z-0"
             />
 
-            <img
-              src={teacherImg}
-              alt="Thilina Dhananjaya - English Teacher"
-              className="relative z-10 w-[300px] md:w-[420px] lg:w-[580px] xl:w-[640px] drop-shadow-2xl block mx-auto"
-            />
+            <div className="relative z-10 w-[300px] md:w-[420px] lg:w-[580px] xl:w-[640px] aspect-[4/5] mx-auto">
+              <div
+                className={`absolute inset-0 rounded-[28px] bg-gradient-to-br from-white/65 via-white/30 to-primary/10 shadow-inner transition-opacity duration-500 ${
+                  heroImageReady ? "opacity-0" : "opacity-100"
+                } animate-pulse`}
+              />
+              <img
+                src={teacherImg}
+                alt="Thilina Dhananjaya - English Teacher"
+                onLoad={() => setHeroImageReady(true)}
+                onError={() => setHeroImageReady(true)}
+                className={`absolute inset-0 w-full h-full object-contain object-bottom drop-shadow-2xl block mx-auto transition-opacity duration-500 ${
+                  heroImageReady ? "opacity-100" : "opacity-0"
+                }`}
+              />
+            </div>
           </div>
 
           <motion.div

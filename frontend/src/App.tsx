@@ -25,7 +25,6 @@ import AdminSlips from './pages/admin/AdminSlips';
 import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
 import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
-import AdminClassAttendance from './pages/admin/AdminClassAttendance';
 import AdminMarkAttendance from './pages/admin/AdminMarkAttendance';
 import AdminMarkAttendanceExternalDevice from './pages/admin/AdminMarkAttendanceExternalDevice';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
@@ -36,8 +35,6 @@ import AdminInstituteSelect from './pages/admin/AdminInstituteSelect';
 import ClassMonthRecordingsPage from './pages/ClassMonthRecordingsPage';
 import ClassMonthLiveLessonsPage from './pages/ClassMonthLiveLessonsPage';
 import ClassMonthMediaPage from './pages/ClassMonthMediaPage';
-import ClassPhysicalAttendancePage from './pages/ClassPhysicalAttendancePage';
-import ClassPhysicalAttendanceQrPage from './pages/ClassPhysicalAttendanceQrPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
@@ -94,6 +91,22 @@ function AdminLegacyRedirect() {
   return <Navigate to={getInstituteAdminPath(selected.id, suffix)} replace />;
 }
 
+function MarkAttendanceExternalOnlyRedirect() {
+  const { selected, loading } = useInstitute();
+  const params = useParams<{ instituteId?: string; classId?: string }>();
+
+  if (loading) {
+    return <LandingStyleLoading />;
+  }
+
+  const instituteId = params.instituteId || selected?.id;
+  const classId = params.classId;
+  const baseTarget = getInstituteAdminPath(instituteId, '/mark-attendance/external-device');
+  const target = classId ? `${baseTarget}?classId=${encodeURIComponent(classId)}` : baseTarget;
+
+  return <Navigate to={target} replace />;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
 
@@ -131,10 +144,10 @@ function AppRoutes() {
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/live-lessons" element={<ProtectedRoute><ClassMonthLiveLessonsPage /></ProtectedRoute>} />
         <Route path="classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
-        <Route path="classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
-        <Route path="institute/:instituteId/classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendancePage /></ProtectedRoute>} />
-        <Route path="classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendanceQrPage /></ProtectedRoute>} />
-        <Route path="institute/:instituteId/classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><ClassPhysicalAttendanceQrPage /></ProtectedRoute>} />
+        <Route path="classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
+        <Route path="classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
@@ -158,7 +171,7 @@ function AppRoutes() {
         <Route path="institute/:instituteId/admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/mark-attendance" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/mark-attendance/external-device" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendanceExternalDevice /></ProtectedRoute>} />
-        <Route path="institute/:instituteId/admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminClassAttendance /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/admin/class-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/recordings" element={<ProtectedRoute role="ADMIN"><AdminRecordingHistory /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/id-cards" element={<ProtectedRoute role="ADMIN"><AdminIdCards /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/institute" element={<ProtectedRoute role="ADMIN"><AdminInstitute /></ProtectedRoute>} />

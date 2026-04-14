@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import logoImg from "@/assets/logo.png";
+import teacherImg from "@/assets/teacher.png";
+import post1Img from "@/assets/post-1.jpeg";
+import post2Img from "@/assets/post-2.jpeg";
+import post3Img from "@/assets/post-3.jpeg";
 
 interface LoadingPageProps {
   onLoadComplete: () => void;
@@ -8,47 +12,41 @@ interface LoadingPageProps {
 
 const LoadingPage = ({ onLoadComplete }: LoadingPageProps) => {
   const [progress, setProgress] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const preloadImages = [
-      "/src/assets/teacher.png",
-      "/src/assets/post-1.jpeg",
-      "/src/assets/post-2.jpeg",
-      "/src/assets/post-3.jpeg",
+      teacherImg,
+      post1Img,
+      post2Img,
+      post3Img,
     ];
 
     let loadedCount = 0;
+    let cancelled = false;
 
-    const img = new Image();
-    img.onload = () => {
-      loadedCount++;
+    const handleAssetDone = () => {
+      loadedCount += 1;
+      if (cancelled) return;
+
       setProgress((loadedCount / preloadImages.length) * 100);
+
       if (loadedCount === preloadImages.length) {
         setTimeout(() => {
-          setIsLoading(false);
-          setTimeout(onLoadComplete, 500);
-        }, 500);
-      }
-    };
-
-    img.onerror = () => {
-      loadedCount++;
-      setProgress((loadedCount / preloadImages.length) * 100);
-      if (loadedCount === preloadImages.length) {
-        setTimeout(() => {
-          setIsLoading(false);
-          setTimeout(onLoadComplete, 500);
+          if (!cancelled) onLoadComplete();
         }, 500);
       }
     };
 
     preloadImages.forEach((src) => {
       const imgElement = new Image();
-      imgElement.onload = img.onload;
-      imgElement.onerror = img.onerror;
+      imgElement.onload = handleAssetDone;
+      imgElement.onerror = handleAssetDone;
       imgElement.src = src;
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [onLoadComplete]);
 
   return (

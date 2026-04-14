@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
@@ -106,6 +106,8 @@ function findStudentByIdentifier(identifier: string, students: ClassStudentItem[
 
 export default function AdminMarkAttendanceExternalDevice() {
   const { instituteId } = useParams<{ instituteId: string }>();
+  const [searchParams] = useSearchParams();
+  const requestedClassId = (searchParams.get('classId') || '').trim();
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -137,14 +139,17 @@ export default function AdminMarkAttendanceExternalDevice() {
         const { data } = await api.get('/classes');
         const rows = (data || []) as ClassItem[];
         setClasses(rows);
-        if (rows.length > 0) setSelectedClassId(rows[0].id);
+        if (rows.length > 0) {
+          const hasRequestedClass = requestedClassId && rows.some((row) => row.id === requestedClassId);
+          setSelectedClassId(hasRequestedClass ? requestedClassId : rows[0].id);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     void loadClasses();
-  }, []);
+  }, [requestedClassId]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -258,6 +263,7 @@ export default function AdminMarkAttendanceExternalDevice() {
 
   const selectedClass = classes.find((item) => item.id === selectedClassId);
   const adminBase = getInstituteAdminPath(instituteId);
+  const classesPath = getInstituteAdminPath(instituteId, '/classes');
   const filteredStudents = useMemo(() => {
     const query = studentFilter.trim().toLowerCase();
     if (!query) return classStudents;
@@ -277,13 +283,13 @@ export default function AdminMarkAttendanceExternalDevice() {
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <Link
-            to={getInstituteAdminPath(instituteId, '/mark-attendance')}
+            to={classesPath}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            Back
+            Classes
           </Link>
           <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Mark Attendance - External Device</h1>
           <Link

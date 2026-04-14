@@ -12,6 +12,18 @@ export class LecturesService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private get db() { return this.prisma as any; }
 
+  private async generateUniqueLectureLiveToken(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const token = randomBytes(12).toString('hex');
+      const existing = await this.db.lecture.findUnique({
+        where: { liveToken: token },
+        select: { id: true },
+      });
+      if (!existing) return token;
+    }
+    throw new BadRequestException('Unable to generate a unique lecture live token');
+  }
+
   /** Admin: create a lecture for a class month */
   async create(monthId: string, data: {
     title: string;
@@ -35,6 +47,8 @@ export class LecturesService {
     });
     if (!month) throw new NotFoundException('Month not found');
 
+    const liveToken = await this.generateUniqueLectureLiveToken();
+
     return this.db.lecture.create({
       data: {
         monthId,
@@ -49,6 +63,7 @@ export class LecturesService {
         meetingPassword: data.meetingPassword,
         maxParticipants: data.maxParticipants,
         welcomeMessage: data.welcomeMessage,
+        liveToken,
         cardImageUrl: data.cardImageUrl,
         bgMediaUrl: data.bgMediaUrl,
         status: data.status ?? 'STUDENTS_ONLY',
@@ -79,10 +94,28 @@ export class LecturesService {
       ? { not: 'INACTIVE' as LectureStatus }
       : { in: ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY'] as LectureStatus[] };
 
-    const lectures = await this.db.lecture.findMany({
+    const rawLectures = await this.db.lecture.findMany({
       where: { monthId, status: statusFilter },
       orderBy: { startTime: 'asc' },
     });
+
+    const lectures = await Promise.all(rawLectures.map(async (lecture: any) => {
+      if (lecture.liveToken || !lecture.sessionLink) return lecture;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const token = await this.generateUniqueLectureLiveToken();
+        try {
+          return await this.db.lecture.update({
+            where: { id: lecture.id },
+            data: { liveToken: token },
+          });
+        } catch (error: any) {
+          if (error?.code !== 'P2002') throw error;
+        }
+      }
+
+      return lecture;
+    }));
 
     return { month, lectures };
   }
@@ -179,7 +212,7 @@ export class LecturesService {
   /** Admin: generate (or regenerate) a shareable live token for a lecture */
   async generateLiveToken(lectureId: string) {
     await this.findOne(lectureId);
-    const token = randomBytes(12).toString('hex'); // 24 hex chars
+    const token = await this.generateUniqueLectureLiveToken();
     return this.db.lecture.update({
       where: { id: lectureId },
       data: { liveToken: token },

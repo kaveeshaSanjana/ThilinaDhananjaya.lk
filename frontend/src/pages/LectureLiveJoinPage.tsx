@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
@@ -129,6 +129,8 @@ export default function LectureLiveJoinPage() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const shouldAutoJoin = searchParams.get('autoJoin') === '1';
 
   const [lecture, setLecture]       = useState<LectureInfo | null>(null);
   const [fetchError, setFetchError] = useState('');
@@ -161,6 +163,7 @@ export default function LectureLiveJoinPage() {
 
   // Welcome message overlay
   const [showWelcome, setShowWelcome] = useState(false);
+  const autoJoinTriggeredRef = useRef(false);
 
   // ── Fetch lecture from token ──────────────────────────
   useEffect(() => {
@@ -168,13 +171,21 @@ export default function LectureLiveJoinPage() {
     api.get(`/lectures/live/${token}`)
       .then(r => {
         setLecture(r.data);
-        setJoinMode(r.data.status === 'ANYONE' ? 'guest' : 'account');
       })
       .catch(() => setFetchError('This live lecture link is invalid or has expired.'));
   }, [token]);
 
+  useEffect(() => {
+    if (!lecture) return;
+    if (lecture.status === 'ANYONE') {
+      setJoinMode(user ? 'account' : 'guest');
+      return;
+    }
+    setJoinMode('account');
+  }, [lecture, user]);
+
   // ── Core join call ────────────────────────────────────
-  const doJoin = async (skipWelcome = false) => {
+  const doJoin = useCallback(async (skipWelcome = false) => {
     if (!token) return;
     setStep('joining');
     setStepError('');
@@ -191,7 +202,17 @@ export default function LectureLiveJoinPage() {
       setStepError(err.response?.data?.message || 'Failed to join. Please try again.');
       setStep('idle');
     }
-  };
+  }, [token, lecture]);
+
+  useEffect(() => {
+    if (!shouldAutoJoin) return;
+    if (autoJoinTriggeredRef.current) return;
+    if (authLoading || !lecture || !user) return;
+    if (joinMode !== 'account' || step !== 'idle') return;
+
+    autoJoinTriggeredRef.current = true;
+    void doJoin(false);
+  }, [shouldAutoJoin, authLoading, lecture, user, joinMode, step, doJoin]);
 
   // ── Guest join ────────────────────────────────────────
   const handleGuestJoin = async (e: React.FormEvent, skipWelcome = false) => {
