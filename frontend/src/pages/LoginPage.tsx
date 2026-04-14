@@ -46,9 +46,9 @@ export default function LoginPage() {
         <div className={`w-full max-w-[400px] transition-all duration-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}>
 
           {/* Logo + branding */}
-          <div className="flex flex-col items-center mb-7">
-            <div className="mb-4 sm:mb-5">
-              <img src={logoImg} alt="logo" className="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
+          <div className="flex flex-col items-center mb-7 sm:mb-8">
+            <div className="mb-5 sm:mb-6">
+              <img src={logoImg} alt="logo" className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Eazy English</h1>
             <p className="text-gray-600 font-medium mt-1">Welcome back</p>

@@ -53,6 +53,7 @@ export default function AdminStudents() {
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [viewStudent, setViewStudent] = useState<any>(null);
+  const [imageCardStudent, setImageCardStudent] = useState<any>(null);
   const [showExport, setShowExport] = useState(false);
   const [exportCols, setExportCols] = useState<string[]>(['instituteId', 'barcodeId', 'fullName', 'email', 'phone', 'status']);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -283,9 +284,16 @@ export default function AdminStudents() {
       minWidth: 200,
       render: (s) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden shadow-sm">
             {s.profile?.avatarUrl ? (
-              <img src={s.profile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setImageCardStudent(s)}
+                className="w-full h-full block cursor-zoom-in"
+                title="View image card"
+              >
+                <img src={s.profile.avatarUrl} alt={s.profile?.fullName || s.email || 'Student'} className="w-full h-full object-cover" />
+              </button>
             ) : (
               (s.profile?.fullName || s.email || '?')[0].toUpperCase()
             )}
@@ -467,9 +475,16 @@ export default function AdminStudents() {
               <div className="p-5 space-y-4">
                 {/* Avatar + name */}
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 overflow-hidden">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-3xl font-bold flex-shrink-0 overflow-hidden">
                     {viewStudent.profile?.avatarUrl ? (
-                      <img src={viewStudent.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setImageCardStudent(viewStudent)}
+                        className="w-full h-full block cursor-zoom-in"
+                        title="View image card"
+                      >
+                        <img src={viewStudent.profile.avatarUrl} alt={viewStudent.profile?.fullName || viewStudent.email || 'Student'} className="w-full h-full object-cover" />
+                      </button>
                     ) : (
                       (viewStudent.profile?.fullName || viewStudent.email || '?')[0].toUpperCase()
                     )}
@@ -514,6 +529,52 @@ export default function AdminStudents() {
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => { setViewStudent(null); openEdit(viewStudent); }} className="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-semibold hover:bg-blue-100 transition">Edit</button>
                   <button onClick={() => setViewStudent(null)} className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200 transition">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* Student Image Card Modal */}
+      {imageCardStudent && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setImageCardStudent(null)}>
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="bg-[hsl(var(--card))] rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="relative h-72 bg-slate-100">
+                {imageCardStudent.profile?.avatarUrl ? (
+                  <img
+                    src={imageCardStudent.profile.avatarUrl}
+                    alt={imageCardStudent.profile?.fullName || imageCardStudent.email || 'Student'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-6xl font-bold flex items-center justify-center">
+                    {(imageCardStudent.profile?.fullName || imageCardStudent.email || '?')[0].toUpperCase()}
+                  </div>
+                )}
+                <button
+                  onClick={() => setImageCardStudent(null)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-lg bg-black/45 text-white hover:bg-black/60 transition"
+                >
+                  <svg className="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="p-5">
+                <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">{imageCardStudent.profile?.fullName || '-'}</h3>
+                <p className="text-sm text-slate-500 mt-0.5">{imageCardStudent.email}</p>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {imageCardStudent.profile?.instituteId && (
+                    <span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-mono font-semibold">
+                      {imageCardStudent.profile.instituteId}
+                    </span>
+                  )}
+                  {imageCardStudent.profile?.barcodeId && (
+                    <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-mono font-semibold">
+                      {imageCardStudent.profile.barcodeId}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
