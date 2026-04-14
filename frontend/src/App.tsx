@@ -27,6 +27,7 @@ import AdminRecordingHistory from './pages/admin/AdminRecordingHistory';
 import AdminStudentWatchDetail from './pages/admin/AdminStudentWatchDetail';
 import AdminMarkAttendance from './pages/admin/AdminMarkAttendance';
 import AdminMarkAttendanceExternalDevice from './pages/admin/AdminMarkAttendanceExternalDevice';
+import AdminPhysicalAttendanceView from './pages/admin/AdminPhysicalAttendanceView';
 import AdminMonthRecAttendance from './pages/admin/AdminMonthRecAttendance';
 import AdminMonthManage from './pages/admin/AdminMonthManage';
 import AdminIdCards from './pages/admin/AdminIdCards';
@@ -171,7 +172,7 @@ function AppRoutes() {
         <Route path="institute/:instituteId/admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/mark-attendance" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/mark-attendance/external-device" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendanceExternalDevice /></ProtectedRoute>} />
-        <Route path="institute/:instituteId/admin/class-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/admin/class-attendance" element={<ProtectedRoute role="ADMIN"><AdminPhysicalAttendanceView /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/recordings" element={<ProtectedRoute role="ADMIN"><AdminRecordingHistory /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/id-cards" element={<ProtectedRoute role="ADMIN"><AdminIdCards /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/institute" element={<ProtectedRoute role="ADMIN"><AdminInstitute /></ProtectedRoute>} />

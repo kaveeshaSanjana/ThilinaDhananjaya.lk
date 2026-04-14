@@ -407,6 +407,7 @@ export default function Layout() {
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/attendance')} icon={icons.attend} label="Recording Attendance" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/mark-attendance')} icon={icons.qrAttend} label="Mark Attendance" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/mark-attendance/external-device')} icon={icons.physAttend} label="Mark Attendance - External Device" />
+                <NavItem to={getInstituteAdminPath(adminInstituteId, '/class-attendance')} icon={icons.attend} label="View Physical Attendance" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/recordings')} icon={icons.recordings} label="Recordings" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/id-cards')} icon={icons.students} label="ID Cards" />
                 <NavItem to={getInstituteAdminPath(adminInstituteId, '/institute')} icon={icons.admin} label="Institute Settings" />

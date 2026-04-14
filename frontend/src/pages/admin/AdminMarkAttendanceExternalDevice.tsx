@@ -127,6 +127,19 @@ export default function AdminMarkAttendanceExternalDevice() {
   const inputRef = useRef<HTMLInputElement>(null);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const focusRfidInput = useCallback((selectValue = false) => {
+    if (loading || submitting) return;
+
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      if (selectValue && input.value) {
+        input.select();
+      }
+    });
+  }, [loading, submitting]);
+
   const lastMarkedStorageKey = useMemo(
     () => (selectedClassId ? `mark-attendance:external:last:${selectedClassId}:${selectedDate}` : ''),
     [selectedClassId, selectedDate],
@@ -209,13 +222,36 @@ export default function AdminMarkAttendanceExternalDevice() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedClassId) return;
+    focusRfidInput();
+  }, [focusRfidInput, selectedClassId, selectedDate, status]);
+
+  useEffect(() => {
+    const onWindowFocus = () => focusRfidInput();
+    const onVisibilityChange = () => {
+      if (!document.hidden) focusRfidInput();
+    };
+
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', onWindowFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [focusRfidInput]);
+
   const handleSubmit = useCallback(async () => {
     const identifier = normalizeIdentifier(rfidInput);
-    if (!identifier || !selectedClassId) return;
+    if (!identifier || !selectedClassId) {
+      focusRfidInput();
+      return;
+    }
     const matchedStudentByScan = findStudentByIdentifier(identifier, classStudents);
 
     if (identifier === lastMarkedId) {
       setError(`Duplicate ignored: ${identifier}`);
+      focusRfidInput(true);
       return;
     }
 
@@ -248,18 +284,21 @@ export default function AdminMarkAttendanceExternalDevice() {
         avatarUrl,
       });
       setRfidInput('');
-      inputRef.current?.focus();
+      focusRfidInput();
 
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
       clearTimerRef.current = setTimeout(() => {
         setMarkedStudent(null);
+        focusRfidInput();
       }, 2000);
     } catch (submitError: any) {
       setError(submitError?.response?.data?.message || 'Failed to mark attendance');
+      focusRfidInput(true);
     } finally {
       setSubmitting(false);
+      focusRfidInput();
     }
-  }, [classStudents, lastMarkedId, rfidInput, selectedClassId, selectedDate, status, studentsById]);
+  }, [classStudents, focusRfidInput, lastMarkedId, rfidInput, selectedClassId, selectedDate, status, studentsById]);
 
   const selectedClass = classes.find((item) => item.id === selectedClassId);
   const adminBase = getInstituteAdminPath(instituteId);
@@ -355,9 +394,16 @@ export default function AdminMarkAttendanceExternalDevice() {
                 <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">RFID ID</label>
                 <input
                   ref={inputRef}
+                  autoFocus
                   value={rfidInput}
                   onChange={(event) => setRfidInput(event.target.value)}
                   onKeyDown={(event) => event.key === 'Enter' && void handleSubmit()}
+                  onBlur={() => {
+                    const activeElement = document.activeElement as HTMLElement | null;
+                    if (!activeElement || activeElement === document.body) {
+                      focusRfidInput();
+                    }
+                  }}
                   placeholder="Scan or enter RFID ID..."
                   className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
                 />
@@ -367,7 +413,10 @@ export default function AdminMarkAttendanceExternalDevice() {
                 <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Status</label>
                 <select
                   value={status}
-                  onChange={(event) => setStatus(event.target.value as AttStatus)}
+                  onChange={(event) => {
+                    setStatus(event.target.value as AttStatus);
+                    focusRfidInput();
+                  }}
                   className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
                 >
                   <option value="PRESENT">Present</option>
@@ -381,7 +430,10 @@ export default function AdminMarkAttendanceExternalDevice() {
                 <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Event</label>
                 <select
                   value={selectedClassId}
-                  onChange={(event) => setSelectedClassId(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedClassId(event.target.value);
+                    focusRfidInput();
+                  }}
                   className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
                 >
                   {classes.map((item) => (
@@ -395,7 +447,10 @@ export default function AdminMarkAttendanceExternalDevice() {
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedDate(event.target.value);
+                    focusRfidInput();
+                  }}
                   className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
                 />
               </div>
