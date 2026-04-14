@@ -25,6 +25,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>(null!);
+const SESSION_HINT_KEY = 'authSessionHint';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => setLoading(false));
     } else {
+      const hasSessionHint = localStorage.getItem(SESSION_HINT_KEY) === '1';
+      if (!hasSessionHint) {
+        setLoading(false);
+        return;
+      }
+
       // Try a silent refresh — maybe we have a valid refresh token cookie
       api.post('/auth/refresh', {}, { timeout: 2000 })
         .then((res) => {
@@ -50,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {
           // No valid session
+          localStorage.removeItem(SESSION_HINT_KEY);
         })
         .finally(() => setLoading(false));
     }
@@ -58,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (identifier: string, password: string) => {
     const res = await api.post('/auth/login', { identifier, password });
     sessionStorage.setItem('accessToken', res.data.accessToken);
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     localStorage.removeItem('selectedInstituteId');
     setToken(res.data.accessToken);
     setUser(res.data.user);
@@ -67,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: Record<string, string | undefined>) => {
     const res = await api.post('/auth/register', data);
     sessionStorage.setItem('accessToken', res.data.accessToken);
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     setToken(res.data.accessToken);
     setUser(res.data.user);
     return res.data.user;
@@ -79,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore errors on logout
     }
     sessionStorage.removeItem('accessToken');
+    localStorage.removeItem(SESSION_HINT_KEY);
     localStorage.removeItem('selectedInstituteId');
     setToken(null);
     setUser(null);

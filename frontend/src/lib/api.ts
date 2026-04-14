@@ -5,6 +5,11 @@ const api = axios.create({
   withCredentials: true, // Send cookies (refresh token) with every request
 });
 
+const refreshApi = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  withCredentials: true,
+});
+
 // Attach access token and selected institute to every request
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('accessToken');
@@ -64,7 +69,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+        const { data } = await refreshApi.post('/auth/refresh', {});
         const newToken = data.accessToken;
         sessionStorage.setItem('accessToken', newToken);
         if (data.user) {
