@@ -33,6 +33,25 @@ function extractErrorMessage(error: any, fallback: string) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
+function readUrl(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function resolveUploadUrl(data: any, ...fallbackKeys: string[]) {
+  const responseUrl = readUrl(data?.responseUrl);
+  if (responseUrl) return responseUrl;
+
+  for (const key of fallbackKeys) {
+    const candidate = readUrl(data?.[key]);
+    if (candidate) return candidate;
+  }
+
+  const incomingUrl = readUrl(data?.incomingUrl);
+  if (incomingUrl) return incomingUrl;
+
+  throw new Error('Upload response did not include a usable URL.');
+}
+
 export function validateImageFile(file: File) {
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
     throw new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
@@ -65,7 +84,7 @@ export async function uploadImage(file: File, folder: UploadFolder = 'general') 
 
   try {
     const { data } = await api.post(`/upload/image?folder=${folder}`, form);
-    return data.url as string;
+    return resolveUploadUrl(data, 'url');
   } catch (error: any) {
     throw new Error(extractErrorMessage(error, 'Failed to upload image.'));
   }
@@ -78,7 +97,7 @@ export async function uploadMediaFile(file: File, folder: UploadFolder = 'media'
 
   try {
     const { data } = await api.post(`/upload/file?folder=${folder}`, form);
-    return data.url as string;
+    return resolveUploadUrl(data, 'url');
   } catch (error: any) {
     throw new Error(extractErrorMessage(error, 'Failed to upload file.'));
   }
@@ -91,7 +110,7 @@ export async function uploadClassThumbnail(classId: string, file: File) {
 
   try {
     const { data } = await api.post(`/classes/${classId}/thumbnail`, form);
-    return data.thumbnail as string;
+    return resolveUploadUrl(data, 'thumbnail', 'url');
   } catch (error: any) {
     throw new Error(extractErrorMessage(error, 'Failed to upload class thumbnail.'));
   }
@@ -104,7 +123,7 @@ export async function uploadRecordingThumbnail(recordingId: string, file: File) 
 
   try {
     const { data } = await api.post(`/recordings/${recordingId}/thumbnail`, form);
-    return data.thumbnail as string;
+    return resolveUploadUrl(data, 'thumbnail', 'url');
   } catch (error: any) {
     throw new Error(extractErrorMessage(error, 'Failed to upload recording thumbnail.'));
   }
@@ -117,7 +136,7 @@ export async function uploadStudentAvatar(userId: string, file: File) {
 
   try {
     const { data } = await api.post(`/users/students/${userId}/avatar`, form);
-    return data.avatarUrl as string;
+    return resolveUploadUrl(data, 'avatarUrl', 'url');
   } catch (error: any) {
     throw new Error(extractErrorMessage(error, 'Failed to upload student avatar.'));
   }

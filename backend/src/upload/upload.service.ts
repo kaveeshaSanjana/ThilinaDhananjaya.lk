@@ -6,15 +6,28 @@ import { extname } from 'path';
 
 type UploadFolder = 'classes' | 'recordings' | 'avatars' | 'general' | 'media';
 
+export interface UploadUrlResult {
+  incomingUrl: string;
+  responseUrl: string;
+}
+
 @Injectable()
 export class UploadService {
   private s3: S3Client;
   private bucket: string;
   private region: string;
+  private responseBaseUrl: string;
 
   constructor(private config: ConfigService) {
     this.region = this.config.get<string>('AWS_REGION') ?? 'us-east-1';
     this.bucket = this.config.get<string>('AWS_S3_BUCKET') ?? '';
+    const configuredResponseBase =
+      this.config.get<string>('UPLOAD_RESPONSE_BASE_URL') ||
+      this.config.get<string>('STORAGE_RESPONSE_BASE_URL') ||
+      this.config.get<string>('ASSET_PUBLIC_BASE_URL') ||
+      '';
+
+    this.responseBaseUrl = this.normalizePublicBaseUrl(configuredResponseBase);
 
     this.s3 = new S3Client({
       region: this.region,
@@ -39,7 +52,29 @@ export class UploadService {
     }
   }
 
-  private async uploadToS3(file: Express.Multer.File, folder: UploadFolder): Promise<string> {
+  private normalizePublicBaseUrl(rawUrl: string) {
+    const trimmed = (rawUrl || '').trim();
+    if (!trimmed) return '';
+
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withScheme.replace(/\/+$/, '');
+  }
+
+  private getIncomingPrefix() {
+    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/`;
+  }
+
+  private buildUploadUrls(key: string): UploadUrlResult {
+    const normalizedKey = key.replace(/^\/+/, '');
+    const incomingUrl = `${this.getIncomingPrefix()}${normalizedKey}`;
+    const responseUrl = this.responseBaseUrl
+      ? `${this.responseBaseUrl}/${normalizedKey}`
+      : incomingUrl;
+
+    return { incomingUrl, responseUrl };
+  }
+
+  private async uploadToS3(file: Express.Multer.File, folder: UploadFolder): Promise<UploadUrlResult> {
     const ext = extname(file.originalname).toLowerCase() || '.bin';
     const key = `${folder}/${randomUUID()}${ext}`;
 
@@ -58,7 +93,7 @@ export class UploadService {
       );
     }
 
-    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    return this.buildUploadUrls(key);
   }
 
   /**
@@ -70,7 +105,7 @@ export class UploadService {
   async uploadImage(
     file: Express.Multer.File,
     folder: 'classes' | 'recordings' | 'avatars' | 'general',
-  ): Promise<string> {
+  ): Promise<UploadUrlResult> {
     this.ensureFileProvided(file);
     this.ensureBucketConfigured();
 
@@ -96,7 +131,7 @@ export class UploadService {
   async uploadFile(
     file: Express.Multer.File,
     folder: UploadFolder = 'media',
-  ): Promise<string> {
+  ): Promise<UploadUrlResult> {
     this.ensureFileProvided(file);
     this.ensureBucketConfigured();
 
@@ -140,14 +175,34 @@ export class UploadService {
     return this.uploadToS3(file, folder);
   }
 
+  private extractKeyFromUrl(url: string): string | null {
+    const value = (url || '').trim();
+    if (!value) return null;
+
+    const incomingPrefix = this.getIncomingPrefix();
+    if (value.startsWith(incomingPrefix)) {
+      const key = value.slice(incomingPrefix.length).split(/[?#]/)[0] || '';
+      return key || null;
+    }
+
+    if (this.responseBaseUrl) {
+      const responsePrefix = `${this.responseBaseUrl}/`;
+      if (value.startsWith(responsePrefix)) {
+        const key = value.slice(responsePrefix.length).split(/[?#]/)[0] || '';
+        return key || null;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Delete an object from S3 by its full URL.
    */
   async deleteByUrl(url: string): Promise<void> {
     try {
-      const prefix = `https://${this.bucket}.s3.${this.region}.amazonaws.com/`;
-      if (!url.startsWith(prefix)) return;
-      const key = url.slice(prefix.length);
+      const key = this.extractKeyFromUrl(url);
+      if (!key) return;
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch {
       // Deletion errors are non-fatal; log but don't throw

@@ -71,9 +71,13 @@ export class RecordingsController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const url = await this.uploadService.uploadImage(file, 'recordings');
-    await this.recordingsService.update(id, { thumbnail: url });
-    return { thumbnail: url };
+    const uploaded = await this.uploadService.uploadImage(file, 'recordings');
+    await this.recordingsService.update(id, { thumbnail: uploaded.responseUrl });
+    return {
+      thumbnail: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

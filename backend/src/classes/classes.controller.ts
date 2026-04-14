@@ -72,9 +72,13 @@ export class ClassesController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const url = await this.uploadService.uploadImage(file, 'classes');
-    await this.classesService.updateClass(id, { thumbnail: url });
-    return { thumbnail: url };
+    const uploaded = await this.uploadService.uploadImage(file, 'classes');
+    await this.classesService.updateClass(id, { thumbnail: uploaded.responseUrl });
+    return {
+      thumbnail: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
   }
 
   // ─── Class Recordings (aggregated from all months) ────

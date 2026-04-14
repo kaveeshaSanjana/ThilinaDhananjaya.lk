@@ -33,8 +33,12 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
     @Query('folder') folder: 'classes' | 'recordings' | 'avatars' | 'general' = 'general',
   ) {
-    const url = await this.uploadService.uploadImage(file, folder);
-    return { url };
+    const uploaded = await this.uploadService.uploadImage(file, folder);
+    return {
+      url: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
   }
 
   /**
@@ -54,7 +58,11 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
     @Query('folder') folder: 'classes' | 'recordings' | 'avatars' | 'general' | 'media' = 'media',
   ) {
-    const url = await this.uploadService.uploadFile(file, folder);
-    return { url };
+    const uploaded = await this.uploadService.uploadFile(file, folder);
+    return {
+      url: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
   }
 }

@@ -151,8 +151,12 @@ export class UsersController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const url = await this.uploadService.uploadImage(file, 'avatars');
-    await this.usersService.updateProfile(id, { avatarUrl: url });
-    return { avatarUrl: url };
+    const uploaded = await this.uploadService.uploadImage(file, 'avatars');
+    await this.usersService.updateProfile(id, { avatarUrl: uploaded.responseUrl });
+    return {
+      avatarUrl: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
   }
 }

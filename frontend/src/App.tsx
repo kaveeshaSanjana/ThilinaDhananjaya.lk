@@ -127,7 +127,7 @@ function AppRoutes() {
       <Route path="lecture-live/:token" element={<LectureLiveJoinPage />} />
 
       <Route path="/" element={<Layout />}>
-        <Route index element={user ? <ClassesPage /> : <Navigate to="/landing" replace />} />
+        <Route index element={<Navigate to="/landing" replace />} />
         <Route path="institute/:instituteId" element={<ClassesPage />} />
         <Route path="classes" element={<ClassesPage />} />
         <Route path="institute/:instituteId/classes" element={<ClassesPage />} />
