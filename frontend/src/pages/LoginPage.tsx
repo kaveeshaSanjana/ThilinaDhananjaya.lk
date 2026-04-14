@@ -72,7 +72,7 @@ export default function LoginPage() {
               {/* Identifier */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Email, Phone, ID or Birth Certificate
+                  Email, Phone, or Student ID
                 </label>
                 <input
                   type="text"
