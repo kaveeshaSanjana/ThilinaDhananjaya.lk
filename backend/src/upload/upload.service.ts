@@ -6,6 +6,8 @@ import { extname } from 'path';
 
 type UploadFolder = 'classes' | 'recordings' | 'avatars' | 'general' | 'media';
 
+const DEFAULT_STORAGE_RESPONSE_BASE_URL = 'https://storage.thilinadhananjaya.lk';
+
 export interface UploadUrlResult {
   incomingUrl: string;
   responseUrl: string;
@@ -25,7 +27,7 @@ export class UploadService {
       this.config.get<string>('UPLOAD_RESPONSE_BASE_URL') ||
       this.config.get<string>('STORAGE_RESPONSE_BASE_URL') ||
       this.config.get<string>('ASSET_PUBLIC_BASE_URL') ||
-      '';
+      DEFAULT_STORAGE_RESPONSE_BASE_URL;
 
     this.responseBaseUrl = this.normalizePublicBaseUrl(configuredResponseBase);
 
@@ -60,7 +62,7 @@ export class UploadService {
     return withScheme.replace(/\/+$/, '');
   }
 
-  private getIncomingPrefix() {
+   private getIncomingPrefix() {
     return `https://${this.bucket}.s3.${this.region}.amazonaws.com/`;
   }
 
