@@ -26,10 +26,16 @@ interface MarkedStudent {
   instituteId?: string;
   barcodeId?: string;
   avatarUrl?: string;
+  sessionTime?: string;
+  sessionCode?: string;
 }
 
 function toDateStr(date: Date) {
   return date.toISOString().split('T')[0];
+}
+
+function toTimeStr(date: Date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function normalizeIdentifier(raw: string) {
@@ -113,6 +119,11 @@ export default function AdminMarkAttendanceExternalDevice() {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
   const [status, setStatus] = useState<AttStatus>('PRESENT');
+  const [entryMode, setEntryMode] = useState<'simple' | 'advanced'>('simple');
+  const [sessionTime, setSessionTime] = useState(toTimeStr(new Date()));
+  const [sessionCode, setSessionCode] = useState('');
+  const [sessionMessage, setSessionMessage] = useState('');
+  const [closingSession, setClosingSession] = useState(false);
   const [rfidInput, setRfidInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -141,9 +152,50 @@ export default function AdminMarkAttendanceExternalDevice() {
   }, [loading, submitting]);
 
   const lastMarkedStorageKey = useMemo(
-    () => (selectedClassId ? `mark-attendance:external:last:${selectedClassId}:${selectedDate}` : ''),
-    [selectedClassId, selectedDate],
+    () => {
+      if (!selectedClassId) return '';
+      const normalizedTime = sessionTime || '00:00';
+      return `mark-attendance:external:last:${selectedClassId}:${selectedDate}:${normalizedTime}`;
+    },
+    [selectedClassId, selectedDate, sessionTime],
   );
+
+  const normalizedSessionTime = useMemo(() => sessionTime || '00:00', [sessionTime]);
+  const trimmedSessionCode = useMemo(() => sessionCode.trim(), [sessionCode]);
+
+  const getEffectiveSessionCode = useCallback(() => {
+    if (trimmedSessionCode) return trimmedSessionCode;
+    return `S-${selectedDate}-${normalizedSessionTime.replace(':', '')}`;
+  }, [normalizedSessionTime, selectedDate, trimmedSessionCode]);
+
+  const handleCreateSession = useCallback(() => {
+    const code = getEffectiveSessionCode();
+    if (!trimmedSessionCode) setSessionCode(code);
+    setSessionMessage(`Session ready: ${code} (${selectedDate} ${normalizedSessionTime})`);
+  }, [getEffectiveSessionCode, normalizedSessionTime, selectedDate, trimmedSessionCode]);
+
+  const handleCloseSession = useCallback(async () => {
+    if (!selectedClassId) return;
+
+    setClosingSession(true);
+    setSessionMessage('');
+
+    try {
+      const code = getEffectiveSessionCode();
+      const response = await api.post(`/attendance/class-attendance/class/${selectedClassId}/close-session`, {
+        date: selectedDate,
+        sessionTime: normalizedSessionTime,
+        sessionCode: code || undefined,
+      });
+
+      const marked = Number(response?.data?.marked || 0);
+      setSessionMessage(`Session closed (${code}) - ${marked} absent student${marked === 1 ? '' : 's'} auto-marked.`);
+    } catch (closeError: any) {
+      setSessionMessage(closeError?.response?.data?.message || 'Failed to close session.');
+    } finally {
+      setClosingSession(false);
+    }
+  }, [getEffectiveSessionCode, normalizedSessionTime, selectedClassId, selectedDate]);
 
   useEffect(() => {
     const loadClasses = async () => {
@@ -225,7 +277,7 @@ export default function AdminMarkAttendanceExternalDevice() {
   useEffect(() => {
     if (!selectedClassId) return;
     focusRfidInput();
-  }, [focusRfidInput, selectedClassId, selectedDate, status]);
+  }, [focusRfidInput, selectedClassId, selectedDate, status, sessionTime, sessionCode]);
 
   useEffect(() => {
     const onWindowFocus = () => focusRfidInput();
@@ -247,6 +299,7 @@ export default function AdminMarkAttendanceExternalDevice() {
       focusRfidInput();
       return;
     }
+
     const matchedStudentByScan = findStudentByIdentifier(identifier, classStudents);
 
     if (identifier === lastMarkedId) {
@@ -264,6 +317,8 @@ export default function AdminMarkAttendanceExternalDevice() {
         identifier,
         date: selectedDate,
         status,
+        sessionTime: normalizedSessionTime,
+        sessionCode: getEffectiveSessionCode() || undefined,
         method: 'external_device',
       });
 
@@ -282,6 +337,8 @@ export default function AdminMarkAttendanceExternalDevice() {
         instituteId: instituteUserId,
         barcodeId,
         avatarUrl,
+        sessionTime: data?.sessionTime || normalizedSessionTime,
+        sessionCode: data?.sessionCode || getEffectiveSessionCode() || '',
       });
       setRfidInput('');
       focusRfidInput();
@@ -298,11 +355,25 @@ export default function AdminMarkAttendanceExternalDevice() {
       setSubmitting(false);
       focusRfidInput();
     }
-  }, [classStudents, focusRfidInput, lastMarkedId, rfidInput, selectedClassId, selectedDate, status, studentsById]);
+  }, [
+    classStudents,
+    focusRfidInput,
+    getEffectiveSessionCode,
+    lastMarkedId,
+    rfidInput,
+    selectedClassId,
+    selectedDate,
+    status,
+    studentsById,
+    normalizedSessionTime,
+  ]);
 
   const selectedClass = classes.find((item) => item.id === selectedClassId);
   const adminBase = getInstituteAdminPath(instituteId);
   const classesPath = getInstituteAdminPath(instituteId, '/classes');
+  const scannerPath = getInstituteAdminPath(instituteId, '/mark-attendance');
+  const classAttendancePath = getInstituteAdminPath(instituteId, '/class-attendance');
+  const showAdvancedFields = entryMode === 'advanced';
   const filteredStudents = useMemo(() => {
     const query = studentFilter.trim().toLowerCase();
     if (!query) return classStudents;
@@ -332,8 +403,20 @@ export default function AdminMarkAttendanceExternalDevice() {
           </Link>
           <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">Mark Attendance - External Device</h1>
           <Link
+            to={scannerPath}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
+          >
+            Scanner Page
+          </Link>
+          <Link
+            to={classAttendancePath}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold"
+          >
+            View Attendance
+          </Link>
+          <Link
             to={adminBase}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold"
           >
             Dashboard
           </Link>
@@ -378,6 +461,14 @@ export default function AdminMarkAttendanceExternalDevice() {
                   <p className="text-[11px] text-emerald-700/90 truncate">
                     User ID: <span className="font-mono">{markedStudent.userId || '-'}</span>
                   </p>
+                  <p className="text-[11px] text-emerald-700/90 truncate">
+                    Session Time: <span className="font-mono">{markedStudent.sessionTime || '-'}</span>
+                  </p>
+                  {markedStudent.sessionCode && (
+                    <p className="text-[11px] text-emerald-700/90 truncate">
+                      Session Code: <span className="font-mono">{markedStudent.sessionCode}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-emerald-700 font-semibold mt-2">Marked as {status}</p>
                 </div>
               ) : (
@@ -390,6 +481,38 @@ export default function AdminMarkAttendanceExternalDevice() {
             </div>
 
             <div className="p-5 md:p-7 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Entry Mode</p>
+                <div className="inline-flex overflow-hidden rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))]">
+                  <button
+                    onClick={() => {
+                      setEntryMode('simple');
+                      focusRfidInput();
+                    }}
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                      !showAdvancedFields
+                        ? 'bg-blue-600 text-white'
+                        : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                    }`}
+                  >
+                    Simple
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEntryMode('advanced');
+                      focusRfidInput();
+                    }}
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                      showAdvancedFields
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                    }`}
+                  >
+                    Advanced
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">RFID ID</label>
                 <input
@@ -427,7 +550,7 @@ export default function AdminMarkAttendanceExternalDevice() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Event</label>
+                <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Class</label>
                 <select
                   value={selectedClassId}
                   onChange={(event) => {
@@ -454,6 +577,60 @@ export default function AdminMarkAttendanceExternalDevice() {
                   className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
                 />
               </div>
+
+              {showAdvancedFields && (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Session Time</label>
+                    <input
+                      type="time"
+                      value={sessionTime}
+                      onChange={(event) => setSessionTime(event.target.value)}
+                      className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Session Code (Optional)</label>
+                    <input
+                      type="text"
+                      value={sessionCode}
+                      onChange={(event) => setSessionCode(event.target.value)}
+                      placeholder="e.g. WEEK-01"
+                      className="mt-1 w-full px-3 py-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCreateSession()}
+                      className="py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      Create Session
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCloseSession()}
+                      disabled={closingSession || !selectedClassId}
+                      className="py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    >
+                      {closingSession ? 'Closing...' : 'Close Session'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {!showAdvancedFields && (
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Session time is <span className="font-semibold text-[hsl(var(--foreground))]">{sessionTime || '00:00'}</span>.
+                  {' '}Switch to Advanced to set a custom session code and close the session.
+                </p>
+              )}
+
+              {sessionMessage && (
+                <p className="text-xs text-emerald-600">{sessionMessage}</p>
+              )}
 
               <button
                 onClick={() => void handleSubmit()}

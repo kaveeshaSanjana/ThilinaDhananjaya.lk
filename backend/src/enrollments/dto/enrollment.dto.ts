@@ -1,4 +1,7 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional, IsIn, IsNumber, Min, IsBoolean } from 'class-validator';
+
+export const ENROLLMENT_PAYMENT_TYPES = ['FULL', 'HALF', 'FREE'] as const;
 
 export class EnrollDto {
   @IsString()
@@ -8,6 +11,17 @@ export class EnrollDto {
   @IsString()
   @IsNotEmpty()
   classId: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(ENROLLMENT_PAYMENT_TYPES)
+  paymentType?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  customMonthlyFee?: number;
 }
 
 export class EnrollByPhoneDto {
@@ -18,4 +32,33 @@ export class EnrollByPhoneDto {
   @IsString()
   @IsNotEmpty()
   classId: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(ENROLLMENT_PAYMENT_TYPES)
+  paymentType?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  customMonthlyFee?: number;
+}
+
+export class UpdateEnrollmentPricingDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(ENROLLMENT_PAYMENT_TYPES)
+  paymentType?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  customMonthlyFee?: number;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  clearCustomFee?: boolean;
 }

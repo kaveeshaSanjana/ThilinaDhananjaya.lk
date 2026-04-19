@@ -1,5 +1,7 @@
-import { IsString, IsNotEmpty, IsInt, IsOptional, IsNumber, IsArray, IsEnum, IsDateString, ValidateNested, Min, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, IsIn, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
+
+const ATTENDANCE_TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export class MarkAttendanceDto {
   @IsString()
@@ -92,6 +94,20 @@ export class MarkClassAttendanceDto {
   @IsNotEmpty()
   date: string; // YYYY-MM-DD
 
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string; // e.g. cls002sub1
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
   @IsString()
   @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
   status: string;
@@ -128,6 +144,20 @@ export class BulkClassAttendanceDto {
   @IsNotEmpty()
   date: string; // YYYY-MM-DD
 
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BulkClassAttendanceItemDto)
@@ -153,6 +183,20 @@ export class MarkByBarcodeDto {
   @IsNotEmpty()
   date: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
   @IsString()
   @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
   status: string;
@@ -174,6 +218,20 @@ export class MarkByInstituteIdDto {
   @IsString()
   @IsNotEmpty()
   date: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
 
   @IsString()
   @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
@@ -197,6 +255,20 @@ export class MarkByPhoneDto {
   @IsNotEmpty()
   date: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
   @IsString()
   @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
   status: string;
@@ -204,4 +276,24 @@ export class MarkByPhoneDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class CloseClassAttendanceSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
 }

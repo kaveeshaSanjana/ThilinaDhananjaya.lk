@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto } from './dto/attendance.dto';
+import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto, CloseClassAttendanceSessionDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -336,8 +336,9 @@ export class AttendanceController {
   getClassAttendanceByDate(
     @Param('classId') classId: string,
     @Param('date') date: string,
+    @Query('sessionTime') sessionTime?: string,
   ) {
-    return this.attendanceService.getClassAttendanceByDate(classId, date);
+    return this.attendanceService.getClassAttendanceByDate(classId, date, sessionTime);
   }
 
   /** Admin: get class attendance for a month */
@@ -398,8 +399,9 @@ export class AttendanceController {
     @Param('classId') classId: string,
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('sessionTime') sessionTime?: string,
   ) {
-    return this.attendanceService.getClassAttendanceMonitor(classId, from, to);
+    return this.attendanceService.getClassAttendanceMonitor(classId, from, to, sessionTime);
   }
 
   /** Admin: get class-wise student payment statuses */
@@ -428,5 +430,17 @@ export class AttendanceController {
     @Request() req: any,
   ) {
     return this.attendanceService.closeClassDate(classId, date, req.user.sub);
+  }
+
+  /** Admin: close one specific class session — auto-marks absences for unmarked students */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/class/:classId/close-session')
+  closeClassSession(
+    @Param('classId') classId: string,
+    @Body() body: CloseClassAttendanceSessionDto,
+    @Request() req: any,
+  ) {
+    return this.attendanceService.closeClassSession(classId, body, req.user.sub);
   }
 }

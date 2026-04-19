@@ -662,26 +662,117 @@ export class AttendanceService {
     throw new NotFoundException(`Student not found for identifier: ${identifier}`);
   }
 
+  private normalizeClassAttendanceDate(date: string): Date {
+    const raw = (date || '').trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!match) {
+      throw new BadRequestException('Invalid class attendance date');
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const dateObj = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      dateObj.getUTCFullYear() !== year
+      || dateObj.getUTCMonth() !== month - 1
+      || dateObj.getUTCDate() !== day
+    ) {
+      throw new BadRequestException('Invalid class attendance date');
+    }
+
+    return dateObj;
+  }
+
+  private normalizeSessionTime(sessionTime?: string): string {
+    const raw = (sessionTime || '').trim();
+    if (!raw) return '00:00';
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(raw)) {
+      throw new BadRequestException('sessionTime must be in HH:mm format');
+    }
+    return raw;
+  }
+
+  private normalizeSessionCode(sessionCode?: string): string | null {
+    const raw = (sessionCode || '').trim();
+    return raw || null;
+  }
+
+  private resolveSessionAt(date: string, sessionTime: string, sessionAt?: string): Date | null {
+    const raw = (sessionAt || '').trim();
+    if (raw) {
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('Invalid sessionAt');
+      }
+      return parsed;
+    }
+
+    if (sessionTime === '00:00') return null;
+    const parsed = new Date(`${date}T${sessionTime}:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private normalizeSessionMeta(data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string }) {
+    const sessionTime = this.normalizeSessionTime(data.sessionTime);
+    const sessionCode = this.normalizeSessionCode(data.sessionCode);
+    const sessionAt = this.resolveSessionAt(data.date, sessionTime, data.sessionAt);
+    return { sessionTime, sessionCode, sessionAt };
+  }
+
+  private getIsoWeekLabel(dateIso: string): string {
+    const date = new Date(`${dateIso}T00:00:00Z`);
+    const day = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+
   // ─── Shared upsert helper for class attendance ────────────
 
   private async doUpsertClassAttendance(
     userId: string,
-    data: { classId: string; date: string; status: string; method?: string; note?: string; markedBy?: string },
+    data: {
+      classId: string;
+      date: string;
+      status: string;
+      sessionTime?: string;
+      sessionCode?: string;
+      sessionAt?: string;
+      method?: string;
+      note?: string;
+      markedBy?: string;
+    },
   ) {
+    const dateObj = this.normalizeClassAttendanceDate(data.date);
+    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
+
     return this.prisma.classAttendance.upsert({
       where: {
-        userId_classId_date: { userId, classId: data.classId, date: new Date(data.date) },
+        userId_classId_date_sessionTime: {
+          userId,
+          classId: data.classId,
+          date: dateObj,
+          sessionTime,
+        },
       },
       update: {
         status: data.status as ClassAttendanceStatus,
         method: data.method || undefined,
         note: data.note || undefined,
         markedBy: data.markedBy || undefined,
+        sessionCode: sessionCode || undefined,
+        sessionAt: sessionAt || undefined,
       },
       create: {
         userId,
         classId: data.classId,
-        date: new Date(data.date),
+        date: dateObj,
+        sessionTime,
+        sessionCode,
+        sessionAt,
         status: data.status as ClassAttendanceStatus,
         method: data.method || null,
         note: data.note || null,
@@ -694,7 +785,17 @@ export class AttendanceService {
   }
 
   /** Mark by barcodeId — single index lookup, fastest path (used by QR/barcode scanner) */
-  async markByBarcode(data: { classId: string; barcode: string; date: string; status: string; note?: string; markedBy?: string }) {
+  async markByBarcode(data: {
+    classId: string;
+    barcode: string;
+    date: string;
+    status: string;
+    sessionTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
+    note?: string;
+    markedBy?: string;
+  }) {
     const profile = await this.prisma.profile.findUnique({
       where: { barcodeId: data.barcode },
       select: { userId: true },
@@ -704,7 +805,17 @@ export class AttendanceService {
   }
 
   /** Mark by instituteId — single unique index lookup */
-  async markByInstituteId(data: { classId: string; instituteId: string; date: string; status: string; note?: string; markedBy?: string }) {
+  async markByInstituteId(data: {
+    classId: string;
+    instituteId: string;
+    date: string;
+    status: string;
+    sessionTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
+    note?: string;
+    markedBy?: string;
+  }) {
     const profile = await this.prisma.profile.findUnique({
       where: { instituteId: data.instituteId },
       select: { userId: true },
@@ -714,7 +825,17 @@ export class AttendanceService {
   }
 
   /** Mark by phone number — single index lookup */
-  async markByPhone(data: { classId: string; phone: string; date: string; status: string; note?: string; markedBy?: string }) {
+  async markByPhone(data: {
+    classId: string;
+    phone: string;
+    date: string;
+    status: string;
+    sessionTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
+    note?: string;
+    markedBy?: string;
+  }) {
     const profile = await this.prisma.profile.findFirst({
       where: { phone: data.phone },
       select: { userId: true },
@@ -732,6 +853,9 @@ export class AttendanceService {
     identifier: string;
     date: string;
     status: string;
+    sessionTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
     method?: string;
     note?: string;
     markedBy?: string;
@@ -747,19 +871,24 @@ export class AttendanceService {
     classId: string;
     date: string;
     records: Array<{ userId: string; status: string; note?: string }>;
+    sessionTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
     method?: string;
     markedBy?: string;
   }) {
-    const dateObj = new Date(data.date);
+    const dateObj = this.normalizeClassAttendanceDate(data.date);
+    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
 
     return this.prisma.$transaction(
       data.records.map((rec) =>
         this.prisma.classAttendance.upsert({
           where: {
-            userId_classId_date: {
+            userId_classId_date_sessionTime: {
               userId: rec.userId,
               classId: data.classId,
               date: dateObj,
+              sessionTime,
             },
           },
           update: {
@@ -767,11 +896,16 @@ export class AttendanceService {
             method: data.method || undefined,
             note: rec.note || undefined,
             markedBy: data.markedBy || undefined,
+            sessionCode: sessionCode || undefined,
+            sessionAt: sessionAt || undefined,
           },
           create: {
             userId: rec.userId,
             classId: data.classId,
             date: dateObj,
+            sessionTime,
+            sessionCode,
+            sessionAt,
             status: rec.status as ClassAttendanceStatus,
             method: data.method || 'bulk',
             note: rec.note || null,
@@ -785,16 +919,25 @@ export class AttendanceService {
   /**
    * Get class attendance for a specific date.
    */
-  async getClassAttendanceByDate(classId: string, date: string) {
+  async getClassAttendanceByDate(classId: string, date: string, sessionTime?: string) {
+    const where: any = {
+      classId,
+      date: this.normalizeClassAttendanceDate(date),
+    };
+
+    if (sessionTime && sessionTime.trim()) {
+      where.sessionTime = this.normalizeSessionTime(sessionTime);
+    }
+
     return this.prisma.classAttendance.findMany({
-      where: {
-        classId,
-        date: new Date(date),
-      },
+      where,
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true, phone: true } } } },
       },
-      orderBy: { user: { profile: { fullName: 'asc' } } },
+      orderBy: [
+        { sessionTime: 'asc' },
+        { user: { profile: { fullName: 'asc' } } },
+      ],
     });
   }
 
@@ -813,7 +956,11 @@ export class AttendanceService {
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true } } } },
       },
-      orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
+      orderBy: [
+        { date: 'asc' },
+        { sessionTime: 'asc' },
+        { user: { profile: { fullName: 'asc' } } },
+      ],
     });
   }
 
@@ -832,7 +979,11 @@ export class AttendanceService {
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true, barcodeId: true } } } },
       },
-      orderBy: [{ date: 'asc' }, { user: { profile: { fullName: 'asc' } } }],
+      orderBy: [
+        { date: 'asc' },
+        { sessionTime: 'asc' },
+        { user: { profile: { fullName: 'asc' } } },
+      ],
     });
   }
 
@@ -848,7 +999,7 @@ export class AttendanceService {
       include: {
         class: { select: { id: true, name: true } },
       },
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: 'desc' }, { sessionTime: 'desc' }],
     });
   }
 
@@ -856,34 +1007,98 @@ export class AttendanceService {
    * Monitor: attendance grid for a class in a date range.
    * Returns only dates that have at least one record, plus all enrolled students.
    */
-  async getClassAttendanceMonitor(classId: string, from: string, to: string) {
-    const startDate = new Date(from);
-    const endDate = new Date(to);
+  async getClassAttendanceMonitor(
+    classId: string,
+    from: string,
+    to: string,
+    sessionTime?: string,
+  ) {
+    const startDate = this.normalizeClassAttendanceDate(from);
+    const endDate = this.normalizeClassAttendanceDate(to);
+    const attendanceWhere: any = { classId, date: { gte: startDate, lte: endDate } };
+
+    if (sessionTime && sessionTime.trim()) {
+      attendanceWhere.sessionTime = this.normalizeSessionTime(sessionTime);
+    }
 
     const [enrollments, records] = await Promise.all([
       this.prisma.enrollment.findMany({
         where: { classId },
-        include: { user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } } },
+        include: {
+          user: {
+            include: {
+              profile: {
+                select: {
+                  fullName: true,
+                  instituteId: true,
+                  avatarUrl: true,
+                  barcodeId: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+        },
         orderBy: { user: { profile: { fullName: 'asc' } } },
       }),
       this.prisma.classAttendance.findMany({
-        where: { classId, date: { gte: startDate, lte: endDate } },
-        select: { userId: true, date: true, status: true },
-        orderBy: { date: 'asc' },
+        where: attendanceWhere,
+        select: {
+          userId: true,
+          date: true,
+          status: true,
+          sessionTime: true,
+          sessionCode: true,
+          sessionAt: true,
+        },
+        orderBy: [{ date: 'asc' }, { sessionTime: 'asc' }],
       }),
     ]);
 
-    // Unique dates that have at least one record
     const dateSet = new Set<string>();
-    const grid: Record<string, Record<string, string>> = {}; // userId -> { dateStr -> status }
+    const slotMap = new Map<string, {
+      key: string;
+      date: string;
+      sessionTime: string;
+      sessionCode: string | null;
+      sessionAt: string | null;
+      week: string;
+      label: string;
+    }>();
+    const grid: Record<string, Record<string, string>> = {};
+
     for (const rec of records) {
       const ds = rec.date.toISOString().split('T')[0];
       dateSet.add(ds);
+
+      const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(rec.sessionTime || '') ? rec.sessionTime : '00:00';
+      const sessionCode = (rec.sessionCode || '').trim() || null;
+      const slotKey = `${ds}|${sessionTime}`;
+
+      if (!slotMap.has(slotKey)) {
+        const week = this.getIsoWeekLabel(ds);
+        const displayCore = sessionCode || (sessionTime === '00:00' ? ds : sessionTime);
+        const timeSuffix = sessionTime === '00:00' ? '' : ` ${sessionTime}`;
+        slotMap.set(slotKey, {
+          key: slotKey,
+          date: ds,
+          sessionTime,
+          sessionCode,
+          sessionAt: rec.sessionAt ? rec.sessionAt.toISOString() : null,
+          week,
+          label: `${displayCore} (${ds}${timeSuffix})`,
+        });
+      }
+
       if (!grid[rec.userId]) grid[rec.userId] = {};
-      grid[rec.userId][ds] = rec.status;
+      grid[rec.userId][slotKey] = rec.status;
     }
 
     const dates = Array.from(dateSet).sort();
+    const slots = Array.from(slotMap.values()).sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.sessionTime.localeCompare(b.sessionTime);
+    });
 
     const students = enrollments.map(e => {
       const statuses = grid[e.userId] || {};
@@ -891,21 +1106,23 @@ export class AttendanceService {
       let late = 0;
       let absent = 0;
       let excused = 0;
-      for (const d of dates) {
-        const s = statuses[d];
+      for (const slot of slots) {
+        const s = statuses[slot.key];
         if (s === 'PRESENT') present++;
         else if (s === 'LATE') late++;
         else if (s === 'ABSENT') absent++;
         else if (s === 'EXCUSED') excused++;
       }
       const attended = present + late;
-      const pct = dates.length > 0 ? Math.round((attended / dates.length) * 100) : 0;
+      const pct = slots.length > 0 ? Math.round((attended / slots.length) * 100) : 0;
 
       return {
         userId: e.userId,
         fullName: e.user?.profile?.fullName || e.user?.email || '—',
         instituteId: e.user?.profile?.instituteId || '',
         avatarUrl: e.user?.profile?.avatarUrl || null,
+        phone: e.user?.profile?.phone || null,
+        barcodeId: e.user?.profile?.barcodeId || null,
         statuses,
         present,
         late,
@@ -915,7 +1132,7 @@ export class AttendanceService {
       };
     });
 
-    return { dates, students };
+    return { dates, slots, students };
   }
 
   /**
@@ -944,7 +1161,7 @@ export class AttendanceService {
    * date as ABSENT. Returns the list of students marked absent.
    */
   async closeClassDate(classId: string, date: string, markedBy: string) {
-    const dateObj = new Date(date);
+    const dateObj = this.normalizeClassAttendanceDate(date);
 
     const [enrollments, existing] = await Promise.all([
       this.prisma.enrollment.findMany({
@@ -971,6 +1188,8 @@ export class AttendanceService {
         userId,
         classId,
         date: dateObj,
+        sessionTime: '00:00',
+        sessionCode: 'AUTO_CLOSE',
         status: 'ABSENT' as ClassAttendanceStatus,
         method: 'auto-close',
         markedBy,
@@ -988,6 +1207,103 @@ export class AttendanceService {
     });
 
     return { marked: absentUserIds.length, absentStudents };
+  }
+
+  /**
+   * Close a specific class attendance session (date + session time).
+   * Marks ABSENT for enrolled students who have no record in this session.
+   */
+  async closeClassSession(
+    classId: string,
+    data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string },
+    markedBy: string,
+  ) {
+    const dateObj = this.normalizeClassAttendanceDate(data.date);
+    const sessionTime = this.normalizeSessionTime(data.sessionTime);
+    const sessionCode = this.normalizeSessionCode(data.sessionCode);
+    const sessionAt = this.resolveSessionAt(data.date, sessionTime, data.sessionAt);
+
+    const [enrollments, existing] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { classId },
+        select: { userId: true },
+      }),
+      this.prisma.classAttendance.findMany({
+        where: {
+          classId,
+          date: dateObj,
+          sessionTime,
+        },
+        select: { userId: true },
+      }),
+    ]);
+
+    const markedUserIds = new Set(existing.map((row) => row.userId));
+    const absentUserIds = enrollments
+      .map((row) => row.userId)
+      .filter((userId) => !markedUserIds.has(userId));
+
+    if (absentUserIds.length === 0) {
+      return {
+        marked: 0,
+        session: {
+          date: data.date,
+          sessionTime,
+          sessionCode: sessionCode || null,
+        },
+        absentStudents: [],
+      };
+    }
+
+    await this.prisma.classAttendance.createMany({
+      data: absentUserIds.map((userId) => ({
+        userId,
+        classId,
+        date: dateObj,
+        sessionTime,
+        sessionCode: sessionCode || 'AUTO_CLOSE',
+        sessionAt: sessionAt || null,
+        status: 'ABSENT' as ClassAttendanceStatus,
+        method: 'auto-close-session',
+        markedBy,
+      })),
+      skipDuplicates: true,
+    });
+
+    const absentStudents = await this.prisma.classAttendance.findMany({
+      where: {
+        classId,
+        date: dateObj,
+        sessionTime,
+        userId: { in: absentUserIds },
+      },
+      include: {
+        user: {
+          include: {
+            profile: {
+              select: {
+                fullName: true,
+                instituteId: true,
+                avatarUrl: true,
+                phone: true,
+                barcodeId: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { user: { profile: { fullName: 'asc' } } },
+    });
+
+    return {
+      marked: absentUserIds.length,
+      session: {
+        date: data.date,
+        sessionTime,
+        sessionCode: sessionCode || null,
+      },
+      absentStudents,
+    };
   }
 
   /**
@@ -1159,6 +1475,9 @@ export class AttendanceService {
       entry.records.push({
         id: rec.id,
         date: rec.date,
+        sessionTime: rec.sessionTime,
+        sessionCode: rec.sessionCode,
+        sessionAt: rec.sessionAt,
         status: rec.status,
         method: rec.method,
         note: rec.note,

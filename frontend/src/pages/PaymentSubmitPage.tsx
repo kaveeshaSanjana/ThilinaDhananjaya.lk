@@ -8,7 +8,7 @@ export default function PaymentSubmitPage() {
   const { instituteId } = useParams();
   const [classes, setClasses] = useState<any[]>([]);
   const [months, setMonths] = useState<any[]>([]);
-  const [form, setForm] = useState({ classId: '', monthId: '', slipImage: '', paymentMethod: '', paymentPortion: '' });
+  const [form, setForm] = useState({ classId: '', monthId: '', slipImage: '', paymentMethod: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -50,7 +50,6 @@ export default function PaymentSubmitPage() {
         type: 'MONTHLY',
         slipUrl: form.slipImage,
         paymentMethod: form.paymentMethod || undefined,
-        paymentPortion: form.paymentPortion || undefined,
       });
       setSuccess(true);
       setTimeout(() => navigate(getInstitutePath(instituteId, '/payments/my')), 2000);
@@ -125,26 +124,9 @@ export default function PaymentSubmitPage() {
               ))}
             </div>
             <input type="text" required value={form.paymentMethod} onChange={() => {}} className="sr-only" tabIndex={-1} aria-hidden="true" />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">Payment Amount <span className="text-red-500">*</span></label>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { value: 'FULL', label: 'Full Payment', desc: 'Pay the full monthly fee' },
-                { value: 'HALF', label: 'Half Payment', desc: 'Pay half of the monthly fee' },
-              ].map(opt => (
-                <button key={opt.value} type="button" onClick={() => update('paymentPortion', opt.value)}
-                  className={`flex flex-col items-start gap-1 p-3.5 rounded-xl border-2 transition text-left ${
-                    form.paymentPortion === opt.value
-                      ? 'border-emerald-500 bg-emerald-50'
-                      : 'border-[hsl(var(--border))] hover:border-emerald-300 bg-[hsl(var(--card))]'
-                  }`}>
-                  <span className={`text-sm font-semibold ${form.paymentPortion === opt.value ? 'text-emerald-700' : 'text-[hsl(var(--foreground))]'}`}>{opt.label}</span>
-                  <span className="text-xs text-[hsl(var(--muted-foreground))]">{opt.desc}</span>
-                </button>
-              ))}
-            </div>
-            <input type="text" required value={form.paymentPortion} onChange={() => {}} className="sr-only" tabIndex={-1} aria-hidden="true" />
+            <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+              Payment type (Full, Half, or Free) is assigned by admin during verification.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">Payment slip</label>

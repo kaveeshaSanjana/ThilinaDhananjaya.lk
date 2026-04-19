@@ -17,11 +17,24 @@ interface MonitorStudent {
   fullName: string;
   instituteId: string;
   avatarUrl: string | null;
+  barcodeId: string | null;
+  phone: string | null;
   statuses: Record<string, AttStatus>;
+}
+
+interface MonitorSlot {
+  key: string;
+  date: string;
+  sessionTime: string;
+  sessionCode: string | null;
+  sessionAt: string | null;
+  week: string;
+  label: string;
 }
 
 interface MonitorResponse {
   dates: string[];
+  slots: MonitorSlot[];
   students: MonitorStudent[];
 }
 
@@ -96,6 +109,15 @@ function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function getIsoWeekLabel(dateText: string) {
+  const date = new Date(`${dateText}T00:00:00Z`);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
 function asIsoDate(value: unknown): string {
   if (typeof value !== 'string') return '';
   const trimmed = value.trim();
@@ -127,8 +149,57 @@ function normalizeMonitorResponse(payload: unknown): MonitorResponse {
     .map((item) => asIsoDate(item))
     .filter((item): item is string => Boolean(item));
 
+  const rawSlots = Array.isArray(raw.slots) ? raw.slots : [];
+  const slotsFromPayload = rawSlots
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const key = typeof row.key === 'string' ? row.key.trim() : '';
+      const date = asIsoDate(row.date);
+      if (!key || !date) return null;
+
+      const sessionTime = typeof row.sessionTime === 'string' && row.sessionTime.trim()
+        ? row.sessionTime.trim()
+        : '00:00';
+      const sessionCode = typeof row.sessionCode === 'string' && row.sessionCode.trim()
+        ? row.sessionCode.trim()
+        : null;
+      const sessionAt = typeof row.sessionAt === 'string' && row.sessionAt.trim()
+        ? row.sessionAt.trim()
+        : null;
+      const week = typeof row.week === 'string' && row.week.trim()
+        ? row.week.trim()
+        : getIsoWeekLabel(date);
+      const label = typeof row.label === 'string' && row.label.trim()
+        ? row.label.trim()
+        : `${sessionCode || `${date}${sessionTime !== '00:00' ? ` ${sessionTime}` : ''}`}`;
+
+      return {
+        key,
+        date,
+        sessionTime,
+        sessionCode,
+        sessionAt,
+        week,
+        label,
+      } satisfies MonitorSlot;
+    })
+    .filter((item): item is MonitorSlot => Boolean(item));
+
+  const fallbackSlots = Array.from(new Set(dates)).sort().map((date) => ({
+    key: date,
+    date,
+    sessionTime: '00:00',
+    sessionCode: null,
+    sessionAt: null,
+    week: getIsoWeekLabel(date),
+    label: date,
+  } satisfies MonitorSlot));
+
+  const slots = slotsFromPayload.length > 0 ? slotsFromPayload : fallbackSlots;
+
   const rawStudents = Array.isArray(raw.students) ? raw.students : [];
-  const students: MonitorStudent[] = rawStudents
+  const students = rawStudents
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
       const row = item as Record<string, unknown>;
@@ -136,6 +207,8 @@ function normalizeMonitorResponse(payload: unknown): MonitorResponse {
       const fullName = typeof row.fullName === 'string' ? row.fullName.trim() : '';
       const instituteId = typeof row.instituteId === 'string' ? row.instituteId.trim() : '';
       const avatarUrl = typeof row.avatarUrl === 'string' ? row.avatarUrl.trim() : '';
+      const barcodeId = typeof row.barcodeId === 'string' ? row.barcodeId.trim() : '';
+      const phone = typeof row.phone === 'string' ? row.phone.trim() : '';
 
       if (!userId) return null;
 
@@ -144,10 +217,10 @@ function normalizeMonitorResponse(payload: unknown): MonitorResponse {
         : {};
 
       const statuses: Record<string, AttStatus> = {};
-      Object.entries(rawStatuses).forEach(([dateKey, statusValue]) => {
-        const isoDate = asIsoDate(dateKey);
+      Object.entries(rawStatuses).forEach(([slotKey, statusValue]) => {
+        const normalizedKey = typeof slotKey === 'string' ? slotKey.trim() : '';
         const status = normalizeStatus(statusValue);
-        if (isoDate && status) statuses[isoDate] = status;
+        if (normalizedKey && status) statuses[normalizedKey] = status;
       });
 
       return {
@@ -155,6 +228,8 @@ function normalizeMonitorResponse(payload: unknown): MonitorResponse {
         fullName: fullName || userId,
         instituteId,
         avatarUrl: avatarUrl || null,
+        barcodeId: barcodeId || null,
+        phone: phone || null,
         statuses,
       } satisfies MonitorStudent;
     })
@@ -162,31 +237,32 @@ function normalizeMonitorResponse(payload: unknown): MonitorResponse {
 
   return {
     dates: Array.from(new Set(dates)).sort(),
+    slots,
     students,
   };
 }
 
-function statusForDate(student: MonitorStudent, date: string): CellStatus {
-  const status = student.statuses[date];
+function statusForSlot(student: MonitorStudent, slotKey: string): CellStatus {
+  const status = student.statuses[slotKey];
   return status || 'NOT_MARKED';
 }
 
-function summarizeStudent(student: MonitorStudent, selectedDates: string[]) {
+function summarizeStudent(student: MonitorStudent, selectedSlots: MonitorSlot[]) {
   let present = 0;
   let late = 0;
   let absent = 0;
   let excused = 0;
 
-  selectedDates.forEach((date) => {
-    const status = statusForDate(student, date);
+  selectedSlots.forEach((slot) => {
+    const status = statusForSlot(student, slot.key);
     if (status === 'PRESENT') present += 1;
     else if (status === 'LATE') late += 1;
     else if (status === 'ABSENT') absent += 1;
     else if (status === 'EXCUSED') excused += 1;
   });
 
-  const percentage = selectedDates.length > 0
-    ? Math.round(((present + late) / selectedDates.length) * 100)
+  const percentage = selectedSlots.length > 0
+    ? Math.round(((present + late) / selectedSlots.length) * 100)
     : 0;
 
   return {
@@ -202,11 +278,16 @@ function csvEscape(value: string | number) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
-function formatDateHeader(dateText: string) {
-  const date = new Date(`${dateText}T00:00:00`);
+function formatSlotHeader(slot: MonitorSlot) {
+  const date = new Date(`${slot.date}T00:00:00`);
+  const sessionLabel = slot.sessionCode || slot.date;
+  const timeLabel = slot.sessionTime !== '00:00' ? slot.sessionTime : '';
   return {
     day: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
     week: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+    session: sessionLabel,
+    time: timeLabel,
+    weekTag: slot.week,
   };
 }
 
@@ -310,10 +391,13 @@ export default function AdminPhysicalAttendanceView() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [selectedClassId, setSelectedClassId] = useState('');
 
   const [calendarYear, setCalendarYear] = useState(now.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth());
+  const [rangeFrom, setRangeFrom] = useState('');
+  const [rangeTo, setRangeTo] = useState('');
 
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -374,6 +458,8 @@ export default function AdminPhysicalAttendanceView() {
     if (!selectedClassId) {
       setAvailableDates([]);
       setSelectedDates([]);
+      setRangeFrom('');
+      setRangeTo('');
       setMonitorData(null);
       setPreviewLoaded(false);
       setPreviewError('');
@@ -381,13 +467,32 @@ export default function AdminPhysicalAttendanceView() {
       return;
     }
 
-    let active = true;
     setSelectedDates([]);
+    setRangeFrom('');
+    setRangeTo('');
     setMonitorData(null);
     setPreviewLoaded(false);
     setPreviewError('');
     setSelectedError('');
     setTableFullscreen(false);
+  }, [selectedClassId]);
+
+  const isAdvancedMode = viewMode === 'advanced';
+
+  useEffect(() => {
+    if (!selectedClassId) {
+      setAvailableDates([]);
+      setSelectedDates([]);
+      setRangeFrom('');
+      setRangeTo('');
+      return;
+    }
+
+    let active = true;
+    setMonitorData(null);
+    setPreviewLoaded(false);
+    setPreviewError('');
+    setSelectedError('');
 
     api.get(`/attendance/class-attendance/class/${selectedClassId}/dates`)
       .then((response) => {
@@ -399,6 +504,15 @@ export default function AdminPhysicalAttendanceView() {
 
         const uniqueSorted = Array.from(new Set(rows)).sort();
         setAvailableDates(uniqueSorted);
+        setSelectedDates((prev) => prev.filter((item) => uniqueSorted.includes(item)));
+
+        if (uniqueSorted.length > 0) {
+          setRangeFrom((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[0]));
+          setRangeTo((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[uniqueSorted.length - 1]));
+        } else {
+          setRangeFrom('');
+          setRangeTo('');
+        }
 
         if (uniqueSorted.length > 0) {
           const lastDate = uniqueSorted[uniqueSorted.length - 1];
@@ -412,6 +526,9 @@ export default function AdminPhysicalAttendanceView() {
       .catch(() => {
         if (!active) return;
         setAvailableDates([]);
+        setSelectedDates([]);
+        setRangeFrom('');
+        setRangeTo('');
       });
 
     return () => {
@@ -422,6 +539,27 @@ export default function AdminPhysicalAttendanceView() {
   const selectedDateSet = useMemo(() => new Set(selectedDates), [selectedDates]);
   const availableDateSet = useMemo(() => new Set(availableDates), [availableDates]);
   const selectedDatesSorted = useMemo(() => [...selectedDates].sort(), [selectedDates]);
+
+  const previewDateCount = useMemo(() => {
+    if (selectedDatesSorted.length > 0) return selectedDatesSorted.length;
+    if (rangeFrom && rangeTo) {
+      const start = rangeFrom <= rangeTo ? rangeFrom : rangeTo;
+      const end = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
+      return availableDates.filter((date) => date >= start && date <= end).length;
+    }
+    return availableDates.length;
+  }, [availableDates, rangeFrom, rangeTo, selectedDatesSorted]);
+
+  const canLoadPreview = useMemo(() => {
+    if (!selectedClassId) return false;
+    if (selectedDatesSorted.length > 0) return true;
+    if (rangeFrom && rangeTo) {
+      const start = rangeFrom <= rangeTo ? rangeFrom : rangeTo;
+      const end = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
+      return availableDates.some((date) => date >= start && date <= end);
+    }
+    return availableDates.length > 0;
+  }, [availableDates, rangeFrom, rangeTo, selectedClassId, selectedDatesSorted]);
 
   const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-`;
   const monthMarkedDates = useMemo(
@@ -459,14 +597,76 @@ export default function AdminPhysicalAttendanceView() {
     setMonitorData(null);
   }, []);
 
+  const applyDateRangeSelection = useCallback((append: boolean) => {
+    if (!rangeFrom || !rangeTo) {
+      setSelectedError('Select both From and To dates for range selection.');
+      return;
+    }
+
+    const start = rangeFrom <= rangeTo ? rangeFrom : rangeTo;
+    const end = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
+    const inRange = availableDates.filter((date) => date >= start && date <= end);
+
+    if (inRange.length === 0) {
+      setSelectedError('No marked dates found in the selected range.');
+      return;
+    }
+
+    setSelectedDates((prev) => (append
+      ? Array.from(new Set([...prev, ...inRange])).sort()
+      : inRange));
+    setPreviewLoaded(false);
+    setPreviewError('');
+    setSelectedError('');
+  }, [availableDates, rangeFrom, rangeTo]);
+
   const loadPreview = useCallback(async () => {
     if (!selectedClassId) return;
 
-    if (selectedDatesSorted.length === 0) {
-      setSelectedError('Select at least one date from the calendar.');
+    const requestSelection = (() => {
+      if (selectedDatesSorted.length > 0) {
+        return {
+          from: selectedDatesSorted[0],
+          to: selectedDatesSorted[selectedDatesSorted.length - 1],
+          pickedDates: selectedDatesSorted,
+        };
+      }
+
+      if (rangeFrom && rangeTo) {
+        const start = rangeFrom <= rangeTo ? rangeFrom : rangeTo;
+        const end = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
+        const inRange = availableDates.filter((date) => date >= start && date <= end);
+        if (inRange.length > 0) {
+          return {
+            from: inRange[0],
+            to: inRange[inRange.length - 1],
+            pickedDates: inRange,
+          };
+        }
+      }
+
+      if (availableDates.length > 0) {
+        return {
+          from: availableDates[0],
+          to: availableDates[availableDates.length - 1],
+          pickedDates: availableDates,
+        };
+      }
+
+      return null;
+    })();
+
+    if (!requestSelection) {
+      setSelectedError(isAdvancedMode
+        ? 'Select at least one date from the calendar.'
+        : 'No marked dates found for the selected range.');
       setPreviewLoaded(false);
       setMonitorData(null);
       return;
+    }
+
+    if (selectedDatesSorted.length === 0) {
+      setSelectedDates(requestSelection.pickedDates);
     }
 
     setLoadingPreview(true);
@@ -474,11 +674,11 @@ export default function AdminPhysicalAttendanceView() {
     setSelectedError('');
 
     try {
-      const from = selectedDatesSorted[0];
-      const to = selectedDatesSorted[selectedDatesSorted.length - 1];
-
       const response = await api.get(`/attendance/class-attendance/class/${selectedClassId}/monitor`, {
-        params: { from, to },
+        params: {
+          from: requestSelection.from,
+          to: requestSelection.to,
+        },
       });
 
       setMonitorData(normalizeMonitorResponse(response.data));
@@ -498,7 +698,14 @@ export default function AdminPhysicalAttendanceView() {
     } finally {
       setLoadingPreview(false);
     }
-  }, [selectedClassId, selectedDatesSorted]);
+  }, [
+    availableDates,
+    isAdvancedMode,
+    rangeFrom,
+    rangeTo,
+    selectedClassId,
+    selectedDatesSorted,
+  ]);
 
   const selectedClass = useMemo(
     () => classes.find((item) => item.id === selectedClassId) || null,
@@ -529,6 +736,10 @@ export default function AdminPhysicalAttendanceView() {
   }, [tableFullscreen]);
 
   const students = monitorData?.students || [];
+  const selectedSlots = useMemo(() => {
+    const allSlots = monitorData?.slots || [];
+    return allSlots.filter((slot) => selectedDateSet.size === 0 || selectedDateSet.has(slot.date));
+  }, [monitorData?.slots, selectedDateSet]);
 
   const filteredStudents = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -548,8 +759,8 @@ export default function AdminPhysicalAttendanceView() {
     let notMarked = 0;
 
     filteredStudents.forEach((student) => {
-      selectedDatesSorted.forEach((date) => {
-        const status = statusForDate(student, date);
+      selectedSlots.forEach((slot) => {
+        const status = statusForSlot(student, slot.key);
         if (status === 'PRESENT') present += 1;
         else if (status === 'LATE') late += 1;
         else if (status === 'ABSENT') absent += 1;
@@ -558,7 +769,7 @@ export default function AdminPhysicalAttendanceView() {
       });
     });
 
-    const totalCells = filteredStudents.length * selectedDatesSorted.length;
+    const totalCells = filteredStudents.length * selectedSlots.length;
 
     return {
       present,
@@ -568,16 +779,22 @@ export default function AdminPhysicalAttendanceView() {
       notMarked,
       totalCells,
     };
-  }, [filteredStudents, selectedDatesSorted]);
+  }, [filteredStudents, selectedSlots]);
 
   const handleExportCsv = useCallback(() => {
-    if (selectedDatesSorted.length === 0 || filteredStudents.length === 0) return;
+    if (selectedSlots.length === 0 || filteredStudents.length === 0) return;
+
+    const slotHeaders = selectedSlots.map((slot) => {
+      const sessionLabel = slot.sessionCode || slot.date;
+      const timeLabel = slot.sessionTime !== '00:00' ? ` ${slot.sessionTime}` : '';
+      return `${slot.week} | ${sessionLabel}${timeLabel ? ` (${slot.date}${timeLabel})` : ''}`;
+    });
 
     const headers = [
       'Student Name',
       'Institute ID',
       'User ID',
-      ...selectedDatesSorted,
+      ...slotHeaders,
       'Present',
       'Late',
       'Absent',
@@ -595,9 +812,9 @@ export default function AdminPhysicalAttendanceView() {
     ];
 
     const rows = filteredStudents.map((student) => {
-      const summary = summarizeStudent(student, selectedDatesSorted);
-      const statuses = selectedDatesSorted.map((date) => {
-        const status = statusForDate(student, date);
+      const summary = summarizeStudent(student, selectedSlots);
+      const statuses = selectedSlots.map((slot) => {
+        const status = statusForSlot(student, slot.key);
         return toCsvStatusLabel(status);
       });
 
@@ -621,23 +838,24 @@ export default function AdminPhysicalAttendanceView() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
-    const from = selectedDatesSorted[0];
-    const to = selectedDatesSorted[selectedDatesSorted.length - 1];
+    const from = selectedDatesSorted[0] || selectedSlots[0]?.date || 'from';
+    const to = selectedDatesSorted[selectedDatesSorted.length - 1] || selectedSlots[selectedSlots.length - 1]?.date || 'to';
     const classSlug = (selectedClass?.name || 'class')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+    const sessionSlug = selectedSlots.length > 0 ? `sessions-${selectedSlots.length}` : 'sessions';
 
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `physical-attendance-${classSlug || 'class'}-${from}-to-${to}.csv`;
+    anchor.download = `physical-attendance-${classSlug || 'class'}-${sessionSlug}-${from}-to-${to}.csv`;
     anchor.click();
 
     URL.revokeObjectURL(url);
-  }, [filteredStudents, selectedClass?.name, selectedDatesSorted]);
+  }, [filteredStudents, selectedClass?.name, selectedDatesSorted, selectedSlots]);
 
   const handleExportXlsx = useCallback(async () => {
-    if (selectedDatesSorted.length === 0 || filteredStudents.length === 0) return;
+    if (selectedSlots.length === 0 || filteredStudents.length === 0) return;
 
     try {
       const ExcelJSImport = await import('exceljs');
@@ -646,11 +864,16 @@ export default function AdminPhysicalAttendanceView() {
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet('Physical Attendance');
+      const slotHeaders = selectedSlots.map((slot) => {
+        const sessionLabel = slot.sessionCode || slot.date;
+        const timeLabel = slot.sessionTime !== '00:00' ? ` ${slot.sessionTime}` : '';
+        return `${slot.week}\n${sessionLabel}${timeLabel ? ` (${slot.date}${timeLabel})` : ''}`;
+      });
       const headers = [
         'Student Name',
         'Institute ID',
         'User ID',
-        ...selectedDatesSorted,
+        ...slotHeaders,
         'Present',
         'Late',
         'Absent',
@@ -672,11 +895,11 @@ export default function AdminPhysicalAttendanceView() {
       });
 
       const statusColStart = 4;
-      const summaryColStart = statusColStart + selectedDatesSorted.length;
+      const summaryColStart = statusColStart + selectedSlots.length;
 
       filteredStudents.forEach((student) => {
-        const summary = summarizeStudent(student, selectedDatesSorted);
-        const statusValues = selectedDatesSorted.map((date) => statusForDate(student, date));
+        const summary = summarizeStudent(student, selectedSlots);
+        const statusValues = selectedSlots.map((slot) => statusForSlot(student, slot.key));
 
         const rowValues: Array<string | number> = [
           student.fullName,
@@ -777,16 +1000,17 @@ export default function AdminPhysicalAttendanceView() {
       });
 
       const url = URL.createObjectURL(blob);
-      const from = selectedDatesSorted[0];
-      const to = selectedDatesSorted[selectedDatesSorted.length - 1];
+      const from = selectedDatesSorted[0] || selectedSlots[0]?.date || 'from';
+      const to = selectedDatesSorted[selectedDatesSorted.length - 1] || selectedSlots[selectedSlots.length - 1]?.date || 'to';
       const classSlug = (selectedClass?.name || 'class')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
+      const sessionSlug = selectedSlots.length > 0 ? `sessions-${selectedSlots.length}` : 'sessions';
 
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `physical-attendance-${classSlug || 'class'}-${from}-to-${to}.xlsx`;
+      anchor.download = `physical-attendance-${classSlug || 'class'}-${sessionSlug}-${from}-to-${to}.xlsx`;
       anchor.click();
 
       URL.revokeObjectURL(url);
@@ -794,7 +1018,7 @@ export default function AdminPhysicalAttendanceView() {
     } catch {
       setPreviewError('Failed to export XLSX file. Please try again.');
     }
-  }, [filteredStudents, selectedClass?.name, selectedDatesSorted]);
+  }, [filteredStudents, selectedClass?.name, selectedDatesSorted, selectedSlots]);
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))] px-3 py-4 md:px-6 md:py-6">
@@ -807,8 +1031,30 @@ export default function AdminPhysicalAttendanceView() {
             Dashboard
           </Link>
           <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">View Physical Attendance</h1>
-          <p className="text-xs text-[hsl(var(--muted-foreground))]">Select dates, preview statuses, export CSV or colored XLSX</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">Review and export attendance only. Use mark pages to record attendance.</p>
           <div className="ml-auto flex items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))]">
+              <button
+                onClick={() => setViewMode('simple')}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                  !isAdvancedMode
+                    ? 'bg-blue-600 text-white'
+                    : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                }`}
+              >
+                Simple
+              </button>
+              <button
+                onClick={() => setViewMode('advanced')}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                  isAdvancedMode
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                }`}
+              >
+                Advanced
+              </button>
+            </div>
             <Link
               to={markAttendancePath}
               className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
@@ -845,28 +1091,83 @@ export default function AdminPhysicalAttendanceView() {
                 )}
               </select>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={selectAllMonthMarkedDates}
-                  disabled={!selectedClassId}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
-                >
-                  Select Marked (Month)
-                </button>
-                <button
-                  onClick={clearSelectedDates}
-                  disabled={selectedDates.length === 0}
-                  className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] disabled:opacity-50"
-                >
-                  Clear Selection
-                </button>
+              <div className="mt-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Sessions</p>
+                <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">
+                  Load a class, choose dates, then preview all attendance sessions recorded in that range.
+                </p>
+              </div>
+
+              {isAdvancedMode && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={selectAllMonthMarkedDates}
+                    disabled={!selectedClassId}
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                  >
+                    Select Marked (Month)
+                  </button>
+                  <button
+                    onClick={clearSelectedDates}
+                    disabled={selectedDates.length === 0}
+                    className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] disabled:opacity-50"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Date Range</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                    From
+                    <input
+                      type="date"
+                      value={rangeFrom}
+                      onChange={(event) => setRangeFrom(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2.5 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                    To
+                    <input
+                      type="date"
+                      value={rangeTo}
+                      onChange={(event) => setRangeTo(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2.5 py-1.5 text-xs"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => applyDateRangeSelection(false)}
+                    disabled={availableDates.length === 0}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"
+                  >
+                    {isAdvancedMode ? 'Select Range' : 'Use This Range'}
+                  </button>
+                  {isAdvancedMode && (
+                    <button
+                      onClick={() => applyDateRangeSelection(true)}
+                      disabled={availableDates.length === 0}
+                      className="rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 disabled:opacity-50"
+                    >
+                      Add Range
+                    </button>
+                  )}
+                </div>
               </div>
 
               <p className="mt-3 text-[11px] text-[hsl(var(--muted-foreground))]">
                 Marked days in this month: <span className="font-semibold text-[hsl(var(--foreground))]">{monthMarkedDates.length}</span>
               </p>
               <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
-                Selected dates: <span className="font-semibold text-[hsl(var(--foreground))]">{selectedDatesSorted.length}</span>
+                {isAdvancedMode ? 'Selected dates:' : 'Dates in active range:'}{' '}
+                <span className="font-semibold text-[hsl(var(--foreground))]">
+                  {isAdvancedMode ? selectedDatesSorted.length : previewDateCount}
+                </span>
               </p>
 
               {selectedError && (
@@ -874,49 +1175,53 @@ export default function AdminPhysicalAttendanceView() {
               )}
             </div>
 
-            <MultiSelectCalendar
-              year={calendarYear}
-              month={calendarMonth}
-              selectedDateSet={selectedDateSet}
-              availableDateSet={availableDateSet}
-              onToggleDate={toggleDate}
-              onPrevMonth={() => {
-                if (calendarMonth === 0) {
-                  setCalendarYear((year) => year - 1);
-                  setCalendarMonth(11);
-                  return;
-                }
-                setCalendarMonth((month) => month - 1);
-              }}
-              onNextMonth={() => {
-                if (calendarMonth === 11) {
-                  setCalendarYear((year) => year + 1);
-                  setCalendarMonth(0);
-                  return;
-                }
-                setCalendarMonth((month) => month + 1);
-              }}
-            />
+            {isAdvancedMode && (
+              <>
+                <MultiSelectCalendar
+                  year={calendarYear}
+                  month={calendarMonth}
+                  selectedDateSet={selectedDateSet}
+                  availableDateSet={availableDateSet}
+                  onToggleDate={toggleDate}
+                  onPrevMonth={() => {
+                    if (calendarMonth === 0) {
+                      setCalendarYear((year) => year - 1);
+                      setCalendarMonth(11);
+                      return;
+                    }
+                    setCalendarMonth((month) => month - 1);
+                  }}
+                  onNextMonth={() => {
+                    if (calendarMonth === 11) {
+                      setCalendarYear((year) => year + 1);
+                      setCalendarMonth(0);
+                      return;
+                    }
+                    setCalendarMonth((month) => month + 1);
+                  }}
+                />
 
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Selected Dates</p>
-              {selectedDatesSorted.length === 0 ? (
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">No dates selected yet.</p>
-              ) : (
-                <div className="flex max-h-40 flex-wrap gap-1.5 overflow-auto">
-                  {selectedDatesSorted.map((date) => (
-                    <button
-                      key={date}
-                      onClick={() => toggleDate(date)}
-                      className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
-                      title="Click to remove"
-                    >
-                      {date}
-                    </button>
-                  ))}
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Selected Dates</p>
+                  {selectedDatesSorted.length === 0 ? (
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">No dates selected yet.</p>
+                  ) : (
+                    <div className="flex max-h-40 flex-wrap gap-1.5 overflow-auto">
+                      {selectedDatesSorted.map((date) => (
+                        <button
+                          key={date}
+                          onClick={() => toggleDate(date)}
+                          className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+                          title="Click to remove"
+                        >
+                          {date}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -931,33 +1236,37 @@ export default function AdminPhysicalAttendanceView() {
                 />
                 <button
                   onClick={() => void loadPreview()}
-                  disabled={!selectedClassId || selectedDatesSorted.length === 0 || loadingPreview}
+                  disabled={!canLoadPreview || loadingPreview}
                   className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loadingPreview ? 'Loading Preview...' : 'Load Preview'}
                 </button>
                 <button
                   onClick={handleExportCsv}
-                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedDatesSorted.length === 0}
+                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedSlots.length === 0}
                   className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Export CSV
                 </button>
                 <button
                   onClick={() => void handleExportXlsx()}
-                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedDatesSorted.length === 0}
+                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedSlots.length === 0}
                   className="rounded-xl border border-lime-200 bg-lime-50 px-4 py-2 text-sm font-semibold text-lime-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Export XLSX (Colored)
                 </button>
                 <button
                   onClick={() => setTableFullscreen(true)}
-                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedDatesSorted.length === 0}
+                  disabled={!previewLoaded || filteredStudents.length === 0 || selectedSlots.length === 0}
                   className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Full Screen Table
                 </button>
               </div>
+
+              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                Active sessions: <span className="font-semibold text-[hsl(var(--foreground))]">{selectedSlots.length}</span>
+              </p>
 
               {previewError && (
                 <p className="mt-2 text-sm font-medium text-red-600">{previewError}</p>
@@ -1009,13 +1318,19 @@ export default function AdminPhysicalAttendanceView() {
               <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
                 Select a class to begin.
               </div>
-            ) : selectedDatesSorted.length === 0 ? (
+            ) : !canLoadPreview ? (
               <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
-                Select one or more dates from the calendar, then click Load Preview.
+                {isAdvancedMode
+                  ? 'Select one or more dates from the calendar, then click Load Preview.'
+                  : 'No marked dates available in the selected range. Adjust date range.'}
               </div>
             ) : !previewLoaded ? (
               <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
-                Preview is ready to load for <span className="font-semibold text-[hsl(var(--foreground))]">{selectedDatesSorted.length}</span> selected date{selectedDatesSorted.length !== 1 ? 's' : ''}.
+                Preview is ready to load for <span className="font-semibold text-[hsl(var(--foreground))]">{previewDateCount}</span> date{previewDateCount !== 1 ? 's' : ''}.
+              </div>
+            ) : selectedSlots.length === 0 ? (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
+                No attendance sessions found for the selected dates.
               </div>
             ) : (
               <div className={`overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] ${tableFullscreen ? 'fixed inset-2 z-[95] md:inset-4 shadow-2xl' : ''}`}>
@@ -1023,7 +1338,7 @@ export default function AdminPhysicalAttendanceView() {
                   <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] px-3 py-2">
                     <p className="text-sm font-semibold text-[hsl(var(--foreground))]">Physical Attendance Table</p>
                     <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-                      {selectedClass?.name || 'Class'} | {selectedDatesSorted[0]} to {selectedDatesSorted[selectedDatesSorted.length - 1]}
+                      {selectedClass?.name || 'Class'} | Sessions {selectedSlots.length} | {selectedDatesSorted[0]} to {selectedDatesSorted[selectedDatesSorted.length - 1]}
                     </p>
                     <button
                       onClick={handleExportCsv}
@@ -1052,12 +1367,13 @@ export default function AdminPhysicalAttendanceView() {
                       <tr>
                         <th className="sticky left-0 z-20 border-r border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 py-2 text-left font-semibold">Student</th>
                         <th className="sticky left-[220px] z-20 border-r border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 py-2 text-left font-semibold">Institute ID</th>
-                        {selectedDatesSorted.map((date) => {
-                          const header = formatDateHeader(date);
+                        {selectedSlots.map((slot) => {
+                          const header = formatSlotHeader(slot);
                           return (
-                            <th key={date} className="min-w-[110px] border-r border-[hsl(var(--border))] px-2 py-2 text-center font-semibold">
-                              <p>{header.day}</p>
-                              <p className="text-[10px] opacity-80">{header.week}</p>
+                            <th key={slot.key} className="min-w-[128px] border-r border-[hsl(var(--border))] px-2 py-2 text-center font-semibold">
+                              <p className="text-[10px] opacity-80">{header.weekTag}</p>
+                              <p>{header.session}{header.time ? ` ${header.time}` : ''}</p>
+                              <p className="text-[10px] opacity-80">{header.day} {header.week}</p>
                             </th>
                           );
                         })}
@@ -1071,13 +1387,13 @@ export default function AdminPhysicalAttendanceView() {
                     <tbody>
                       {filteredStudents.length === 0 ? (
                         <tr>
-                          <td colSpan={selectedDatesSorted.length + 7} className="px-4 py-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+                          <td colSpan={selectedSlots.length + 7} className="px-4 py-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
                             No students match your search.
                           </td>
                         </tr>
                       ) : (
                         filteredStudents.map((student) => {
-                          const summary = summarizeStudent(student, selectedDatesSorted);
+                          const summary = summarizeStudent(student, selectedSlots);
                           const initials = student.fullName
                             .split(' ')
                             .map((part) => part[0] || '')
@@ -1107,11 +1423,11 @@ export default function AdminPhysicalAttendanceView() {
                                 {student.instituteId || '-'}
                               </td>
 
-                              {selectedDatesSorted.map((date) => {
-                                const status = statusForDate(student, date);
+                              {selectedSlots.map((slot) => {
+                                const status = statusForSlot(student, slot.key);
                                 const meta = STATUS_META[status];
                                 return (
-                                  <td key={`${student.userId}-${date}`} className="border-r border-[hsl(var(--border))] px-2 py-2 text-center">
+                                  <td key={`${student.userId}-${slot.key}`} className="border-r border-[hsl(var(--border))] px-2 py-2 text-center">
                                     <span className={`inline-flex min-w-[34px] items-center justify-center rounded-md border px-2 py-1 text-[10px] font-bold ${meta.pill}`} title={meta.label}>
                                       {meta.short}
                                     </span>
@@ -1141,6 +1457,7 @@ export default function AdminPhysicalAttendanceView() {
                   {' '}| Range: <span className="font-mono">{selectedDatesSorted[0]} to {selectedDatesSorted[selectedDatesSorted.length - 1]}</span>
                 </>
               )}
+              {' '}| Sessions: <span className="font-semibold text-[hsl(var(--foreground))]">{selectedSlots.length}</span>
               {' '}| Total cells: <span className="font-semibold text-[hsl(var(--foreground))]">{tableSummary.totalCells}</span>
             </p>
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
 
@@ -36,6 +36,8 @@ interface ScanResultPopup {
   barcodeId?: string;
   userId?: string;
   message?: string;
+  sessionTime?: string;
+  sessionCode?: string;
 }
 
 interface CameraDeviceOption {
@@ -46,6 +48,10 @@ interface CameraDeviceOption {
 
 function toDateStr(date: Date) {
   return date.toISOString().split('T')[0];
+}
+
+function toTimeStr(date: Date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function normalizeScannedIdentifier(raw: string) {
@@ -635,11 +641,21 @@ function useCameraScanner(onScan: (value: string) => void, facingMode: 'environm
 
 export default function AdminMarkAttendance() {
   const { instituteId } = useParams<{ instituteId: string }>();
+  const [searchParams] = useSearchParams();
+  const requestedClassId = (searchParams.get('classId') || '').trim();
+  const requestedMode = (searchParams.get('mode') || '').trim().toLowerCase();
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
   const [status, setStatus] = useState<AttStatus>('PRESENT');
+  const [entryMode, setEntryMode] = useState<'simple' | 'advanced'>(
+    requestedMode === 'advanced' ? 'advanced' : 'simple',
+  );
+  const [sessionTime, setSessionTime] = useState(toTimeStr(new Date()));
+  const [sessionCode, setSessionCode] = useState('');
+  const [sessionMessage, setSessionMessage] = useState('');
+  const [closingSession, setClosingSession] = useState(false);
   const [scanInput, setScanInput] = useState('');
   const [phase, setPhase] = useState<'ready' | 'waiting' | 'success' | 'error'>('ready');
   const [message, setMessage] = useState('Ready to scan');
@@ -666,10 +682,51 @@ export default function AdminMarkAttendance() {
   const apiUnavailableRef = useRef(false);
   const failedScanCooldownRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
 
+  const normalizedSessionTime = useMemo(() => sessionTime || '00:00', [sessionTime]);
+  const trimmedSessionCode = useMemo(() => sessionCode.trim(), [sessionCode]);
+
   const lastMarkedStorageKey = useMemo(
-    () => (selectedClassId ? `mark-attendance:last:${selectedClassId}:${selectedDate}` : ''),
-    [selectedClassId, selectedDate],
+    () => (
+      selectedClassId
+        ? `mark-attendance:last:${selectedClassId}:${selectedDate}:${normalizedSessionTime}`
+        : ''
+    ),
+    [selectedClassId, selectedDate, normalizedSessionTime],
   );
+
+  const getEffectiveSessionCode = useCallback(() => {
+    if (trimmedSessionCode) return trimmedSessionCode;
+    return `S-${selectedDate}-${normalizedSessionTime.replace(':', '')}`;
+  }, [normalizedSessionTime, selectedDate, trimmedSessionCode]);
+
+  const handleCreateSession = useCallback(() => {
+    const code = getEffectiveSessionCode();
+    if (!trimmedSessionCode) {
+      setSessionCode(code);
+    }
+    setSessionMessage(`Session ready: ${code} (${selectedDate} ${normalizedSessionTime})`);
+  }, [getEffectiveSessionCode, normalizedSessionTime, selectedDate, trimmedSessionCode]);
+
+  const handleCloseSession = useCallback(async () => {
+    if (!selectedClassId) return;
+    setClosingSession(true);
+    setSessionMessage('');
+
+    try {
+      const code = getEffectiveSessionCode();
+      const response = await api.post(`/attendance/class-attendance/class/${selectedClassId}/close-session`, {
+        date: selectedDate,
+        sessionTime: normalizedSessionTime,
+        sessionCode: code || undefined,
+      });
+      const marked = Number(response?.data?.marked || 0);
+      setSessionMessage(`Session closed (${code}) - ${marked} absent student${marked === 1 ? '' : 's'} auto-marked.`);
+    } catch (error: any) {
+      setSessionMessage(error?.response?.data?.message || 'Failed to close session.');
+    } finally {
+      setClosingSession(false);
+    }
+  }, [getEffectiveSessionCode, normalizedSessionTime, selectedClassId, selectedDate]);
 
   const submitScan = useCallback(async (rawValue: string) => {
     const identifier = normalizeScannedIdentifier(rawValue);
@@ -741,6 +798,8 @@ export default function AdminMarkAttendance() {
           barcode: identifier,
           date: selectedDate,
           status,
+          sessionTime: normalizedSessionTime,
+          sessionCode: getEffectiveSessionCode() || undefined,
         });
         return response.data;
       };
@@ -751,6 +810,8 @@ export default function AdminMarkAttendance() {
           identifier,
           date: selectedDate,
           status,
+          sessionTime: normalizedSessionTime,
+          sessionCode: getEffectiveSessionCode() || undefined,
           method: 'barcode',
         });
         return response.data;
@@ -805,6 +866,8 @@ export default function AdminMarkAttendance() {
         instituteId: instituteUserId,
         barcodeId,
         avatarUrl,
+        sessionTime: data?.sessionTime || normalizedSessionTime,
+        sessionCode: data?.sessionCode || getEffectiveSessionCode() || '',
       });
       setRecent((prev) => [
         {
@@ -858,7 +921,17 @@ export default function AdminMarkAttendance() {
         scanGateRef.current = false;
       }, 2000);
     }
-  }, [classStudents, lastMarkedId, phase, selectedClassId, selectedDate, status, studentsById]);
+  }, [
+    classStudents,
+    getEffectiveSessionCode,
+    lastMarkedId,
+    normalizedSessionTime,
+    phase,
+    selectedClassId,
+    selectedDate,
+    status,
+    studentsById,
+  ]);
 
   const {
     videoRef,
@@ -880,14 +953,17 @@ export default function AdminMarkAttendance() {
         const { data } = await api.get('/classes');
         const classRows = (data || []) as ClassItem[];
         setClasses(classRows);
-        if (classRows.length > 0) setSelectedClassId(classRows[0].id);
+        if (classRows.length > 0) {
+          const hasRequestedClass = requestedClassId && classRows.some((row) => row.id === requestedClassId);
+          setSelectedClassId(hasRequestedClass ? requestedClassId : classRows[0].id);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     void loadClasses();
-  }, []);
+  }, [requestedClassId]);
 
   useEffect(() => {
     if (!selectedClassId) {
@@ -993,7 +1069,10 @@ export default function AdminMarkAttendance() {
   }, [scanInput, submitScan]);
 
   const adminBase = getInstituteAdminPath(instituteId);
+  const externalDevicePath = getInstituteAdminPath(instituteId, '/mark-attendance/external-device');
+  const classAttendancePath = getInstituteAdminPath(instituteId, '/class-attendance');
   const selectedClass = classes.find((item) => item.id === selectedClassId);
+  const showAdvancedFields = entryMode === 'advanced';
   const popupAvatarUrl = resolveAvatarUrl(resultPopup?.avatarUrl);
   const filteredStudents = useMemo(() => {
     const query = studentFilter.trim().toLowerCase();
@@ -1026,40 +1105,124 @@ export default function AdminMarkAttendance() {
             </Link>
             <div className="min-w-0">
               <h1 className="text-base md:text-lg font-bold truncate">Mark Attendance</h1>
-              <p className="text-xs text-slate-300 truncate">Camera scanner mode</p>
+              <p className="text-xs text-slate-300 truncate">Camera scanner entry page</p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold border border-blue-300/40 bg-blue-500/20 text-blue-100">
-            {recent.filter((item) => item.ok).length}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Link
+              to={classAttendancePath}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-300/40 bg-emerald-500/10 text-emerald-100"
+            >
+              View Attendance
+            </Link>
+            <Link
+              to={externalDevicePath}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-indigo-300/40 bg-indigo-500/10 text-indigo-100"
+            >
+              External Device
+            </Link>
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold border border-blue-300/40 bg-blue-500/20 text-blue-100">
+              {recent.filter((item) => item.ok).length}
+            </span>
+          </div>
         </div>
 
-        <div className="px-3 md:px-4 py-3 grid gap-2 md:grid-cols-[1fr_180px_180px] bg-[#0f1720] border-b border-white/10">
-          <select
-            value={selectedClassId}
-            onChange={(event) => setSelectedClassId(event.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
-          >
-            {classes.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}{item.subject ? ` - ${item.subject}` : ''}</option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => setSelectedDate(event.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
-          />
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value as AttStatus)}
-            className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
-          >
-            <option value="PRESENT">Present</option>
-            <option value="LATE">Late</option>
-            <option value="ABSENT">Absent</option>
-            <option value="EXCUSED">Excused</option>
-          </select>
+        <div className="px-3 md:px-4 py-3 space-y-3 bg-[#0f1720] border-b border-white/10">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Scan Setup</p>
+            <div className="inline-flex overflow-hidden rounded-lg border border-white/20 bg-[#131f2c]">
+              <button
+                onClick={() => {
+                  setEntryMode('simple');
+                }}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                  !showAdvancedFields ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                Simple
+              </button>
+              <button
+                onClick={() => setEntryMode('advanced')}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition ${
+                  showAdvancedFields ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                Advanced
+              </button>
+            </div>
+          </div>
+
+          <div className={`grid gap-2 ${showAdvancedFields ? 'md:grid-cols-[1fr_165px_170px_170px]' : 'md:grid-cols-[1fr_165px_170px]'}`}>
+            <select
+              value={selectedClassId}
+              onChange={(event) => setSelectedClassId(event.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
+            >
+              {classes.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}{item.subject ? ` - ${item.subject}` : ''}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
+            />
+            {showAdvancedFields && (
+              <input
+                type="time"
+                value={sessionTime}
+                onChange={(event) => setSessionTime(event.target.value)}
+                className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
+              />
+            )}
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as AttStatus)}
+              className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
+            >
+              <option value="PRESENT">Present</option>
+              <option value="LATE">Late</option>
+              <option value="ABSENT">Absent</option>
+              <option value="EXCUSED">Excused</option>
+            </select>
+          </div>
+
+          {showAdvancedFields ? (
+            <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
+              <input
+                type="text"
+                value={sessionCode}
+                onChange={(event) => setSessionCode(event.target.value)}
+                placeholder="Session code (optional) e.g. WEEK-01"
+                className="px-3 py-2.5 rounded-xl border border-white/20 bg-[#131f2c] text-sm text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={() => handleCreateSession()}
+                className="px-3 py-2.5 rounded-xl border border-blue-300/40 bg-blue-500/10 text-xs font-semibold text-blue-100 hover:bg-blue-500/20"
+              >
+                Create Session
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCloseSession()}
+                disabled={closingSession || !selectedClassId}
+                className="px-3 py-2.5 rounded-xl border border-emerald-300/40 bg-emerald-500/10 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-50"
+              >
+                {closingSession ? 'Closing...' : 'Close Session'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-300">
+              Session time is <span className="font-semibold text-white">{normalizedSessionTime}</span>.
+              {' '}Switch to Advanced to set custom session code and manage closing.
+            </p>
+          )}
+
+          {sessionMessage && (
+            <p className="text-xs text-emerald-200">{sessionMessage}</p>
+          )}
         </div>
 
         <div
@@ -1278,6 +1441,10 @@ export default function AdminMarkAttendance() {
                     <p className="truncate">Institute ID: <span className="font-mono">{resultPopup.instituteId || '-'}</span></p>
                     <p className="truncate">Barcode ID: <span className="font-mono">{resultPopup.barcodeId || '-'}</span></p>
                     <p className="truncate">User ID: <span className="font-mono">{resultPopup.userId || '-'}</span></p>
+                    <p className="truncate">Session Time: <span className="font-mono">{resultPopup.sessionTime || '-'}</span></p>
+                    {resultPopup.sessionCode && (
+                      <p className="truncate">Session Code: <span className="font-mono">{resultPopup.sessionCode}</span></p>
+                    )}
                   </div>
                 ) : (
                   <p className="mt-1.5 text-sm font-semibold truncate">{resultPopup.message || 'Failed to mark attendance'}</p>
