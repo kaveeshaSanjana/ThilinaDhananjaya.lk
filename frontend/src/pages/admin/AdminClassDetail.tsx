@@ -996,6 +996,14 @@ export default function AdminClassDetail() {
   const removePhysicalReportGroup = async (groupId: string) => {
     if (!id) return;
 
+    const groupName = physicalReportGroups.find((group) => group.id === groupId)?.name || 'this week';
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        `Delete "${groupName}"? This will also clear week assignment from linked sessions.`,
+      );
+      if (!confirmed) return;
+    }
+
     setPhysicalDeletingWeekId(groupId);
     setPhysicalGroupError('');
 
@@ -1271,6 +1279,10 @@ export default function AdminClassDetail() {
         ? prev.filter((id) => id !== groupId)
         : [...prev, groupId]
     ));
+  };
+
+  const removePhysicalReportWeekSelection = (groupId: string) => {
+    setPhysicalSelectedWeekIds((prev) => prev.filter((id) => id !== groupId));
   };
 
   const selectAllPhysicalReportWeeks = () => {
@@ -4791,6 +4803,10 @@ export default function AdminClassDetail() {
                   </div>
                 </div>
 
+                <p className="text-[11px] text-slate-500">
+                  Week selection here affects report preview only. Session week assignments stay unchanged.
+                </p>
+
                 {physicalReportGroups.length === 0 ? (
                   <p className="text-xs text-slate-500">No saved week groups yet. Use Create Group to create a week, then assign sessions from the session table.</p>
                 ) : (
@@ -4815,15 +4831,16 @@ export default function AdminClassDetail() {
                           >
                             {selected ? 'Selected: ' : ''}{group.name} ({group.slotKeys.length})
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => void removePhysicalReportGroup(group.id)}
-                            disabled={physicalDeletingWeekId === group.id}
-                            className="text-rose-600/80 hover:text-rose-700 disabled:opacity-50"
-                            aria-label={`Remove ${group.name}`}
-                          >
-                            {physicalDeletingWeekId === group.id ? '...' : 'x'}
-                          </button>
+                          {selected && (
+                            <button
+                              type="button"
+                              onClick={() => removePhysicalReportWeekSelection(group.id)}
+                              className="text-slate-500/80 hover:text-slate-700"
+                              aria-label={`Unselect ${group.name} from report`}
+                            >
+                              x
+                            </button>
+                          )}
                         </span>
                       );
                     })}
@@ -4859,6 +4876,27 @@ export default function AdminClassDetail() {
                   <p className="text-[11px] text-indigo-800/80">
                     After creating a week, go to <span className="font-semibold">Attendance Sessions (Class Level)</span> and use the <span className="font-semibold">Week Assign</span> dropdown in each row.
                   </p>
+
+                  {physicalReportGroups.length > 0 && (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide">
+                        Delete Week Group (will unassign linked sessions)
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {physicalReportGroups.map((group) => (
+                          <button
+                            key={`delete-week-${group.id}`}
+                            type="button"
+                            onClick={() => void removePhysicalReportGroup(group.id)}
+                            disabled={physicalDeletingWeekId === group.id}
+                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          >
+                            {physicalDeletingWeekId === group.id ? 'Deleting...' : `Delete ${group.name}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
