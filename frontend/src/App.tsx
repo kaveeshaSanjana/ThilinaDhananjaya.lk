@@ -168,6 +168,7 @@ function AppRoutes() {
         <Route path="institute/:instituteId/admin/classes" element={<ProtectedRoute role="ADMIN"><AdminClasses /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/classes/:id" element={<ProtectedRoute role="ADMIN"><AdminClassDetail /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/classes/:classId/months/:monthId/manage" element={<ProtectedRoute role="ADMIN"><AdminMonthManage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/admin/classes/:classId/months/:monthId/rec-attendance" element={<ProtectedRoute role="ADMIN"><AdminMonthRecAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/slips" element={<ProtectedRoute role="ADMIN"><AdminSlips /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/attendance" element={<ProtectedRoute role="ADMIN"><AdminAttendance /></ProtectedRoute>} />
         <Route path="institute/:instituteId/admin/mark-attendance" element={<ProtectedRoute role="ADMIN"><AdminMarkAttendance /></ProtectedRoute>} />

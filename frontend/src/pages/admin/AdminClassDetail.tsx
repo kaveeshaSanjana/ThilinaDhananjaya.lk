@@ -52,6 +52,17 @@ const statusBadge = (s: string) => {
 };
 
 type PhysicalCellStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'NOT_MARKED';
+type PhysicalEditableCellStatus = PhysicalCellStatus;
+
+const PHYSICAL_EDITABLE_STATUSES: PhysicalEditableCellStatus[] = ['PRESENT', 'ABSENT', 'NOT_MARKED', 'EXCUSED', 'LATE'];
+
+function isPhysicalEditableStatus(value: unknown): value is PhysicalEditableCellStatus {
+  return value === 'PRESENT'
+    || value === 'ABSENT'
+    || value === 'NOT_MARKED'
+    || value === 'EXCUSED'
+    || value === 'LATE';
+}
 
 interface PhysicalMonitorSlot {
   key: string;
@@ -100,6 +111,8 @@ interface PhysicalSessionStudentRow {
   barcodeId: string;
   avatarUrl: string | null;
   status: PhysicalCellStatus;
+  attendanceId: string | null;
+  markedAt: string | null;
 }
 
 interface PhysicalWeekPreviewStudentRow {
@@ -288,6 +301,44 @@ function asIsoDate(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(shortIso) ? shortIso : '';
 }
 
+function toLocalDateTimeInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toIsoDateTimeFromInput(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return parsed.toISOString();
+}
+
+function formatDateTimeLabel(value: string | null | undefined): string {
+  if (!value) return 'Not marked';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Not marked';
+
+  return parsed.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function summarizePhysicalStatuses(statuses: Record<string, PhysicalCellStatus>, slots: PhysicalMonitorSlot[]) {
   let present = 0;
   let late = 0;
@@ -317,8 +368,7 @@ function csvEscape(value: unknown) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
-type Tab = 'months' | 'recordings' | 'students' | 'attendance';
-type AttendanceViewTab = 'sessions' | 'payments';
+type Tab = 'months' | 'recordings' | 'students' | 'attendance' | 'payments';
 
 const emptyMonthForm = { name: '', year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), status: 'ANYONE' };
 const emptyRecForm = { monthId: '', title: '', description: '', videoUrl: '', thumbnail: '', topic: '', icon: '', materials: '', status: 'PAID_ONLY' };
@@ -329,17 +379,15 @@ export default function AdminClassDetail() {
   const rawTabParam = (searchParams.get('tab') || '').trim().toLowerCase();
   const rawAttendanceViewParam = (searchParams.get('attendanceView') || '').trim().toLowerCase();
   const rawPaymentStatusParam = (searchParams.get('paymentStatus') || '').trim().toUpperCase();
-  const initialTabFromQuery: Tab = rawTabParam === 'months'
+  const initialTabFromQuery: Tab = rawTabParam === 'attendance' && rawAttendanceViewParam === 'payments'
+    ? 'payments'
+    : rawTabParam === 'months'
     || rawTabParam === 'recordings'
     || rawTabParam === 'students'
     || rawTabParam === 'attendance'
+    || rawTabParam === 'payments'
     ? rawTabParam
-    : rawTabParam === 'payments'
-      ? 'attendance'
-      : 'months';
-  const initialAttendanceView: AttendanceViewTab = rawTabParam === 'payments' || rawAttendanceViewParam === 'payments'
-    ? 'payments'
-    : 'sessions';
+    : 'months';
   const initialPaymentStatusFilter: ClassPaymentStatusFilter = rawPaymentStatusParam === 'PAID'
     || rawPaymentStatusParam === 'PENDING'
     || rawPaymentStatusParam === 'UNPAID'
@@ -350,7 +398,6 @@ export default function AdminClassDetail() {
   const [cls, setCls] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>(initialTabFromQuery);
-  const [attendanceView, setAttendanceView] = useState<AttendanceViewTab>(initialAttendanceView);
 
   // Months
   const [months, setMonths] = useState<any[]>([]);
@@ -460,6 +507,12 @@ export default function AdminClassDetail() {
   const [physicalSessionError, setPhysicalSessionError] = useState('');
   const [physicalSessionClosing, setPhysicalSessionClosing] = useState(false);
   const [physicalSessionCloseMessage, setPhysicalSessionCloseMessage] = useState('');
+  const [physicalSessionManualMode, setPhysicalSessionManualMode] = useState(false);
+  const [physicalSessionDraftStatus, setPhysicalSessionDraftStatus] = useState<Record<string, PhysicalEditableCellStatus>>({});
+  const [physicalSessionDraftMarkedAt, setPhysicalSessionDraftMarkedAt] = useState<Record<string, string>>({});
+  const [physicalSessionBatchSaving, setPhysicalSessionBatchSaving] = useState(false);
+  const [physicalSessionSavingUserIds, setPhysicalSessionSavingUserIds] = useState<string[]>([]);
+  const [physicalSessionEditingTimeUserIds, setPhysicalSessionEditingTimeUserIds] = useState<string[]>([]);
   const [physicalWeekPreviewRows, setPhysicalWeekPreviewRows] = useState<PhysicalWeekPreviewStudentRow[]>([]);
   const [physicalWeekPreviewLoading, setPhysicalWeekPreviewLoading] = useState(false);
   const [physicalWeekPreviewError, setPhysicalWeekPreviewError] = useState('');
@@ -473,6 +526,8 @@ export default function AdminClassDetail() {
   const [physicalPaymentRows, setPhysicalPaymentRows] = useState<ClassPaymentStudentRow[]>([]);
   const [physicalPaymentLoading, setPhysicalPaymentLoading] = useState(false);
   const [physicalPaymentError, setPhysicalPaymentError] = useState('');
+  const [physicalPaymentExporting, setPhysicalPaymentExporting] = useState(false);
+  const [physicalPaymentExportError, setPhysicalPaymentExportError] = useState('');
   const [physicalPaymentStatusFilter, setPhysicalPaymentStatusFilter] = useState<ClassPaymentStatusFilter>(initialPaymentStatusFilter);
   const [physicalPaymentSearchText, setPhysicalPaymentSearchText] = useState(initialPaymentSearchText);
 
@@ -568,24 +623,24 @@ export default function AdminClassDetail() {
     const nextParams = new URLSearchParams(searchParams);
 
     if (tab === 'attendance') {
-      nextParams.set('tab', attendanceView === 'payments' ? 'payments' : 'attendance');
-      nextParams.set('attendanceView', attendanceView);
+      nextParams.set('tab', 'attendance');
+      nextParams.delete('attendanceView');
+      nextParams.delete('paymentStatus');
+      nextParams.delete('paymentSearch');
+    } else if (tab === 'payments') {
+      nextParams.set('tab', 'payments');
+      nextParams.delete('attendanceView');
 
-      if (attendanceView === 'payments') {
-        if (physicalPaymentStatusFilter === 'ALL') {
-          nextParams.delete('paymentStatus');
-        } else {
-          nextParams.set('paymentStatus', physicalPaymentStatusFilter);
-        }
-
-        const trimmedSearch = physicalPaymentSearchText.trim();
-        if (trimmedSearch) {
-          nextParams.set('paymentSearch', trimmedSearch);
-        } else {
-          nextParams.delete('paymentSearch');
-        }
-      } else {
+      if (physicalPaymentStatusFilter === 'ALL') {
         nextParams.delete('paymentStatus');
+      } else {
+        nextParams.set('paymentStatus', physicalPaymentStatusFilter);
+      }
+
+      const trimmedSearch = physicalPaymentSearchText.trim();
+      if (trimmedSearch) {
+        nextParams.set('paymentSearch', trimmedSearch);
+      } else {
         nextParams.delete('paymentSearch');
       }
     } else {
@@ -599,7 +654,6 @@ export default function AdminClassDetail() {
       setSearchParams(nextParams, { replace: true });
     }
   }, [
-    attendanceView,
     physicalPaymentSearchText,
     physicalPaymentStatusFilter,
     searchParams,
@@ -608,7 +662,7 @@ export default function AdminClassDetail() {
   ]);
 
   useEffect(() => {
-    if (tab !== 'attendance' || !id) {
+    if ((tab !== 'attendance' && tab !== 'payments') || !id) {
       setPhysicalAvailableDates([]);
       setPhysicalFromDate('');
       setPhysicalToDate('');
@@ -642,6 +696,12 @@ export default function AdminClassDetail() {
       setPhysicalSessionError('');
       setPhysicalSessionClosing(false);
       setPhysicalSessionCloseMessage('');
+      setPhysicalSessionManualMode(false);
+      setPhysicalSessionDraftStatus({});
+      setPhysicalSessionDraftMarkedAt({});
+      setPhysicalSessionBatchSaving(false);
+      setPhysicalSessionSavingUserIds([]);
+      setPhysicalSessionEditingTimeUserIds([]);
       setPhysicalWeekPreviewRows([]);
       setPhysicalWeekPreviewLoading(false);
       setPhysicalWeekPreviewError('');
@@ -650,6 +710,8 @@ export default function AdminClassDetail() {
       setPhysicalPaymentRows([]);
       setPhysicalPaymentLoading(false);
       setPhysicalPaymentError('');
+      setPhysicalPaymentExporting(false);
+      setPhysicalPaymentExportError('');
       return;
     }
 
@@ -766,6 +828,7 @@ export default function AdminClassDetail() {
 
     setPhysicalPaymentLoading(true);
     setPhysicalPaymentError('');
+    setPhysicalPaymentExportError('');
     api.get(`/attendance/class-attendance/class/${id}/payments`)
       .then((response) => {
         if (!active) return;
@@ -1234,6 +1297,16 @@ export default function AdminClassDetail() {
   const selectedPhysicalSessionDate = physicalQuickSelectedSession?.date || '';
   const selectedPhysicalSessionTime = physicalQuickSelectedSession?.sessionTime || '00:00';
 
+  const selectedPhysicalSessionDefaultMarkedAtInput = useMemo(() => {
+    if (physicalQuickSelectedSession?.sessionAt) {
+      return toLocalDateTimeInputValue(physicalQuickSelectedSession.sessionAt);
+    }
+    if (selectedPhysicalSessionDate && selectedPhysicalSessionTime && selectedPhysicalSessionTime !== '00:00') {
+      return `${selectedPhysicalSessionDate}T${selectedPhysicalSessionTime}`;
+    }
+    return '';
+  }, [physicalQuickSelectedSession, selectedPhysicalSessionDate, selectedPhysicalSessionTime]);
+
   const physicalQuickSessionByKey = useMemo(
     () => new Map(physicalQuickSessions.map((session) => [session.key, session] as const)),
     [physicalQuickSessions],
@@ -1473,6 +1546,12 @@ export default function AdminClassDetail() {
     if (!id || !selectedPhysicalSessionKey || !selectedPhysicalSessionDate) {
       setPhysicalSessionRows([]);
       setPhysicalSessionError('');
+      setPhysicalSessionManualMode(false);
+      setPhysicalSessionDraftStatus({});
+      setPhysicalSessionDraftMarkedAt({});
+      setPhysicalSessionBatchSaving(false);
+      setPhysicalSessionSavingUserIds([]);
+      setPhysicalSessionEditingTimeUserIds([]);
       return;
     }
 
@@ -1496,7 +1575,13 @@ export default function AdminClassDetail() {
           ? studentPayload.students
           : [];
 
-      const statusByUserId = new Map<string, PhysicalCellStatus>();
+      const attendanceByUserId = new Map<string, {
+        id: string;
+        status: PhysicalCellStatus;
+        sessionAt: string | null;
+        createdAt: string | null;
+        updatedAt: string | null;
+      }>();
       const attendanceItems = Array.isArray(attendanceResponse.data) ? attendanceResponse.data : [];
 
       attendanceItems.forEach((item: any) => {
@@ -1505,11 +1590,17 @@ export default function AdminClassDetail() {
 
         if (!userId) return;
         if (status === 'PRESENT' || status === 'LATE' || status === 'ABSENT' || status === 'EXCUSED') {
-          statusByUserId.set(userId, status);
+          attendanceByUserId.set(userId, {
+            id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : '',
+            status,
+            sessionAt: typeof item?.sessionAt === 'string' && item.sessionAt.trim() ? item.sessionAt.trim() : null,
+            createdAt: typeof item?.createdAt === 'string' && item.createdAt.trim() ? item.createdAt.trim() : null,
+            updatedAt: typeof item?.updatedAt === 'string' && item.updatedAt.trim() ? item.updatedAt.trim() : null,
+          });
         }
       });
 
-      const rows = studentItems
+      const rows: PhysicalSessionStudentRow[] = studentItems
         .map((item: any): PhysicalSessionStudentRow | null => {
           const userId = typeof item?.userId === 'string' ? item.userId : '';
           if (!userId) return null;
@@ -1521,7 +1612,9 @@ export default function AdminClassDetail() {
           const phone = typeof item?.phone === 'string' ? item.phone : '';
           const barcodeId = typeof item?.barcodeId === 'string' ? item.barcodeId : '';
           const avatarUrl = typeof item?.avatarUrl === 'string' && item.avatarUrl.trim() ? item.avatarUrl : null;
-          const status = statusByUserId.get(userId) || 'NOT_MARKED';
+          const attendanceMeta = attendanceByUserId.get(userId);
+          const status = attendanceMeta?.status || 'NOT_MARKED';
+          const markedAt = attendanceMeta?.sessionAt || attendanceMeta?.updatedAt || attendanceMeta?.createdAt || null;
 
           return {
             userId,
@@ -1531,12 +1624,27 @@ export default function AdminClassDetail() {
             barcodeId,
             avatarUrl,
             status,
+            attendanceId: attendanceMeta?.id || null,
+            markedAt,
           };
         })
         .filter((row: PhysicalSessionStudentRow | null): row is PhysicalSessionStudentRow => Boolean(row))
         .sort((a: PhysicalSessionStudentRow, b: PhysicalSessionStudentRow) => a.fullName.localeCompare(b.fullName));
 
       setPhysicalSessionRows(rows);
+      setPhysicalSessionDraftStatus(() => rows.reduce((acc: Record<string, PhysicalEditableCellStatus>, row: PhysicalSessionStudentRow) => {
+        acc[row.userId] = isPhysicalEditableStatus(row.status) ? row.status : 'NOT_MARKED';
+        return acc;
+      }, {} as Record<string, PhysicalEditableCellStatus>));
+      setPhysicalSessionDraftMarkedAt(() => rows.reduce((acc: Record<string, string>, row: PhysicalSessionStudentRow) => {
+        acc[row.userId] = row.markedAt
+          ? toLocalDateTimeInputValue(row.markedAt)
+          : selectedPhysicalSessionDefaultMarkedAtInput;
+        return acc;
+      }, {} as Record<string, string>));
+      setPhysicalSessionBatchSaving(false);
+      setPhysicalSessionSavingUserIds([]);
+      setPhysicalSessionEditingTimeUserIds([]);
       setPhysicalQuickSessions((prev) => {
         let changed = false;
         const next = prev.map((session) => {
@@ -1559,7 +1667,7 @@ export default function AdminClassDetail() {
     } finally {
       setPhysicalSessionLoading(false);
     }
-  }, [id, selectedPhysicalSessionDate, selectedPhysicalSessionKey, selectedPhysicalSessionTime]);
+  }, [id, selectedPhysicalSessionDate, selectedPhysicalSessionDefaultMarkedAtInput, selectedPhysicalSessionKey, selectedPhysicalSessionTime]);
 
   useEffect(() => {
     if (tab !== 'attendance' || !id || !selectedPhysicalSessionKey) {
@@ -1568,11 +1676,164 @@ export default function AdminClassDetail() {
       setPhysicalSessionCloseMessage('');
       setPhysicalSessionLoading(false);
       setPhysicalSessionClosing(false);
+      setPhysicalSessionManualMode(false);
+      setPhysicalSessionDraftStatus({});
+      setPhysicalSessionDraftMarkedAt({});
+      setPhysicalSessionBatchSaving(false);
+      setPhysicalSessionSavingUserIds([]);
+      setPhysicalSessionEditingTimeUserIds([]);
       return;
     }
 
     void loadSelectedPhysicalSessionAttendance();
   }, [id, loadSelectedPhysicalSessionAttendance, selectedPhysicalSessionKey, tab]);
+
+  const getPhysicalSessionOriginalMarkedAtInput = useCallback((student: PhysicalSessionStudentRow) => (
+    student.markedAt ? toLocalDateTimeInputValue(student.markedAt) : ''
+  ), []);
+
+  const physicalSessionPendingRows = useMemo(() => (
+    physicalSessionRows.filter((student) => {
+      const draftStatus = physicalSessionDraftStatus[student.userId] || 'NOT_MARKED';
+      const originalStatus = student.status;
+      const draftMarkedAt = (physicalSessionDraftMarkedAt[student.userId] || '').trim();
+      const originalMarkedAt = getPhysicalSessionOriginalMarkedAtInput(student);
+
+      if (draftStatus !== originalStatus) return true;
+      if (draftStatus === 'NOT_MARKED') return false;
+      return draftMarkedAt !== originalMarkedAt;
+    })
+  ), [getPhysicalSessionOriginalMarkedAtInput, physicalSessionDraftMarkedAt, physicalSessionDraftStatus, physicalSessionRows]);
+
+  const physicalSessionPendingUserIdSet = useMemo(
+    () => new Set(physicalSessionPendingRows.map((student) => student.userId)),
+    [physicalSessionPendingRows],
+  );
+
+  const applyPhysicalSessionStudentDraftStatus = (
+    student: PhysicalSessionStudentRow,
+    nextStatus: PhysicalEditableCellStatus,
+  ) => {
+    if (!isPhysicalEditableStatus(nextStatus)) return;
+
+    const previousStatus = physicalSessionDraftStatus[student.userId] || 'NOT_MARKED';
+
+    setPhysicalSessionDraftStatus((prev) => ({
+      ...prev,
+      [student.userId]: nextStatus,
+    }));
+
+    if (nextStatus === 'NOT_MARKED') {
+      setPhysicalSessionDraftMarkedAt((prev) => ({
+        ...prev,
+        [student.userId]: '',
+      }));
+      setPhysicalSessionEditingTimeUserIds((prev) => prev.filter((userId) => userId !== student.userId));
+      return;
+    }
+
+    if (nextStatus !== previousStatus) {
+      const nowInput = toLocalDateTimeInputValue(new Date().toISOString());
+      setPhysicalSessionDraftMarkedAt((prev) => ({
+        ...prev,
+        [student.userId]: nowInput,
+      }));
+    }
+  };
+
+  const handleBatchSavePhysicalSessionAttendance = async () => {
+    if (!id || !physicalQuickSelectedSession || !selectedPhysicalSessionDate) return;
+    if (physicalSessionPendingRows.length === 0) {
+      setPhysicalSessionCloseMessage('No attendance changes to save.');
+      return;
+    }
+
+    const pendingUserIds = physicalSessionPendingRows.map((student) => student.userId);
+    setPhysicalSessionBatchSaving(true);
+    setPhysicalSessionSavingUserIds(pendingUserIds);
+    setPhysicalSessionError('');
+    setPhysicalSessionCloseMessage('');
+
+    const failedRows: Array<{ name: string; message: string }> = [];
+
+    await Promise.all(physicalSessionPendingRows.map(async (student) => {
+      const draftStatus = physicalSessionDraftStatus[student.userId] || 'NOT_MARKED';
+      if (!isPhysicalEditableStatus(draftStatus)) {
+        failedRows.push({ name: student.fullName, message: 'Invalid status selected.' });
+        return;
+      }
+
+      const draftMarkedAtInput = (physicalSessionDraftMarkedAt[student.userId] || '').trim();
+      let draftMarkedAtIso = draftMarkedAtInput ? toIsoDateTimeFromInput(draftMarkedAtInput) : null;
+
+      if (draftMarkedAtInput && !draftMarkedAtIso) {
+        failedRows.push({ name: student.fullName, message: 'Invalid attendance time.' });
+        return;
+      }
+
+      if (draftStatus === 'NOT_MARKED') {
+        if (!student.attendanceId) return;
+
+        try {
+          await api.delete(`/attendance/class-attendance/${student.attendanceId}`);
+        } catch (error: any) {
+          const message = error?.response?.data?.message;
+          failedRows.push({
+            name: student.fullName,
+            message: Array.isArray(message)
+              ? message.join(', ')
+              : (typeof message === 'string' ? message : 'Failed to clear attendance.'),
+          });
+        }
+        return;
+      }
+
+      if (!draftMarkedAtIso) {
+        draftMarkedAtIso = new Date().toISOString();
+        setPhysicalSessionDraftMarkedAt((prev) => ({
+          ...prev,
+          [student.userId]: toLocalDateTimeInputValue(draftMarkedAtIso),
+        }));
+      }
+
+      try {
+        await api.post('/attendance/class-attendance/mark', {
+          classId: id,
+          identifier: student.userId,
+          date: selectedPhysicalSessionDate,
+          sessionTime: selectedPhysicalSessionTime,
+          sessionCode: physicalQuickSelectedSession.sessionCode || undefined,
+          sessionAt: draftMarkedAtIso || undefined,
+          status: draftStatus,
+          method: 'manual',
+        });
+      } catch (error: any) {
+        const message = error?.response?.data?.message;
+        failedRows.push({
+          name: student.fullName,
+          message: Array.isArray(message)
+            ? message.join(', ')
+            : (typeof message === 'string' ? message : 'Failed to save attendance.'),
+        });
+      }
+    }));
+
+    await loadSelectedPhysicalSessionAttendance();
+
+    if (failedRows.length === 0) {
+      setPhysicalSessionCloseMessage(`Attendance saved for ${physicalSessionPendingRows.length} student${physicalSessionPendingRows.length === 1 ? '' : 's'}.`);
+    } else {
+      const successful = physicalSessionPendingRows.length - failedRows.length;
+      const failedNames = failedRows.slice(0, 3).map((row) => row.name).join(', ');
+      setPhysicalSessionError(
+        `Saved ${successful}/${physicalSessionPendingRows.length}. Failed: ${failedRows.length}${failedNames ? ` (${failedNames}${failedRows.length > 3 ? ', ...' : ''})` : ''}.`,
+      );
+    }
+
+    setPhysicalSessionEditingTimeUserIds((prev) => prev.filter((userId) => !pendingUserIds.includes(userId)));
+    setPhysicalSessionSavingUserIds([]);
+    setPhysicalSessionBatchSaving(false);
+  };
 
   const loadPhysicalWeekPreview = useCallback(async () => {
     if (!id) return;
@@ -1928,6 +2189,118 @@ export default function AdminClassDetail() {
 
     return summary;
   }, [physicalVisiblePaymentRows]);
+
+  const physicalPaymentMonthsForMatrix = useMemo(() => (
+    [...physicalPaymentMonths].sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    })
+  ), [physicalPaymentMonths]);
+
+  const exportPhysicalPaymentsXlsx = async () => {
+    if (physicalVisiblePaymentRows.length === 0) {
+      setPhysicalPaymentExportError('No payment rows to export for the current filter.');
+      return;
+    }
+
+    setPhysicalPaymentExporting(true);
+    setPhysicalPaymentExportError('');
+
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const workbook = new ExcelJSImport.Workbook();
+      workbook.creator = 'Suraksha LMS';
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet('Class Payments');
+      const monthHeaders = physicalPaymentMonthsForMatrix.map((month) => `${month.name} ${month.year}`);
+      const headers = [
+        'Student Name',
+        'Institute ID',
+        'Phone',
+        'Barcode ID',
+        ...monthHeaders,
+        'Overall',
+        'Paid Count',
+        'Pending Count',
+        'Unpaid Count',
+      ];
+
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 22;
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FF1E293B' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE2E8F0' },
+        };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+
+      physicalVisiblePaymentRows.forEach((student) => {
+        const monthStatusMap = new Map(
+          student.months.map((month) => [month.monthId, month.status] as const),
+        );
+        const overallStatus = resolveClassPaymentOverallStatus(student);
+
+        const monthStatusLabels = physicalPaymentMonthsForMatrix.map((month) => {
+          const status = monthStatusMap.get(month.id) || 'UNPAID';
+          return CLASS_PAYMENT_STATUS_LABEL[status];
+        });
+
+        worksheet.addRow([
+          student.fullName,
+          student.instituteId || '-',
+          student.phone || '-',
+          student.barcodeId || '-',
+          ...monthStatusLabels,
+          CLASS_PAYMENT_STATUS_LABEL[overallStatus],
+          student.paidCount,
+          student.pendingCount,
+          student.unpaidCount,
+        ]);
+      });
+
+      worksheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }];
+      worksheet.getColumn(1).width = 28;
+      worksheet.getColumn(2).width = 16;
+      worksheet.getColumn(3).width = 16;
+      worksheet.getColumn(4).width = 16;
+      const firstMonthColumn = 5;
+      monthHeaders.forEach((_, index) => {
+        worksheet.getColumn(firstMonthColumn + index).width = 14;
+      });
+
+      const overallColumn = firstMonthColumn + monthHeaders.length;
+      worksheet.getColumn(overallColumn).width = 12;
+      worksheet.getColumn(overallColumn + 1).width = 12;
+      worksheet.getColumn(overallColumn + 2).width = 14;
+      worksheet.getColumn(overallColumn + 3).width = 12;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const classSlug = (cls?.name || 'class')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      const stamp = new Date().toISOString().slice(0, 10);
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `class-payments-${classSlug || 'class'}-${stamp}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setPhysicalPaymentExportError('Failed to export payment matrix as Excel. Please try again.');
+    } finally {
+      setPhysicalPaymentExporting(false);
+    }
+  };
 
   const physicalSessionStatusSummary = useMemo(() => {
     const summary = {
@@ -3505,7 +3878,7 @@ export default function AdminClassDetail() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 overflow-x-auto">
-        {([['months', 'Months'], ['recordings', 'Recordings'], ['students', 'Students'], ['attendance', 'Attendance']] as [Tab, string][]).map(([key, lbl]) => (
+        {([['months', 'Months'], ['recordings', 'Recordings'], ['students', 'Students'], ['attendance', 'Attendance'], ['payments', 'Payments']] as [Tab, string][]).map(([key, lbl]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex-1 min-w-[4.5rem] px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${tab === key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {lbl}
@@ -3513,6 +3886,7 @@ export default function AdminClassDetail() {
             {key === 'recordings' && <span className="ml-1.5 text-slate-400">({recordings.length})</span>}
             {key === 'students' && <span className="ml-1.5 text-slate-400">({enrollments.length})</span>}
             {key === 'attendance' && <span className="ml-1.5 text-slate-400">({physicalMonitor?.slots.length || physicalAvailableDates.length})</span>}
+            {key === 'payments' && <span className="ml-1.5 text-slate-400">({physicalPaymentRows.length})</span>}
           </button>
         ))}
       </div>
@@ -4384,73 +4758,58 @@ export default function AdminClassDetail() {
       )}
 
       {/* ═══════════════ ATTENDANCE TAB ═══════════════ */}
-      {tab === 'attendance' && (
+      {(tab === 'attendance' || tab === 'payments') && (
         <div className="space-y-3">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-700">Physical Attendance (Class Wise)</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Select a session, mark/view attendance, review students with images, and close the session when done.
-                </p>
+            {tab === 'attendance' && (
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-700">Physical Attendance (Class Wise)</h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Select a session, mark/view attendance, review students with images, and close the session when done.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhysicalSessionFormOpen((prev) => !prev);
+                      setPhysicalCreateSessionError('');
+                      setPhysicalCreateSessionSuccess('');
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                  >
+                    {physicalSessionFormOpen ? 'Cancel Session Create' : 'Create Session'}
+                  </button>
+                  <Link
+                    to={markAttendanceScannerPath}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    Mark Selected Session
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (physicalQuickSelectedSession) {
+                        handlePreviewPhysicalSession(physicalQuickSelectedSession);
+                      }
+                    }}
+                    disabled={!physicalQuickSelectedSession}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Preview Selected Session
+                  </button>
+                  <Link
+                    to={markAttendanceExternalPath}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    External Device
+                  </Link>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhysicalSessionFormOpen((prev) => !prev);
-                    setPhysicalCreateSessionError('');
-                    setPhysicalCreateSessionSuccess('');
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
-                >
-                  {physicalSessionFormOpen ? 'Cancel Session Create' : 'Create Session'}
-                </button>
-                <Link
-                  to={markAttendanceScannerPath}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                >
-                  Mark Selected Session
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (physicalQuickSelectedSession) {
-                      handlePreviewPhysicalSession(physicalQuickSelectedSession);
-                    }
-                  }}
-                  disabled={!physicalQuickSelectedSession}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                >
-                  Preview Selected Session
-                </button>
-                <Link
-                  to={markAttendanceExternalPath}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                >
-                  External Device
-                </Link>
-              </div>
-            </div>
+            )}
 
-            <div className="inline-flex w-fit items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => setAttendanceView('sessions')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${attendanceView === 'sessions' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Sessions
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttendanceView('payments')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${attendanceView === 'payments' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Payments
-              </button>
-            </div>
-
-            <div className={attendanceView === 'sessions' ? 'space-y-3' : 'hidden'}>
+            <div className={tab === 'attendance' ? 'space-y-3' : 'hidden'}>
 
             {physicalSessionFormOpen && (
               <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3">
@@ -5031,15 +5390,45 @@ export default function AdminClassDetail() {
                       Session ID: <span className="font-mono text-slate-700">{physicalQuickSelectedSession.readableId}</span>
                     </p>
                   )}
+                  {physicalQuickSelectedSession && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Update each student status and attendance time before closing this session.
+                    </p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleCloseSelectedPhysicalSession()}
-                  disabled={!physicalQuickSelectedSession || physicalSessionClosing || physicalSessionLoading}
-                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                >
-                  {physicalSessionClosing ? 'Closing Session...' : 'Close Session'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPhysicalSessionManualMode((prev) => !prev)}
+                    disabled={!physicalQuickSelectedSession || physicalSessionLoading || physicalSessionClosing || physicalSessionBatchSaving}
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${physicalSessionManualMode
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {physicalSessionManualMode ? 'Mark Manually: ON' : 'Mark Manually'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleBatchSavePhysicalSessionAttendance()}
+                    disabled={!physicalQuickSelectedSession || !physicalSessionManualMode || physicalSessionLoading || physicalSessionClosing || physicalSessionBatchSaving || physicalSessionPendingRows.length === 0}
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    {physicalSessionBatchSaving
+                      ? 'Marking Attendance...'
+                      : `Mark Attendance${physicalSessionPendingRows.length > 0 ? ` (${physicalSessionPendingRows.length})` : ''}`}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleCloseSelectedPhysicalSession()}
+                    disabled={!physicalQuickSelectedSession || physicalSessionClosing || physicalSessionLoading || physicalSessionBatchSaving || physicalSessionSavingUserIds.length > 0}
+                    className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    {physicalSessionClosing ? 'Closing Session...' : 'Close Session'}
+                  </button>
+                </div>
               </div>
 
               <label className="text-[11px] font-semibold text-slate-500">
@@ -5058,6 +5447,11 @@ export default function AdminClassDetail() {
               )}
               {physicalSessionCloseMessage && (
                 <p className="text-xs font-medium text-emerald-700">{physicalSessionCloseMessage}</p>
+              )}
+              {physicalSessionManualMode && physicalSessionPendingRows.length > 0 && (
+                <p className="text-xs font-medium text-amber-700">
+                  {physicalSessionPendingRows.length} pending change{physicalSessionPendingRows.length === 1 ? '' : 's'} ready to save. Click Mark Attendance.
+                </p>
               )}
 
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
@@ -5112,9 +5506,18 @@ export default function AdminClassDetail() {
                         .slice(0, 2)
                         .map((part) => part[0]?.toUpperCase() || '')
                         .join('') || '?';
+                      const draftStatus = physicalSessionDraftStatus[student.userId] || 'NOT_MARKED';
+                      const draftMarkedAt = physicalSessionDraftMarkedAt[student.userId] || '';
+                      const saving = physicalSessionSavingUserIds.includes(student.userId);
+                      const editingTime = physicalSessionEditingTimeUserIds.includes(student.userId);
+                      const canEditTime = draftStatus !== 'NOT_MARKED';
+                      const hasPendingChange = physicalSessionPendingUserIdSet.has(student.userId);
 
                       return (
-                        <div key={student.userId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div
+                          key={student.userId}
+                          className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between ${hasPendingChange ? 'bg-amber-50/70' : ''}`}
+                        >
                           <div className="flex min-w-0 items-center gap-3">
                             {student.avatarUrl ? (
                               <img
@@ -5136,12 +5539,123 @@ export default function AdminClassDetail() {
                                 {student.phone ? ` | ${student.phone}` : ''}
                                 {student.barcodeId ? ` | ${student.barcodeId}` : ''}
                               </p>
+                              <p className="truncate text-[10px] text-slate-400">
+                                Marked time: {formatDateTimeLabel(student.markedAt)}
+                              </p>
                             </div>
                           </div>
 
-                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${PHYSICAL_STATUS_BADGE[student.status]}`}>
-                            {PHYSICAL_STATUS_LABEL[student.status]}
-                          </span>
+                          <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${PHYSICAL_STATUS_BADGE[student.status]}`}>
+                              {PHYSICAL_STATUS_LABEL[student.status]}
+                            </span>
+
+                            {physicalSessionManualMode && (
+                              <>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {PHYSICAL_EDITABLE_STATUSES.map((statusOption) => {
+                                    const active = draftStatus === statusOption;
+                                    const toneClass = active
+                                      ? PHYSICAL_STATUS_BADGE[statusOption]
+                                      : 'border-slate-200 bg-white text-slate-500';
+
+                                    return (
+                                      <button
+                                        key={`session-status-${student.userId}-${statusOption}`}
+                                        type="button"
+                                        onClick={() => {
+                                          applyPhysicalSessionStudentDraftStatus(student, statusOption);
+                                        }}
+                                        disabled={saving || physicalSessionLoading || physicalSessionBatchSaving}
+                                        className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition hover:brightness-[0.98] disabled:opacity-60 ${toneClass}`}
+                                      >
+                                        {PHYSICAL_STATUS_LABEL[statusOption]}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Time</span>
+
+                                  {editingTime ? (
+                                    <>
+                                      <input
+                                        type="datetime-local"
+                                        value={draftMarkedAt}
+                                        onChange={(event) => {
+                                          setPhysicalSessionDraftMarkedAt((prev) => ({
+                                            ...prev,
+                                            [student.userId]: event.target.value,
+                                          }));
+                                        }}
+                                        className="h-8 min-w-[174px] rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
+                                      />
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPhysicalSessionEditingTimeUserIds((prev) => prev.filter((userId) => userId !== student.userId));
+                                        }}
+                                        disabled={saving || physicalSessionLoading || physicalSessionBatchSaving || !canEditTime}
+                                        className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                                      >
+                                        Done
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPhysicalSessionEditingTimeUserIds((prev) => prev.filter((userId) => userId !== student.userId));
+                                          setPhysicalSessionDraftMarkedAt((prev) => ({
+                                            ...prev,
+                                            [student.userId]: student.markedAt
+                                              ? toLocalDateTimeInputValue(student.markedAt)
+                                              : selectedPhysicalSessionDefaultMarkedAtInput,
+                                          }));
+                                        }}
+                                        disabled={saving || physicalSessionLoading || physicalSessionBatchSaving}
+                                        className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-100"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700">
+                                        {draftMarkedAt ? formatDateTimeLabel(draftMarkedAt) : 'Not marked'}
+                                      </span>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!canEditTime) return;
+                                          if (!draftMarkedAt && selectedPhysicalSessionDefaultMarkedAtInput) {
+                                            setPhysicalSessionDraftMarkedAt((prev) => ({
+                                              ...prev,
+                                              [student.userId]: selectedPhysicalSessionDefaultMarkedAtInput,
+                                            }));
+                                          }
+                                          setPhysicalSessionEditingTimeUserIds((prev) => (
+                                            prev.includes(student.userId)
+                                              ? prev
+                                              : [...prev, student.userId]
+                                          ));
+                                        }}
+                                        disabled={!canEditTime || saving || physicalSessionLoading || physicalSessionBatchSaving}
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                                        title="Edit attendance time"
+                                      >
+                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.25 2.25 0 113.182 3.182L7.5 20.213 3 21l.787-4.5 13.075-12.013z" />
+                                        </svg>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -5151,16 +5665,26 @@ export default function AdminClassDetail() {
             </div>
             </div>
 
-            {attendanceView === 'payments' && (
+            {tab === 'payments' && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Class Payment Status</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      View paid, pending, and unpaid students at class level with month-wise status.
+                      Student-wise month matrix for this class. Each month shows Paid, Pending, or Unpaid.
                     </p>
                   </div>
-                  <p className="text-[11px] text-slate-500">Months: {physicalPaymentMonths.length}</p>
+                  <div className="flex items-center gap-2 self-start md:self-center">
+                    <p className="text-[11px] text-slate-500">Months: {physicalPaymentMonths.length}</p>
+                    <button
+                      type="button"
+                      onClick={() => void exportPhysicalPaymentsXlsx()}
+                      disabled={physicalPaymentExporting || physicalPaymentLoading || physicalVisiblePaymentRows.length === 0}
+                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {physicalPaymentExporting ? 'Exporting...' : 'Export Excel'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -5192,6 +5716,9 @@ export default function AdminClassDetail() {
 
                 {physicalPaymentError && (
                   <p className="text-xs font-medium text-red-600">{physicalPaymentError}</p>
+                )}
+                {physicalPaymentExportError && (
+                  <p className="text-xs font-medium text-red-600">{physicalPaymentExportError}</p>
                 )}
 
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -5234,6 +5761,9 @@ export default function AdminClassDetail() {
                           .map((part) => part[0]?.toUpperCase() || '')
                           .join('') || '?';
                         const overallStatus = resolveClassPaymentOverallStatus(student);
+                        const monthStatusMap = new Map(
+                          student.months.map((month) => [month.monthId, month.status] as const),
+                        );
 
                         return (
                           <div key={`payment-mobile-${student.userId}`} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -5281,19 +5811,24 @@ export default function AdminClassDetail() {
                               </div>
                             </div>
 
-                            <div className="mt-2">
-                              {student.months.length === 0 ? (
+                            <div className="mt-2 space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Month Status</p>
+                              {physicalPaymentMonthsForMatrix.length === 0 ? (
                                 <span className="text-[11px] text-slate-400">No months</span>
                               ) : (
-                                <div className="flex flex-wrap gap-1">
-                                  {student.months.map((month) => (
-                                    <span
-                                      key={`mobile-${student.userId}-${month.monthId}`}
-                                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[month.status]}`}
-                                    >
-                                      {month.monthName}
-                                    </span>
-                                  ))}
+                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                  {physicalPaymentMonthsForMatrix.map((month) => {
+                                    const monthStatus = monthStatusMap.get(month.id) || 'UNPAID';
+
+                                    return (
+                                      <div key={`mobile-${student.userId}-${month.id}`} className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+                                        <span className="text-[10px] font-medium text-slate-600">{month.name} {month.year}</span>
+                                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[monthStatus]}`}>
+                                          {CLASS_PAYMENT_STATUS_LABEL[monthStatus]}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -5303,15 +5838,18 @@ export default function AdminClassDetail() {
                     </div>
 
                     <div className="hidden rounded-lg border border-slate-200 bg-white md:block">
-                      <table className="w-full table-fixed text-xs">
-                        <thead className="bg-slate-100 text-slate-600">
+                      <div className="max-h-[560px] overflow-auto">
+                      <table className="min-w-max w-full text-xs border-separate border-spacing-0">
+                        <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">Student</th>
-                            <th className="px-3 py-2 text-left font-semibold">Paid</th>
-                            <th className="px-3 py-2 text-left font-semibold">Pending</th>
-                            <th className="px-3 py-2 text-left font-semibold">Unpaid</th>
-                            <th className="px-3 py-2 text-left font-semibold">Overall</th>
-                            <th className="px-3 py-2 text-left font-semibold">Monthly Status</th>
+                            <th className="sticky left-0 z-20 border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold">Student</th>
+                            {physicalPaymentMonthsForMatrix.map((month) => (
+                              <th key={`payment-header-${month.id}`} className="border-l border-slate-200 px-3 py-2 text-center font-semibold whitespace-nowrap">
+                                <div>{month.name}</div>
+                                <div className="text-[10px] text-slate-500">{month.year}</div>
+                              </th>
+                            ))}
+                            <th className="border-l border-slate-200 px-3 py-2 text-center font-semibold">Overall</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -5324,10 +5862,13 @@ export default function AdminClassDetail() {
                               .map((part) => part[0]?.toUpperCase() || '')
                               .join('') || '?';
                             const overallStatus = resolveClassPaymentOverallStatus(student);
+                            const monthStatusMap = new Map(
+                              student.months.map((month) => [month.monthId, month.status] as const),
+                            );
 
                             return (
                               <tr key={`payment-${student.userId}`} className="border-t border-slate-100">
-                                <td className="px-3 py-2.5 align-middle">
+                                <td className="sticky left-0 z-[1] border-r border-slate-200 bg-white px-3 py-2.5 align-middle">
                                   <div className="flex items-center gap-2.5">
                                     {student.avatarUrl ? (
                                       <img
@@ -5352,40 +5893,30 @@ export default function AdminClassDetail() {
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-3 py-2.5 align-middle text-emerald-700 font-semibold">{student.paidCount}</td>
-                                <td className="px-3 py-2.5 align-middle text-amber-700 font-semibold">{student.pendingCount}</td>
-                                <td className="px-3 py-2.5 align-middle text-rose-700 font-semibold">{student.unpaidCount}</td>
-                                <td className="px-3 py-2.5 align-middle">
+
+                                {physicalPaymentMonthsForMatrix.map((month) => {
+                                  const monthStatus = monthStatusMap.get(month.id) || 'UNPAID';
+
+                                  return (
+                                    <td key={`payment-${student.userId}-${month.id}`} className="border-l border-slate-100 px-2.5 py-2.5 align-middle text-center">
+                                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[monthStatus]}`}>
+                                        {CLASS_PAYMENT_STATUS_LABEL[monthStatus]}
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+
+                                <td className="border-l border-slate-100 px-3 py-2.5 align-middle text-center">
                                   <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[overallStatus]}`}>
                                     {CLASS_PAYMENT_STATUS_LABEL[overallStatus]}
                                   </span>
-                                </td>
-                                <td className="px-3 py-2.5 align-middle">
-                                  {student.months.length === 0 ? (
-                                    <span className="text-[11px] text-slate-400">No months</span>
-                                  ) : (
-                                    <div className="flex flex-wrap gap-1">
-                                      {student.months.slice(0, 6).map((month) => (
-                                        <span
-                                          key={`${student.userId}-${month.monthId}`}
-                                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[month.status]}`}
-                                        >
-                                          {month.monthName}
-                                        </span>
-                                      ))}
-                                      {student.months.length > 6 && (
-                                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                                          +{student.months.length - 6} more
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
                                 </td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   </div>
                 )}
