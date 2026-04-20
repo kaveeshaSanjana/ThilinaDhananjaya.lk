@@ -1031,7 +1031,12 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
 /*              CLASS MONTH LIVE LESSONS PAGE             */
 /* ═══════════════════════════════════════════════════════ */
 
-export default function ClassMonthLiveLessonsPage() {
+interface ClassMonthLiveLessonsPageProps {
+  embedded?: boolean;
+  hideBackLink?: boolean;
+}
+
+export default function ClassMonthLiveLessonsPage({ embedded = false, hideBackLink = false }: ClassMonthLiveLessonsPageProps = {}) {
   const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -1077,10 +1082,12 @@ export default function ClassMonthLiveLessonsPage() {
   if (error) return (
     <div className="max-w-lg mx-auto mt-16 text-center bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] p-12 shadow-sm">
       <p className="text-[hsl(var(--muted-foreground))] text-sm font-medium">{error}</p>
-      <Link to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)} className="mt-4 inline-flex items-center gap-1.5 text-sm text-[hsl(var(--primary))] font-semibold hover:opacity-80">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Back to recordings
-      </Link>
+      {!embedded && !hideBackLink && (
+        <Link to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)} className="mt-4 inline-flex items-center gap-1.5 text-sm text-[hsl(var(--primary))] font-semibold hover:opacity-80">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back to recordings
+        </Link>
+      )}
     </div>
   );
 
@@ -1091,13 +1098,15 @@ export default function ClassMonthLiveLessonsPage() {
   return (
     <div className="w-full space-y-6 animate-fade-in">
       {/* Back link */}
-      <Link
-        to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)}
-        className="inline-flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-        Back to recordings
-      </Link>
+      {!embedded && !hideBackLink && (
+        <Link
+          to={getInstitutePath(instituteId, `/classes/${classId}/months/${monthId}`)}
+          className="inline-flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition font-medium"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back to recordings
+        </Link>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">

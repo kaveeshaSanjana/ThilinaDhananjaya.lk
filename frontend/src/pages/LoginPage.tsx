@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Eye, EyeOff } from 'lucide-react';
 import thilinaLogo from '../assets/logo.png';
-import thilinaLoginIllustration from '../assets/login-image.jpeg';
+import thilinaLoginIllustration from '../assets/thilinadhananjaya.png';
 
 const BRAND_APP_NAME = 'Thilina Dhananjaya';
 const BRAND_WELCOME_TITLE = 'Welcome back';

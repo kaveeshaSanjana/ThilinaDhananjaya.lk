@@ -6,6 +6,7 @@ import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
 import StudentWatchDetailModal from '../../components/StudentWatchDetailModal';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
+import ClassMonthLiveLessonsPage from '../ClassMonthLiveLessonsPage';
 
 /* ─── Constants ──────────────────────────────────────── */
 
@@ -166,7 +167,7 @@ export default function AdminMonthManage() {
   const [loading, setLoading] = useState(true);
 
   /* ─── Tab ───────────────────────────────────────────── */
-  const [tab, setTab] = useState<'recordings' | 'attendance'>('recordings');
+  const [tab, setTab] = useState<'recordings' | 'liveLessons' | 'attendance'>('recordings');
 
   /* ─── Recording form ─────────────────────────────────── */
   const [showRecForm, setShowRecForm] = useState(false);
@@ -367,18 +368,22 @@ export default function AdminMonthManage() {
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-1 p-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] w-full">
-        {(['recordings', 'attendance'] as const).map(t => (
+        {([
+          { key: 'recordings', label: 'Recordings' },
+          { key: 'liveLessons', label: 'Live Lessons' },
+          { key: 'attendance', label: 'Attendance' },
+        ] as const).map(({ key, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             className={`flex-1 py-2 rounded-lg text-xs font-semibold transition capitalize ${
-              tab === t
+              tab === key
                 ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm'
                 : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
             }`}
           >
-            {t}
-            {t === 'recordings' && (
+            {label}
+            {key === 'recordings' && (
               <span className="ml-1.5 text-[hsl(var(--muted-foreground))]">({recordings.length})</span>
             )}
           </button>
@@ -660,6 +665,13 @@ export default function AdminMonthManage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════════ LIVE LESSONS TAB ══════════ */}
+      {tab === 'liveLessons' && (
+        <div className="space-y-4">
+          <ClassMonthLiveLessonsPage embedded hideBackLink />
         </div>
       )}
 
