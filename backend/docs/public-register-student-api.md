@@ -5,6 +5,7 @@
 This endpoint creates a **new public student user** without authentication.
 
 - Route: `POST /api/public/register-student`
+- Bulk route: `POST /api/public/register-students/bulk`
 - Auth: `None` (public)
 - Controller: `backend/src/public/public.controller.ts`
 - Service flow: `backend/src/users/users.service.ts#create`
@@ -24,6 +25,7 @@ This endpoint creates a **new public student user** without authentication.
 5. If `classId` is provided:
   - Verifies class exists.
   - Auto-enrolls the created student into that class.
+  - If `paymentType` / `customMonthlyFee` are provided, those class fee settings are applied.
 6. Returns created student data (without password) and optional enrollment payload.
 
 ## Headers
@@ -58,7 +60,9 @@ If both are provided, `orgId` from body has higher priority than header:
   "avatarUrl": "https://example.com/avatar.jpg",
   "gender": "MALE",
   "orgId": "institute-uuid",
-  "classId": "class-uuid"
+  "classId": "class-uuid",
+  "paymentType": "HALF",
+  "customMonthlyFee": 2750
 }
 ```
 
@@ -82,6 +86,8 @@ Optional:
 - `gender` (`MALE`, `FEMALE`, `OTHER`)
 - `orgId`
 - `classId` (if provided, newly created student is automatically enrolled to this class)
+- `paymentType` (`FULL`, `HALF`, `FREE`) — optional, used only when `classId` is provided
+- `customMonthlyFee` (non-negative number) — optional, used only when `classId` is provided
 
 ## Success Response (`201 Created`)
 
@@ -113,11 +119,11 @@ Optional:
   "enrollment": {
     "id": "uuid",
     "classId": "class-uuid",
-    "paymentType": "FULL",
-    "customMonthlyFee": null,
+    "paymentType": "HALF",
+    "customMonthlyFee": 2750,
     "defaultMonthlyFee": 3500,
-    "effectiveMonthlyFee": 3500,
-    "hasCustomMonthlyFee": false,
+    "effectiveMonthlyFee": 2750,
+    "hasCustomMonthlyFee": true,
     "class": {
       "id": "class-uuid",
       "name": "Grade 10 Maths",
@@ -131,6 +137,8 @@ Optional:
 ```
 
 If `classId` is not provided, `enrollment` is returned as `null`.
+
+`paymentType` and `customMonthlyFee` are optional. If omitted, class default fee rules are used.
 
 ## Error Cases
 
@@ -146,6 +154,8 @@ Validation errors such as:
 - Missing both `instituteUserId` and `instituteId`
 - Invalid `dateOfBirth`
 - Invalid `gender`
+- Invalid `paymentType`
+- Invalid `customMonthlyFee`
 
 ### `409 Conflict`
 
@@ -162,6 +172,82 @@ From `UsersService.create(...)`:
 ### `500 Internal Server Error`
 
 Unexpected DB/app errors.
+
+---
+
+## Bulk Student Creation API
+
+### Endpoint
+
+```http
+POST /api/public/register-students/bulk
+Content-Type: application/json
+```
+
+### Request Body
+
+```json
+{
+  "students": [
+    {
+      "email": "student1@example.com",
+      "password": "Pass@12345",
+      "fullName": "Student One",
+      "instituteUserId": "PUB-2026-0001",
+      "barcodeId": "BC-2026-0001",
+      "classId": "class-uuid",
+      "paymentType": "FULL"
+    },
+    {
+      "email": "student2@example.com",
+      "password": "Pass@12345",
+      "fullName": "Student Two",
+      "instituteUserId": "PUB-2026-0002",
+      "barcodeId": "BC-2026-0002",
+      "classId": "class-uuid",
+      "customMonthlyFee": 3000
+    }
+  ]
+}
+```
+
+### Bulk Success Response (`200 OK`)
+
+```json
+{
+  "message": "Bulk student registration processed",
+  "summary": {
+    "totalRecords": 2,
+    "successCount": 1,
+    "failedCount": 1
+  },
+  "successful": [
+    {
+      "index": 1,
+      "status": "SUCCESS",
+      "email": "student1@example.com",
+      "studentId": "user_uuid_1",
+      "instituteUserId": "PUB-2026-0001",
+      "classId": "class-uuid",
+      "enrollmentStatus": "ENROLLED",
+      "student": { "id": "user_uuid_1" },
+      "enrollment": { "id": "enr_uuid_1", "paymentType": "FULL" }
+    }
+  ],
+  "failed": [
+    {
+      "index": 2,
+      "status": "FAILED",
+      "email": "student2@example.com",
+      "instituteUserId": "PUB-2026-0002",
+      "classId": "class-uuid",
+      "reason": "Class not found: class-uuid"
+    }
+  ]
+}
+```
+
+This response includes count fields and per-row status details.
 
 ## Password Handling
 
@@ -210,6 +296,8 @@ $body = @{
   avatarUrl = "https://example.com/avatar.jpg"
   gender = "MALE"
   classId = "class-uuid"
+  paymentType = "HALF"
+  customMonthlyFee = 2750
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/public/register-student" -ContentType "application/json" -Body $body

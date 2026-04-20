@@ -167,59 +167,168 @@ export async function exportStudentWatchDetailPdf(data: any) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 0, pageWidth, 26, 'F');
+  const palette = {
+    headerDark: [10, 18, 34] as const,
+    headerAccent: [8, 145, 178] as const,
+    sectionBar: [30, 41, 59] as const,
+    tableHead: [30, 41, 59] as const,
+    summaryHead: [13, 148, 136] as const,
+    card: [248, 250, 252] as const,
+    cardBorder: [226, 232, 240] as const,
+    text: [15, 23, 42] as const,
+    muted: [100, 116, 139] as const,
+    white: [255, 255, 255] as const,
+    info: [29, 78, 216] as const,
+    success: [22, 163, 74] as const,
+    warning: [217, 119, 6] as const,
+  };
 
-  doc.setTextColor(255, 255, 255);
+  const sessionEventCount = (session: any): number => {
+    if (!Array.isArray(session?.events)) return 0;
+    return session.events.filter((event: any) => {
+      const type = String(event?.type || event?.event || '').toUpperCase();
+      return !type.includes('HB') && !type.includes('HEARTBEAT') && type !== 'IDLE' && type !== 'FOCUS';
+    }).length;
+  };
+
+  const normalizeSessionStatus = (raw: string | undefined): string => {
+    const value = (raw || '').toUpperCase();
+    if (value === 'WATCHING') return 'Watching';
+    if (value === 'ENDED') return 'Ended';
+    if (value === 'PAUSED') return 'Paused';
+    if (value === 'JOINED') return 'Joined';
+    return value || '-';
+  };
+
+  let y = 38;
+
+  const ensurePageSpace = (neededHeight: number) => {
+    if (y + neededHeight <= pageHeight - 14) return;
+    doc.addPage();
+    y = 16;
+  };
+
+  const drawSectionTitle = (title: string, subtitle?: string) => {
+    ensurePageSpace(subtitle ? 16 : 11);
+    doc.setFillColor(...palette.sectionBar);
+    doc.roundedRect(14, y, pageWidth - 28, 8, 1.5, 1.5, 'F');
+    doc.setTextColor(...palette.white);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text(title, 16, y + 5.3);
+    y += 10;
+
+    if (subtitle) {
+      doc.setTextColor(...palette.muted);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(subtitle, 14, y + 2.5);
+      y += 5;
+    }
+
+    doc.setTextColor(...palette.text);
+  };
+
+  const drawMetricCard = (x: number, title: string, value: string, subValue: string, accent: readonly [number, number, number]) => {
+    const cardWidth = (pageWidth - 28 - 6) / 3;
+    const cardHeight = 18;
+    doc.setFillColor(...palette.card);
+    doc.setDrawColor(...palette.cardBorder);
+    doc.roundedRect(x, y, cardWidth, cardHeight, 1.8, 1.8, 'FD');
+
+    doc.setFillColor(...accent);
+    doc.rect(x, y, 2.4, cardHeight, 'F');
+
+    doc.setTextColor(...palette.muted);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.text(title.toUpperCase(), x + 4, y + 4.7);
+
+    doc.setTextColor(...palette.text);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(value, x + 4, y + 10.8);
+
+    doc.setTextColor(...palette.muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.8);
+    doc.text(subValue, x + 4, y + 15.2);
+  };
+
+  doc.setFillColor(...palette.headerDark);
+  doc.rect(0, 0, pageWidth, 30, 'F');
+  doc.setFillColor(...palette.headerAccent);
+  doc.rect(0, 30, pageWidth, 4, 'F');
+
+  doc.setTextColor(...palette.white);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.text('Student Watch Detail Report', 14, 10.5);
+  doc.setFontSize(16);
+  doc.text('Student Watch Report', 14, 11);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.8);
   doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, pageWidth - 14, 10.5, { align: 'right' });
-  doc.text(`Class: ${cls.name || '-'}`, 14, 16.5);
-  doc.text(`Recording: ${recording.title || '-'}`, 14, 21.5);
+  doc.text(`Class: ${cls.name || '-'}`, 14, 17);
+  doc.text(`Month: ${month.name || '-'}`, 14, 22);
+  doc.text(`Recording: ${recording.title || '-'}`, 14, 27);
 
-  doc.setTextColor(20, 20, 20);
-
-  let y = 31;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(14, y, pageWidth - 28, 34, 2, 2, 'FD');
+  doc.setTextColor(...palette.text);
+  doc.setFillColor(...palette.card);
+  doc.setDrawColor(...palette.cardBorder);
+  doc.roundedRect(14, y, pageWidth - 28, 40, 2, 2, 'FD');
 
   const avatarX = 18;
-  const avatarY = y + 5;
+  const avatarY = y + 8;
   const avatarSize = 24;
   if (avatarImage) {
     doc.addImage(avatarImage.dataUrl, avatarImage.format, avatarX, avatarY, avatarSize, avatarSize);
   } else {
-    doc.setFillColor(59, 130, 246);
+    doc.setFillColor(...palette.info);
     doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 'F');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...palette.white);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text(initialsFromName(studentDisplayName), avatarX + avatarSize / 2, avatarY + avatarSize / 2 + 1.5, { align: 'center' });
-    doc.setTextColor(20, 20, 20);
+    doc.setTextColor(...palette.text);
   }
 
   const textX = avatarX + avatarSize + 4;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12.5);
-  doc.text(studentDisplayName, textX, y + 11);
+  doc.text(studentDisplayName, textX, y + 12);
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Institute ID: ${profile.instituteId || '-'}`, textX, y + 16.5);
-  doc.text(`Phone: ${profile.phone || '-'}`, textX, y + 21.5);
-  doc.text(`Email: ${user.email || '-'}`, textX, y + 26.5);
-  doc.text(
-    `Attendance: ${student.attendanceStatus || 'NOT VIEWED'}  |  Payment: ${student.paymentStatus || 'UNPAID'}  |  Enrolled: ${student.enrolled ? 'Yes' : 'No'}`,
-    textX,
-    y + 31,
+  doc.setFontSize(8.8);
+  doc.text(`Institute ID: ${profile.instituteId || '-'}`, textX, y + 17.5);
+  doc.text(`Phone: ${profile.phone || '-'}`, textX, y + 22.2);
+  doc.text(`Email: ${user.email || '-'}`, textX, y + 26.9);
+
+  const statusLine = doc.splitTextToSize(
+    `Attendance: ${student.attendanceStatus || 'NOT VIEWED'} | Payment: ${student.paymentStatus || 'UNPAID'} | Enrolled: ${student.enrolled ? 'Yes' : 'No'}`,
+    pageWidth - textX - 16,
   );
+  doc.setTextColor(...palette.muted);
+  doc.text(statusLine, textX, y + 31.6);
+  doc.setTextColor(...palette.text);
 
-  y += 40;
+  y += 46;
 
+  drawMetricCard(14, 'Watch Sessions', String(student.sessionCount || 0), 'Total sessions captured', palette.info);
+  drawMetricCard(14 + ((pageWidth - 28 - 6) / 3) + 3, 'Total Watched', fmtDuration(student.totalWatchedSec || 0), 'Across all sessions', palette.success);
+  drawMetricCard(14 + (((pageWidth - 28 - 6) / 3) * 2) + 6, 'Activity Events', String(allActivityEvents.length), 'Playback + attendance events', palette.warning);
+
+  y += 22;
+
+  const tableStyles = {
+    fontSize: 8.3,
+    cellPadding: 2.1,
+    lineColor: [...palette.cardBorder],
+    lineWidth: 0.15,
+    textColor: [...palette.text],
+    overflow: 'linebreak' as const,
+  };
+
+  drawSectionTitle('Report Overview', 'Core class, recording and timeline metadata');
   autoTable(doc, {
     startY: y,
     head: [['Field', 'Value']],
@@ -228,84 +337,83 @@ export async function exportStudentWatchDetailPdf(data: any) {
       ['Month', month.name || '-'],
       ['Recording Title', recording.title || '-'],
       ['Recording Duration', recording.duration ? fmtSec(recording.duration) : '-'],
-      ['Last Watch Time', fmtDateTime(student.lastWatchedAt)],
-      ['Live Joined At', fmtDateTime(student.liveJoinedAt)],
+      ['Last Watch', fmtDateTime(student.lastWatchedAt)],
+      ['Live Joined', fmtDateTime(student.liveJoinedAt)],
     ],
-    styles: { fontSize: 9, cellPadding: 2.3, overflow: 'linebreak' },
-    columnStyles: { 0: { cellWidth: 42, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
-    headStyles: { fillColor: [30, 41, 59] },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    styles: { ...tableStyles, fontSize: 8.8, cellPadding: 2.4 },
+    columnStyles: { 0: { cellWidth: 44, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14 },
     theme: 'grid',
   });
 
-  y = ((doc as any).lastAutoTable?.finalY || y) + 4;
+  y = ((doc as any).lastAutoTable?.finalY || y) + 5;
 
   autoTable(doc, {
     startY: y,
-    head: [['Sessions', 'Total Watch', 'Attendance Watch', 'Attendance Status', 'Payment Status']],
+    head: [['Session Count', 'Total Watch', 'Attendance Watch', 'Attendance Status', 'Payment Status', 'Events']],
     body: [[
       String(student.sessionCount || 0),
       fmtDuration(student.totalWatchedSec || 0),
       fmtDuration(student.attendanceWatchedSec || 0),
       student.attendanceStatus || 'NOT VIEWED',
       student.paymentStatus || 'UNPAID',
+      String(allActivityEvents.length),
     ]],
-    styles: { fontSize: 9.2, cellPadding: 2.5, halign: 'center' },
-    headStyles: { fillColor: [15, 118, 110] },
+    styles: { ...tableStyles, fontSize: 8.7, halign: 'center' },
+    headStyles: { fillColor: [...palette.summaryHead], textColor: [...palette.white], fontStyle: 'bold' },
+    margin: { left: 14, right: 14 },
     theme: 'grid',
   });
 
-  y = ((doc as any).lastAutoTable?.finalY || y) + 5;
+  y = ((doc as any).lastAutoTable?.finalY || y) + 6;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(`Watch Sessions (${sessions.length})`, 14, y);
-  doc.setFont('helvetica', 'normal');
-
+  drawSectionTitle(`Watch Sessions (${sessions.length})`, 'Session-level watch behavior with event counts and active ratio');
   autoTable(doc, {
-    startY: y + 2,
-    head: [['#', 'Status', 'Started', 'Ended', 'Watched', 'Real Time', 'Active %', 'Video Range']],
+    startY: y,
+    head: [['#', 'Status', 'Started', 'Ended', 'Watched', 'Real Time', 'Active', 'Events', 'Video Range']],
     body: sessions.length > 0
       ? sessions.map((session: any, i: number) => {
           const realDur = calcRealDuration(session);
           const active = calcActivePercent(session);
           return [
             String(i + 1),
-            session.status || '-',
+            normalizeSessionStatus(session.status),
             fmtDateTime(session.startedAt),
             fmtDateTime(session.endedAt),
             fmtDuration(session.totalWatchedSec || 0),
             fmtDuration(realDur),
             `${active}%`,
+            String(sessionEventCount(session)),
             `${fmtSec(session.videoStartPos || 0)} -> ${fmtSec(session.videoEndPos || 0)}`,
           ];
         })
-      : [['-', '-', '-', '-', '-', '-', '-', '-']],
-    styles: { fontSize: 8, cellPadding: 2 },
+      : [['-', '-', '-', '-', '-', '-', '-', '-', '-']],
+    styles: { ...tableStyles, fontSize: 7.8 },
     columnStyles: {
       0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 19, halign: 'center' },
-      2: { cellWidth: 34 },
-      3: { cellWidth: 34 },
-      4: { cellWidth: 20, halign: 'center' },
-      5: { cellWidth: 20, halign: 'center' },
-      6: { cellWidth: 16, halign: 'center' },
-      7: { cellWidth: 'auto' },
+      1: { cellWidth: 18, halign: 'center' },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 18, halign: 'center' },
+      5: { cellWidth: 18, halign: 'center' },
+      6: { cellWidth: 12, halign: 'center' },
+      7: { cellWidth: 12, halign: 'center' },
+      8: { cellWidth: 'auto' },
     },
-    headStyles: { fillColor: [30, 41, 59] },
-    alternateRowStyles: { fillColor: [250, 250, 250] },
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14 },
     theme: 'grid',
   });
 
-  const tableY = ((doc as any).lastAutoTable?.finalY || 0) + 5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(`Activity Timeline (${allActivityEvents.length})`, 14, tableY);
-  doc.setFont('helvetica', 'normal');
+  y = ((doc as any).lastAutoTable?.finalY || y) + 6;
 
+  drawSectionTitle(`Activity Timeline (${allActivityEvents.length})`, 'Playback actions, seeks and attendance events in chronological order');
   autoTable(doc, {
-    startY: tableY + 2,
-    head: [['When', 'Event', 'Source', 'Video Time', 'Watched']],
+    startY: y,
+    head: [['When', 'Activity', 'Source', 'Video Position', 'Watched Time', 'Details']],
     body: allActivityEvents.length > 0
       ? allActivityEvents.map((evt: any) => {
           const raw = String(evt.type || evt.event || 'UNKNOWN');
@@ -313,43 +421,52 @@ export async function exportStudentWatchDetailPdf(data: any) {
           const source = evt._source === 'session'
             ? `Session${evt._sessionNum ? ` #${evt._sessionNum}` : ''}`
             : 'Attendance';
-          const vTime = evt.videoTime ?? evt.videoPosition;
+          const videoTime = evt.videoTime ?? evt.videoPosition;
+          const seekFrom = evt.seekFrom ?? evt.fromVideoTime;
+          const seekTo = evt.seekTo ?? evt.toVideoTime;
+          const details = seekFrom != null && seekTo != null
+            ? `${fmtSec(Number(seekFrom))} -> ${fmtSec(Number(seekTo))}`
+            : (evt.note || evt.reason || '-');
+
           return [
             when,
             activityLabel(raw),
             source,
-            vTime != null ? fmtSec(Number(vTime)) : '-',
+            videoTime != null ? fmtSec(Number(videoTime)) : '-',
             evt.watchedSec != null ? fmtDuration(Number(evt.watchedSec)) : '-',
+            String(details),
           ];
         })
-      : [['-', '-', '-', '-', '-']],
-    styles: { fontSize: 8, cellPadding: 2 },
+      : [['-', '-', '-', '-', '-', '-']],
+    styles: { ...tableStyles, fontSize: 7.9 },
     columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 66 },
-      2: { cellWidth: 25, halign: 'center' },
-      3: { cellWidth: 24, halign: 'center' },
-      4: { cellWidth: 'auto', halign: 'center' },
+      0: { cellWidth: 31 },
+      1: { cellWidth: 44 },
+      2: { cellWidth: 22, halign: 'center' },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 20, halign: 'center' },
+      5: { cellWidth: 'auto' },
     },
-    headStyles: { fillColor: [30, 41, 59], textColor: 255 },
-    alternateRowStyles: { fillColor: [252, 252, 252] },
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14, bottom: 10 },
     theme: 'grid',
-    margin: { bottom: 10 },
   });
 
   const pageCount = doc.getNumberOfPages();
   for (let page = 1; page <= pageCount; page++) {
     doc.setPage(page);
-    doc.setDrawColor(226, 232, 240);
+    doc.setDrawColor(...palette.cardBorder);
     doc.line(14, pageHeight - 9, pageWidth - 14, pageHeight - 9);
     doc.setFontSize(8);
-    doc.setTextColor(110);
+    doc.setTextColor(...palette.muted);
     doc.text(`Student: ${studentDisplayName}`, 14, pageHeight - 4.5);
+    doc.text('Thilina Dhananjaya LMS', pageWidth / 2, pageHeight - 4.5, { align: 'center' });
     doc.text(`Page ${page} of ${pageCount}`, pageWidth - 14, pageHeight - 4.5, { align: 'right' });
   }
 
   const fileName = cleanFileName(
-    `Student-Watch-Detail-${studentDisplayName}.pdf`,
+    `Student-Watch-Detail-${studentDisplayName}-${recording.title || 'Recording'}.pdf`,
   );
   doc.save(fileName);
 }

@@ -6,6 +6,7 @@ Base path with global prefix:
 
 - `/api/public/attendance/import/by-barcode`
 - `/api/public/attendance/import/by-institute-id`
+- `/api/public/attendance/import/bulk/by-institute-id`
 
 ## 1. Import by Barcode
 
@@ -85,6 +86,97 @@ For both endpoints:
 
 ---
 
+## 3. Bulk Import by Institute Student ID
+
+### Endpoint
+
+```http
+POST /api/public/attendance/import/bulk/by-institute-id
+Content-Type: application/json
+```
+
+### Request Body
+
+```json
+{
+  "sessionId": "cls_session_uuid",
+  "classId": "class_uuid",
+  "records": [
+    {
+      "studentInstituteId": "TD-2026-00045",
+      "date": "2026-04-20",
+      "checkInTime": "10:12",
+      "status": "PRESENT"
+    },
+    {
+      "studentInstituteId": "TD-2026-00046",
+      "checkInAt": "2026-04-20T10:14:33.000Z",
+      "status": "LATE",
+      "note": "Arrived after bell"
+    }
+  ]
+}
+```
+
+### Required Fields
+
+- `sessionId` (string)
+- `classId` (string)
+- `records` (array, at least 1 item)
+- `records[].studentInstituteId` (string)
+
+### Optional Per-Record Fields
+
+- `records[].status`: `PRESENT | ABSENT | LATE | EXCUSED` (default: `PRESENT`)
+- `records[].date`: `YYYY-MM-DD` (must match the session date)
+- `records[].checkInTime`: `HH:mm`
+- `records[].checkInAt`: ISO datetime
+- `records[].note`: string
+
+### Bulk Response (Enhanced Summary)
+
+```json
+{
+  "message": "Bulk attendance import processed",
+  "session": {
+    "id": "cls_session_uuid",
+    "classId": "class_uuid",
+    "className": "Grade 10 Maths",
+    "date": "2026-04-20",
+    "sessionTime": "10:00",
+    "sessionCode": "MORNING_BATCH",
+    "sessionAt": "2026-04-20T10:00:00.000Z"
+  },
+  "classId": "class_uuid",
+  "summary": {
+    "totalRecords": 2,
+    "successCount": 1,
+    "failedCount": 1
+  },
+  "successful": [
+    {
+      "index": 1,
+      "studentInstituteId": "TD-2026-00045",
+      "userId": "user_uuid_45",
+      "attendanceId": "attendance_uuid_45",
+      "status": "PRESENT",
+      "sessionAt": "2026-04-20T10:12:00.000Z"
+    }
+  ],
+  "failed": [
+    {
+      "index": 2,
+      "studentInstituteId": "TD-2026-00999",
+      "reason": "No student found for institute ID: TD-2026-00999"
+    }
+  ]
+}
+```
+
+This response gives exact counts and failed student IDs with reasons.
+
+---
+
 ## Success Response (Both Endpoints)
 
 ```json
@@ -127,6 +219,8 @@ For both endpoints:
 - `404` if session is not found.
 - `404` if student is not found by barcode or institute id.
 - `400` if student is not enrolled in that session's class.
+- `400` if `sessionId` does not belong to `classId` in bulk import.
+- `400` if a bulk record `date` does not match session date.
 - `400` for invalid payload values (invalid status/date format/etc).
 
 ---

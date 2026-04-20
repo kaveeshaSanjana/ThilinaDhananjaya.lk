@@ -403,6 +403,14 @@ export default function AdminMonthRecAttendance() {
     });
   }, [gridData, gridColumns]);
 
+  const getDetailRecordingForStudent = (student: StudentRow): RecordingCell | null => {
+    const withSessions = student.recordings.find((r: RecordingCell) => (r?.sessionCount || 0) > 0);
+    if (withSessions) return withSessions;
+
+    const withAttendance = student.recordings.find((r: RecordingCell) => Boolean(r?.attendanceStatus));
+    return withAttendance || null;
+  };
+
   /*  RENDER  */
   if (loadingInit) return (
     <div className="flex items-center justify-center h-64">
@@ -795,20 +803,22 @@ export default function AdminMonthRecAttendance() {
 
                           {/* Row actions */}
                           <td className="px-3 py-3 text-right">
-                            {student.recordings.some((r: RecordingCell) => r?.sessionCount > 0 || r?.attendanceStatus) && (
-                              <button
-                                onClick={() => {
-                                  const firstActive = student.recordings.find((r: RecordingCell) => r?.sessionCount > 0 || r?.attendanceStatus);
-                                  if (firstActive) setPopup({ recordingId: firstActive.recordingId, userId: student.userId });
-                                }}
-                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary)/0.1)] hover:text-[hsl(var(--primary))]"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                </svg>
-                                Detail
-                              </button>
-                            )}
+                            {(() => {
+                              const detailTarget = getDetailRecordingForStudent(student);
+                              if (!detailTarget) return null;
+
+                              return (
+                                <button
+                                  onClick={() => setPopup({ recordingId: detailTarget.recordingId, userId: student.userId })}
+                                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary)/0.1)] hover:text-[hsl(var(--primary))]"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  View Detail
+                                </button>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -895,6 +905,9 @@ export default function AdminMonthRecAttendance() {
                       ))}
                       <th className="px-3 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[60px] border-l border-[hsl(var(--border))]">
                         %
+                      </th>
+                      <th className="px-3 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[90px] border-l border-[hsl(var(--border))]">
+                        Detail
                       </th>
                     </tr>
                   </thead>
@@ -998,6 +1011,25 @@ export default function AdminMonthRecAttendance() {
                             }`}>
                               {pct}%
                             </span>
+                          </td>
+
+                          <td className="px-3 py-3 text-center border-l border-[hsl(var(--border))]">
+                            {(() => {
+                              const detailTarget = getDetailRecordingForStudent(student);
+                              if (!detailTarget) {
+                                return <span className="text-[11px] text-slate-300">—</span>;
+                              }
+
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setPopup({ recordingId: detailTarget.recordingId, userId: student.userId })}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary)/0.1)] hover:text-[hsl(var(--primary))]"
+                                >
+                                  View Detail
+                                </button>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );

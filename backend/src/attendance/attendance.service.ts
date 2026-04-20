@@ -699,6 +699,14 @@ export class AttendanceService {
     return raw || null;
   }
 
+  private normalizeClassAttendanceStatus(status?: string): ClassAttendanceStatus {
+    const normalized = (status || 'PRESENT').trim().toUpperCase();
+    if (normalized === 'PRESENT' || normalized === 'ABSENT' || normalized === 'LATE' || normalized === 'EXCUSED') {
+      return normalized as ClassAttendanceStatus;
+    }
+    throw new BadRequestException('status must be PRESENT, ABSENT, LATE, or EXCUSED');
+  }
+
   private resolveSessionAt(date: string, sessionTime: string, sessionAt?: string): Date | null {
     const raw = (sessionAt || '').trim();
     if (raw) {
@@ -1012,6 +1020,157 @@ export class AttendanceService {
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       },
+    };
+  }
+
+  async importPublicClassAttendanceBulkBySessionInstituteId(data: {
+    sessionId: string;
+    classId: string;
+    records: Array<{
+      studentInstituteId: string;
+      date?: string;
+      checkInTime?: string;
+      checkInAt?: string;
+      status?: string;
+      note?: string;
+    }>;
+  }) {
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId);
+    const requestedClassId = (data.classId || '').trim();
+
+    if (!requestedClassId) {
+      throw new BadRequestException('classId is required');
+    }
+
+    if (session.classId !== requestedClassId) {
+      throw new BadRequestException('sessionId does not belong to the provided classId');
+    }
+
+    const successful: Array<{
+      index: number;
+      studentInstituteId: string;
+      userId: string;
+      attendanceId: string;
+      status: ClassAttendanceStatus;
+      sessionAt: string | null;
+    }> = [];
+    const failed: Array<{
+      index: number;
+      studentInstituteId: string;
+      reason: string;
+    }> = [];
+
+    for (let i = 0; i < data.records.length; i += 1) {
+      const row = data.records[i];
+      const index = i + 1;
+      const studentInstituteId = (row.studentInstituteId || '').trim();
+
+      if (!studentInstituteId) {
+        failed.push({
+          index,
+          studentInstituteId: '',
+          reason: 'studentInstituteId is required',
+        });
+        continue;
+      }
+
+      try {
+        const status = this.normalizeClassAttendanceStatus(row.status);
+
+        const checkInAtRaw = (row.checkInAt || '').trim();
+        let rowSessionAtIso = '';
+
+        if (checkInAtRaw) {
+          const parsed = new Date(checkInAtRaw);
+          if (Number.isNaN(parsed.getTime())) {
+            throw new BadRequestException('Invalid checkInAt');
+          }
+          rowSessionAtIso = parsed.toISOString();
+        } else {
+          const rowDate = (row.date || session.date || '').trim() || session.date;
+          this.normalizeClassAttendanceDate(rowDate);
+          if (rowDate !== session.date) {
+            throw new BadRequestException(`date must match session date ${session.date}`);
+          }
+
+          const rowCheckInTimeRaw = (row.checkInTime || '').trim();
+          const rowCheckInTime = rowCheckInTimeRaw
+            ? this.normalizeSessionTime(rowCheckInTimeRaw)
+            : this.normalizeSessionTime(session.sessionTime);
+
+          if (rowCheckInTime === '00:00') {
+            rowSessionAtIso = new Date().toISOString();
+          } else {
+            const parsed = new Date(`${rowDate}T${rowCheckInTime}:00`);
+            if (Number.isNaN(parsed.getTime())) {
+              throw new BadRequestException('Invalid checkInTime');
+            }
+            rowSessionAtIso = parsed.toISOString();
+          }
+        }
+
+        const profile = await this.prisma.profile.findUnique({
+          where: { instituteId: studentInstituteId },
+          select: {
+            userId: true,
+          },
+        });
+
+        if (!profile) {
+          throw new NotFoundException(`No student found for institute ID: ${studentInstituteId}`);
+        }
+
+        await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+        const attendance = await this.doUpsertClassAttendance(profile.userId, {
+          classId: session.classId,
+          date: session.date,
+          sessionTime: session.sessionTime,
+          sessionCode: session.sessionCode || undefined,
+          sessionAt: rowSessionAtIso,
+          status,
+          note: row.note,
+          method: 'public_import_institute_id_bulk',
+        });
+
+        successful.push({
+          index,
+          studentInstituteId,
+          userId: profile.userId,
+          attendanceId: attendance.id,
+          status: attendance.status,
+          sessionAt: attendance.sessionAt ? attendance.sessionAt.toISOString() : null,
+        });
+      } catch (error: any) {
+        const message = error?.message;
+        const reason = Array.isArray(message)
+          ? message.join(', ')
+          : (typeof message === 'string' && message.trim()
+            ? message
+            : 'Failed to import attendance');
+
+        failed.push({
+          index,
+          studentInstituteId,
+          reason,
+        });
+      }
+    }
+
+    const totalRecords = data.records.length;
+    const successCount = successful.length;
+    const failedCount = failed.length;
+
+    return {
+      session,
+      classId: session.classId,
+      summary: {
+        totalRecords,
+        successCount,
+        failedCount,
+      },
+      successful,
+      failed,
     };
   }
 

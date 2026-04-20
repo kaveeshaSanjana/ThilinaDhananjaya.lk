@@ -1,10 +1,14 @@
 import { Controller, Post, Body, Headers, HttpCode, HttpStatus, NotFoundException } from '@nestjs/common';
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf, IsIn, IsArray, ArrayMinSize, ValidateNested, Matches, IsNumber, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+const ATTENDANCE_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ATTENDANCE_TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 enum Gender {
   MALE = 'MALE',
@@ -89,6 +93,17 @@ class PublicRegisterDto {
   @IsOptional()
   @IsString()
   classId?: string; // Optional class id to auto-enroll after registration
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['FULL', 'HALF', 'FREE'])
+  paymentType?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  customMonthlyFee?: number;
 }
 
 class PublicImportAttendanceByBarcodeDto {
@@ -137,6 +152,59 @@ class PublicImportAttendanceByInstituteIdDto {
   note?: string;
 }
 
+class PublicBulkImportAttendanceByInstituteIdItemDto {
+  @IsString()
+  @IsNotEmpty()
+  studentInstituteId: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_DATE_REGEX, { message: 'date must be in YYYY-MM-DD format' })
+  date?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'checkInTime must be in HH:mm format' })
+  checkInTime?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+class PublicBulkImportAttendanceByInstituteIdDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => PublicBulkImportAttendanceByInstituteIdItemDto)
+  records: PublicBulkImportAttendanceByInstituteIdItemDto[];
+}
+
+class PublicBulkRegisterStudentDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => PublicRegisterDto)
+  students: PublicRegisterDto[];
+}
+
 @Controller('public')
 export class PublicController {
   constructor(
@@ -146,18 +214,72 @@ export class PublicController {
     private prisma: PrismaService,
   ) {}
 
-  /**
-   * Public endpoint — no authentication required.
-   * Registers a new student. Accepts requests from any origin.
-   * Use this for bulk-registration scripts.
-   *
-   * POST /api/public/register-student
-   */
-  @Post('register-student')
-  @HttpCode(HttpStatus.CREATED)
-  async registerStudent(
-    @Body() body: PublicRegisterDto,
-    @Headers('x-institute-id') headerOrgId?: string,
+  private formatPublicStudentPayload(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      instituteId: user.orgId,
+      instituteUserId: user.profile?.instituteId,
+      barcodeId: user.profile?.barcodeId,
+      fullName: user.profile?.fullName,
+      avatarUrl: user.profile?.avatarUrl,
+      phone: user.profile?.phone,
+      whatsappPhone: user.profile?.whatsappPhone,
+      school: user.profile?.school,
+      address: user.profile?.address,
+      occupation: user.profile?.occupation,
+      gender: user.profile?.gender,
+      dateOfBirth: user.profile?.dateOfBirth,
+      guardianName: user.profile?.guardianName,
+      guardianPhone: user.profile?.guardianPhone,
+      relationship: user.profile?.relationship,
+      status: user.profile?.status,
+      enrolledDate: user.profile?.enrolledDate,
+      createdAt: user.createdAt,
+    };
+  }
+
+  private formatPublicEnrollmentPayload(enrollment: any) {
+    if (!enrollment) return null;
+
+    return {
+      id: enrollment.id,
+      classId: enrollment.classId,
+      paymentType: enrollment.paymentType,
+      customMonthlyFee: enrollment.customMonthlyFee,
+      defaultMonthlyFee: enrollment.defaultMonthlyFee,
+      effectiveMonthlyFee: enrollment.effectiveMonthlyFee,
+      hasCustomMonthlyFee: enrollment.hasCustomMonthlyFee,
+      class: enrollment.class
+        ? {
+          id: enrollment.class.id,
+          name: enrollment.class.name,
+          subject: enrollment.class.subject,
+          monthlyFee: enrollment.class.monthlyFee,
+        }
+        : null,
+      createdAt: enrollment.createdAt,
+      updatedAt: enrollment.updatedAt,
+    };
+  }
+
+  private resolvePublicErrorMessage(error: any) {
+    const errorMessage = error?.response?.message;
+    if (Array.isArray(errorMessage)) {
+      return errorMessage.join(', ');
+    }
+    if (typeof errorMessage === 'string' && errorMessage.trim()) {
+      return errorMessage;
+    }
+    if (typeof error?.message === 'string' && error.message.trim()) {
+      return error.message;
+    }
+    return 'Failed to register student';
+  }
+
+  private async registerSinglePublicStudent(
+    body: PublicRegisterDto,
+    headerOrgId?: string,
   ) {
     const classId = (body.classId || '').trim();
 
@@ -198,7 +320,12 @@ export class PublicController {
     let enrollment: any = null;
     if (classId) {
       try {
-        enrollment = await this.enrollmentsService.enroll(user.id, classId);
+        enrollment = await this.enrollmentsService.enroll(
+          user.id,
+          classId,
+          body.paymentType,
+          body.customMonthlyFee,
+        );
       } catch (error) {
         await this.usersService.delete(user.id).catch(() => null);
         throw error;
@@ -206,50 +333,108 @@ export class PublicController {
     }
 
     return {
+      student: this.formatPublicStudentPayload(user),
+      enrollment: this.formatPublicEnrollmentPayload(enrollment),
+    };
+  }
+
+  /**
+   * Public endpoint — no authentication required.
+   * Registers a new student. Accepts requests from any origin.
+   * Use this for bulk-registration scripts.
+   *
+   * POST /api/public/register-student
+   */
+  @Post('register-student')
+  @HttpCode(HttpStatus.CREATED)
+  async registerStudent(
+    @Body() body: PublicRegisterDto,
+    @Headers('x-institute-id') headerOrgId?: string,
+  ) {
+    const result = await this.registerSinglePublicStudent(body, headerOrgId);
+
+    return {
       message: 'Student registered successfully',
-      student: {
-        id: user.id,
-        email: user.email,
-        instituteId: user.orgId,
-        instituteUserId: user.profile?.instituteId,
-        barcodeId: user.profile?.barcodeId,
-        fullName: user.profile?.fullName,
-        avatarUrl: user.profile?.avatarUrl,
-        phone: user.profile?.phone,
-        whatsappPhone: user.profile?.whatsappPhone,
-        school: user.profile?.school,
-        address: user.profile?.address,
-        occupation: user.profile?.occupation,
-        gender: user.profile?.gender,
-        dateOfBirth: user.profile?.dateOfBirth,
-        guardianName: user.profile?.guardianName,
-        guardianPhone: user.profile?.guardianPhone,
-        relationship: user.profile?.relationship,
-        status: user.profile?.status,
-        enrolledDate: user.profile?.enrolledDate,
-        createdAt: user.createdAt,
+      ...result,
+    };
+  }
+
+  /**
+   * Public endpoint:
+   * Bulk create students with optional class enrollment/fees per row.
+   */
+  @Post('register-students/bulk')
+  @HttpCode(HttpStatus.OK)
+  async registerStudentsBulk(
+    @Body() body: PublicBulkRegisterStudentDto,
+    @Headers('x-institute-id') headerOrgId?: string,
+  ) {
+    const successful: Array<{
+      index: number;
+      status: 'SUCCESS';
+      email: string;
+      studentId: string;
+      instituteUserId: string | null;
+      classId: string | null;
+      enrollmentStatus: 'ENROLLED' | 'NOT_ENROLLED';
+      student: any;
+      enrollment: any;
+    }> = [];
+
+    const failed: Array<{
+      index: number;
+      status: 'FAILED';
+      email: string;
+      instituteUserId: string | null;
+      classId: string | null;
+      reason: string;
+    }> = [];
+
+    for (let i = 0; i < body.students.length; i += 1) {
+      const index = i + 1;
+      const row = body.students[i];
+      const email = (row.email || '').trim();
+      const instituteUserId = ((row.instituteUserId || row.instituteId || '') as string).trim() || null;
+      const classId = (row.classId || '').trim() || null;
+
+      try {
+        const result = await this.registerSinglePublicStudent(row, headerOrgId);
+        successful.push({
+          index,
+          status: 'SUCCESS',
+          email: result.student.email,
+          studentId: result.student.id,
+          instituteUserId: result.student.instituteUserId || null,
+          classId,
+          enrollmentStatus: result.enrollment ? 'ENROLLED' : 'NOT_ENROLLED',
+          student: result.student,
+          enrollment: result.enrollment,
+        });
+      } catch (error: any) {
+        failed.push({
+          index,
+          status: 'FAILED',
+          email,
+          instituteUserId,
+          classId,
+          reason: this.resolvePublicErrorMessage(error),
+        });
+      }
+    }
+
+    const totalRecords = body.students.length;
+    const successCount = successful.length;
+    const failedCount = failed.length;
+
+    return {
+      message: 'Bulk student registration processed',
+      summary: {
+        totalRecords,
+        successCount,
+        failedCount,
       },
-      enrollment: enrollment
-        ? {
-          id: enrollment.id,
-          classId: enrollment.classId,
-          paymentType: enrollment.paymentType,
-          customMonthlyFee: enrollment.customMonthlyFee,
-          defaultMonthlyFee: enrollment.defaultMonthlyFee,
-          effectiveMonthlyFee: enrollment.effectiveMonthlyFee,
-          hasCustomMonthlyFee: enrollment.hasCustomMonthlyFee,
-          class: enrollment.class
-            ? {
-              id: enrollment.class.id,
-              name: enrollment.class.name,
-              subject: enrollment.class.subject,
-              monthlyFee: enrollment.class.monthlyFee,
-            }
-            : null,
-          createdAt: enrollment.createdAt,
-          updatedAt: enrollment.updatedAt,
-        }
-        : null,
+      successful,
+      failed,
     };
   }
 
@@ -291,6 +476,25 @@ export class PublicController {
 
     return {
       message: 'Attendance imported successfully',
+      ...result,
+    };
+  }
+
+  /**
+   * Public endpoint for external systems:
+   * Bulk import class attendance by institute student IDs for one session.
+   */
+  @Post('attendance/import/bulk/by-institute-id')
+  @HttpCode(HttpStatus.OK)
+  async importAttendanceBulkByInstituteId(@Body() body: PublicBulkImportAttendanceByInstituteIdDto) {
+    const result = await this.attendanceService.importPublicClassAttendanceBulkBySessionInstituteId({
+      sessionId: body.sessionId,
+      classId: body.classId,
+      records: body.records,
+    });
+
+    return {
+      message: 'Bulk attendance import processed',
       ...result,
     };
   }

@@ -19,10 +19,22 @@ const ENROLLMENT_PAYMENT_TYPES = ['FULL', 'HALF', 'FREE'] as const;
 
 type EnrollmentPaymentType = typeof ENROLLMENT_PAYMENT_TYPES[number];
 
-const PAYMENT_TYPE_META: Record<EnrollmentPaymentType, { label: string; badge: string }> = {
-  FULL: { label: 'Full', badge: 'bg-blue-100 text-blue-700' },
-  HALF: { label: 'Half', badge: 'bg-amber-100 text-amber-700' },
-  FREE: { label: 'Free Card', badge: 'bg-emerald-100 text-emerald-700' },
+const PAYMENT_TYPE_META: Record<EnrollmentPaymentType, { label: string; badge: string; chipClass: string }> = {
+  FULL: {
+    label: 'Full',
+    badge: 'bg-blue-100 text-blue-700',
+    chipClass: 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100',
+  },
+  HALF: {
+    label: 'Half',
+    badge: 'bg-amber-100 text-amber-700',
+    chipClass: 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100',
+  },
+  FREE: {
+    label: 'Free Card',
+    badge: 'bg-emerald-100 text-emerald-700',
+    chipClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100',
+  },
 };
 
 function formatMoney(amount: unknown) {
@@ -2577,7 +2589,7 @@ export default function AdminClassDetail() {
 
     return Array.from(map.values())
       .map((row) => {
-        const topRecording = Object.values(row.recordingWatch)
+        const topRecording = (Object.values(row.recordingWatch) as Array<{ title: string; watchedSec: number }>)
           .sort((a, b) => b.watchedSec - a.watchedSec)[0];
 
         return {
@@ -4492,178 +4504,233 @@ export default function AdminClassDetail() {
           )}
 
           {studentsViewMode === 'ADVANCED' ? (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700">Student Reports</h3>
-                  <p className="text-xs text-slate-400">Export PDF reports for one student or multiple students.</p>
+            <div className="rounded-[24px] border border-blue-200 bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 shadow-sm p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm shadow-blue-500/30">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75h9A2.25 2.25 0 0118.75 6v12A2.25 2.25 0 0116.5 20.25h-9A2.25 2.25 0 015.25 18V6A2.25 2.25 0 017.5 3.75z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9.75h7.5M8.25 13.5h7.5M8.25 17.25h4.5" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-900">Student Reports Center</h3>
+                    <p className="text-xs text-blue-700/80">Create clean PDF reports for selected students using a guided export setup.</p>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-500">
-                  Selected: <span className="font-semibold text-slate-700">{selectedReportCount}</span> total
-                  <span className="ml-2 text-slate-400">Filtered: {selectedFilteredReportCount}/{filteredReportUserIds.length}</span>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-xl border border-blue-200 bg-white px-2.5 py-1.5 text-blue-700">
+                    Selected <span className="font-semibold text-blue-900">{selectedReportCount}</span>
+                  </span>
+                  <span className="rounded-xl border border-blue-200 bg-white px-2.5 py-1.5 text-blue-700">
+                    Filtered <span className="font-semibold text-blue-900">{selectedFilteredReportCount}/{filteredReportUserIds.length}</span>
+                  </span>
+                  <span className="rounded-xl border border-blue-200 bg-white px-2.5 py-1.5 text-blue-700">
+                    Sections <span className="font-semibold text-blue-900">{Number(reportIncludePhysicalAttendance) + Number(reportIncludePayments) + Number(reportIncludeRecordingAttendance)}</span>
+                  </span>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <label className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <label className={`inline-flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-xs transition ${
+                  reportIncludePhysicalAttendance
+                    ? 'border-blue-300 bg-white text-blue-900 shadow-sm ring-2 ring-blue-100'
+                    : 'border-blue-100 bg-white/90 text-slate-600 hover:border-blue-200 hover:bg-white'
+                }`}>
                   <input
                     type="checkbox"
                     checked={reportIncludePhysicalAttendance}
                     onChange={(event) => setReportIncludePhysicalAttendance(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span>
                     Include physical attendance
-                    <span className="block text-[11px] text-slate-400">Summary and date-wise status</span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">Summary and date-wise status</span>
                   </span>
                 </label>
 
-                <label className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <label className={`inline-flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-xs transition ${
+                  reportIncludePayments
+                    ? 'border-blue-300 bg-white text-blue-900 shadow-sm ring-2 ring-blue-100'
+                    : 'border-blue-100 bg-white/90 text-slate-600 hover:border-blue-200 hover:bg-white'
+                }`}>
                   <input
                     type="checkbox"
                     checked={reportIncludePayments}
                     onChange={(event) => setReportIncludePayments(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span>
                     Include payment history
-                    <span className="block text-[11px] text-slate-400">Monthly payment status and latest transactions</span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">Monthly payment status and latest transactions</span>
                   </span>
                 </label>
 
-                <label className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <label className={`inline-flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-xs transition ${
+                  reportIncludeRecordingAttendance
+                    ? 'border-blue-300 bg-white text-blue-900 shadow-sm ring-2 ring-blue-100'
+                    : 'border-blue-100 bg-white/90 text-slate-600 hover:border-blue-200 hover:bg-white'
+                }`}>
                   <input
                     type="checkbox"
                     checked={reportIncludeRecordingAttendance}
                     onChange={(event) => setReportIncludeRecordingAttendance(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span>
-                    Include recordings watch summary
-                    <span className="block text-[11px] text-slate-400">Total watch duration and watched status per recording</span>
+                    Include recording summary
+                    <span className="block text-[11px] text-slate-500 mt-0.5">Watch duration and recording status</span>
                   </span>
                 </label>
               </div>
 
               {reportIncludeRecordingAttendance && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="text-xs font-semibold text-slate-600">
+                <div className="grid gap-3 sm:grid-cols-2 rounded-2xl border border-blue-200 bg-white/90 p-3">
+                  <label className="text-xs font-semibold text-blue-800">
                     Recording mode
                     <select
                       value={reportRecordingMode}
                       onChange={(event) => setReportRecordingMode(event.target.value as RecordingReportMode)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                      className="mt-1 w-full rounded-xl border border-blue-200 bg-white px-2.5 py-2 text-xs text-slate-700"
                     >
                       <option value="SUMMARY">Summary only (compact)</option>
                       <option value="FULL">Detailed watch logs</option>
                     </select>
                   </label>
-                  <p className="text-[11px] text-slate-400 self-end">
-                    Detailed mode includes each watch session row and can produce larger PDFs.
+                  <p className="text-[11px] text-blue-700/75 self-end">
+                    Detailed mode includes each watch session and can create larger PDF files.
                   </p>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => toggleSelectAllFilteredReports(!allFilteredSelectedForReports)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  {allFilteredSelectedForReports ? 'Clear filtered selection' : 'Select all filtered students'}
-                </button>
+              <div className="rounded-2xl border border-blue-200 bg-white/95 p-3 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllFilteredReports}
+                    className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    {allFilteredSelectedForReports ? 'Clear filtered selection' : 'Select all filtered students'}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={clearSelectedReports}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                  disabled={selectedReportCount === 0}
-                >
-                  Reset selection
-                </button>
+                  <button
+                    type="button"
+                    onClick={clearSelectedReports}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                    disabled={selectedReportCount === 0}
+                  >
+                    Reset selection
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => void exportBatchStudentReports('selected')}
-                  disabled={reporting || selectedReportCount === 0}
-                  className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {reporting ? 'Preparing ZIP...' : `Export Selected (${selectedReportCount})`}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void exportBatchStudentReports('selected')}
+                    disabled={reporting || selectedReportCount === 0}
+                    className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {reporting ? 'Preparing ZIP...' : `Export Selected (${selectedReportCount})`}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => void exportBatchStudentReports('filtered')}
-                  disabled={reporting || filteredReportUserIds.length === 0}
-                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {reporting ? 'Preparing ZIP...' : `Export Filtered (${filteredReportUserIds.length})`}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void exportBatchStudentReports('filtered')}
+                    disabled={reporting || filteredReportUserIds.length === 0}
+                    className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {reporting ? 'Preparing ZIP...' : `Export Filtered (${filteredReportUserIds.length})`}
+                  </button>
+                </div>
+                <p className="text-[11px] text-blue-700/80">
+                  Tip: Select filters first, then export filtered to quickly generate consistent reports.
+                </p>
               </div>
 
-              {!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && (
-                <p className="text-xs text-red-500">Select at least one report section before exporting.</p>
-              )}
+              <div className="space-y-2">
+                {!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                    Select at least one report section before exporting.
+                  </div>
+                )}
 
-              {reportProgress && (
-                <p className="text-xs text-indigo-600">{reportProgress}</p>
-              )}
+                {reportProgress && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    {reportProgress}
+                  </div>
+                )}
 
-              {reportSuccess && (
-                <p className="text-xs text-emerald-600">{reportSuccess}</p>
-              )}
+                {reportSuccess && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                    {reportSuccess}
+                  </div>
+                )}
 
-              {reportError && (
-                <p className="text-xs text-red-500">{reportError}</p>
-              )}
+                {reportError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                    {reportError}
+                  </div>
+                )}
 
-              {reportWarning && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 whitespace-pre-line">
-                  {reportWarning}
-                </div>
-              )}
+                {reportWarning && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 whitespace-pre-line">
+                    {reportWarning}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="rounded-[24px] border border-blue-200 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 shadow-sm p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-slate-700">Student Reports</h3>
-                <p className="text-xs text-slate-400">Use Advanced mode to export and customize report content.</p>
+                <h3 className="text-sm font-semibold text-blue-900">Student Reports</h3>
+                <p className="text-xs text-blue-700/80">Use Advanced mode for curved blue report controls and bulk export setup.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setStudentsViewMode('ADVANCED')}
-                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 w-fit"
+                className="rounded-xl border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 w-fit"
               >
                 Open Advanced Reports
               </button>
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            {enrollments.length === 0 ? (
-              <div className="p-10 text-center">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                </div>
-                <p className="text-sm font-medium text-slate-500">No students enrolled yet</p>
-                <p className="text-xs text-slate-400 mt-1">Use the form above to enroll students</p>
+          <div className="rounded-[24px] border border-blue-100 bg-gradient-to-b from-blue-50/70 to-white p-2.5 sm:p-3 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-blue-100 bg-white/85 px-3.5 py-2.5">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-blue-800">Students Table</h4>
+                <p className="text-[11px] text-blue-700/75 mt-0.5">Rounded table view with filter-friendly rows and report actions.</p>
               </div>
-            ) : filteredEnrollments.length === 0 ? (
-              <div className="p-10 text-center">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M10 17h4" /></svg>
+              <span className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                Showing {filteredEnrollments.length}/{enrollments.length}
+              </span>
+            </div>
+
+            <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
+              {enrollments.length === 0 ? (
+                <div className="p-10 text-center">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3 border border-blue-100">
+                    <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">No students enrolled yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Use the form above to enroll students</p>
                 </div>
-                <p className="text-sm font-medium text-slate-500">No students match your filters</p>
-                <p className="text-xs text-slate-400 mt-1">Try changing payment type, custom fee filter, or search text</p>
-              </div>
-            ) : (
-              <StickyDataTable
-                columns={enrollmentColumnsForView}
-                rows={filteredEnrollments}
-                getRowId={(row) => row.userId}
-                tableHeight={studentsViewMode === 'ADVANCED' ? 'calc(100vh - 500px)' : 'calc(100vh - 430px)'}
-              />
-            )}
+              ) : filteredEnrollments.length === 0 ? (
+                <div className="p-10 text-center">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3 border border-blue-100">
+                    <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M10 17h4" /></svg>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">No students match your filters</p>
+                  <p className="text-xs text-slate-400 mt-1">Try changing payment type, custom fee filter, or search text</p>
+                </div>
+              ) : (
+                <StickyDataTable
+                  columns={enrollmentColumnsForView}
+                  rows={filteredEnrollments}
+                  getRowId={(row) => row.userId}
+                  tableHeight={studentsViewMode === 'ADVANCED' ? 'calc(100vh - 500px)' : 'calc(100vh - 430px)'}
+                />
+              )}
+            </div>
           </div>
 
           {pricingModalRow && createPortal(
