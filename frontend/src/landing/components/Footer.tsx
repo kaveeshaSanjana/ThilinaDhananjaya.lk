@@ -1,4 +1,4 @@
-﻿import { motion } from "framer-motion";
+import { motion } from "framer-motion";
 import logoImg from "../assets/logo.png";
 
 const socialLinks = [
@@ -39,10 +39,10 @@ const Footer = () => (
     <div className="container mx-auto px-4">
       <div className="grid md:grid-cols-3 gap-8 items-start">
         <div className="flex items-center gap-3">
-          <img src={logoImg} alt="Eazy English Logo" className="w-14 h-14 object-contain" />
+          <img src={logoImg} alt="Easy English Logo" className="w-14 h-14 object-contain" />
           <div>
             <h3 className="text-foreground font-bold text-lg" style={{ fontFamily: "var(--font-body)" }}>
-              Eazy English
+              Easy English
             </h3>
             <p className="text-muted-foreground text-xs">with Thilina Dhananjaya</p>
           </div>
@@ -78,7 +78,7 @@ const Footer = () => (
       </div>
 
       <div className="border-t border-border mt-8 pt-6 text-center">
-        <p className="text-muted-foreground/80 text-xs">© 2026 Eazy English with Thilina Dhananjaya. All rights reserved.</p>
+        <p className="text-muted-foreground/80 text-xs">© 2026 Easy English with Thilina Dhananjaya. All rights reserved.</p>
         <p className="text-muted-foreground/90 text-xs mt-2">
           Powered by{' '}
           <a href="https://suraksha.lk" target="_blank" rel="noreferrer" className="font-semibold hover:underline">

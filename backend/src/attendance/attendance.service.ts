@@ -730,6 +730,64 @@ export class AttendanceService {
     return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
   }
 
+  private normalizeAttendanceWeekName(name: string): string {
+    const value = (name || '').trim();
+    if (!value) {
+      throw new BadRequestException('Week name is required');
+    }
+    if (value.length > 120) {
+      throw new BadRequestException('Week name must be 120 characters or less');
+    }
+    return value;
+  }
+
+  private parseClassAttendanceSessionKey(sessionKey: string) {
+    const raw = (sessionKey || '').trim();
+    const [rawDate = '', rawTime = '00:00'] = raw.split('|');
+    const date = rawDate.trim();
+
+    if (!date) {
+      throw new BadRequestException(`Invalid session key: ${sessionKey}`);
+    }
+
+    const dateObj = this.normalizeClassAttendanceDate(date);
+    const sessionTime = this.normalizeSessionTime(rawTime.trim() || '00:00');
+
+    return {
+      key: `${date}|${sessionTime}`,
+      date,
+      dateObj,
+      sessionTime,
+    };
+  }
+
+  private buildClassAttendanceSessionRow(data: {
+    date: string;
+    sessionTime: string;
+    sessionCode: string | null;
+    sessionAt: string | null;
+    recordsCount: number;
+    source: 'CREATED' | 'ATTENDANCE' | 'BOTH';
+    weekId?: string | null;
+    weekName?: string | null;
+  }) {
+    const timeSuffix = data.sessionTime === '00:00' ? '' : ` ${data.sessionTime}`;
+    const labelCore = data.sessionCode || `${data.date}${timeSuffix}`;
+
+    return {
+      key: `${data.date}|${data.sessionTime}`,
+      date: data.date,
+      sessionTime: data.sessionTime,
+      sessionCode: data.sessionCode,
+      sessionAt: data.sessionAt,
+      label: data.sessionCode ? `${labelCore} (${data.date}${timeSuffix})` : labelCore,
+      recordsCount: data.recordsCount,
+      source: data.source,
+      weekId: data.weekId || null,
+      weekName: data.weekName || null,
+    };
+  }
+
   // ─── Shared upsert helper for class attendance ────────────
 
   private async doUpsertClassAttendance(
@@ -1154,6 +1212,559 @@ export class AttendanceService {
       orderBy: { date: 'asc' },
     });
     return records.map(r => r.date.toISOString().split('T')[0]);
+  }
+
+  /**
+   * Create or update a class attendance session definition without attendance rows.
+   */
+  async createClassAttendanceSession(
+    classId: string,
+    data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string },
+    createdBy?: string,
+  ) {
+    const dateObj = this.normalizeClassAttendanceDate(data.date);
+    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
+
+    const session = await this.prisma.classAttendanceSession.upsert({
+      where: {
+        classId_date_sessionTime: {
+          classId,
+          date: dateObj,
+          sessionTime,
+        },
+      },
+      update: {
+        sessionCode: sessionCode || undefined,
+        sessionAt: sessionAt || undefined,
+        createdBy: createdBy || undefined,
+      },
+      create: {
+        classId,
+        date: dateObj,
+        sessionTime,
+        sessionCode,
+        sessionAt,
+        createdBy: createdBy || null,
+      },
+    });
+
+    const recordsCount = await this.prisma.classAttendance.count({
+      where: {
+        classId,
+        date: dateObj,
+        sessionTime,
+      },
+    });
+
+    return this.buildClassAttendanceSessionRow({
+      date: session.date.toISOString().split('T')[0],
+      sessionTime,
+      sessionCode: session.sessionCode || null,
+      sessionAt: session.sessionAt ? session.sessionAt.toISOString() : null,
+      recordsCount,
+      source: recordsCount > 0 ? 'BOTH' : 'CREATED',
+      weekId: session.weekId || null,
+    });
+  }
+
+  /**
+   * Get distinct class attendance sessions (date + session time) for quick selection.
+   * Returns newest sessions first.
+   */
+  async getClassAttendanceSessions(classId: string, limit = 200) {
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.trunc(limit), 1), 1000)
+      : 200;
+
+    const [createdSessions, records] = await Promise.all([
+      this.prisma.classAttendanceSession.findMany({
+        where: { classId },
+        select: {
+          date: true,
+          sessionTime: true,
+          sessionCode: true,
+          sessionAt: true,
+          weekId: true,
+          week: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: [
+          { date: 'desc' },
+          { sessionTime: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take: safeLimit * 5,
+      }),
+      this.prisma.classAttendance.findMany({
+        where: { classId },
+        select: {
+          date: true,
+          sessionTime: true,
+          sessionCode: true,
+          sessionAt: true,
+        },
+        orderBy: [
+          { date: 'desc' },
+          { sessionTime: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take: safeLimit * 20,
+      }),
+    ]);
+
+    const sessionMap = new Map<string, {
+      key: string;
+      date: string;
+      sessionTime: string;
+      sessionCode: string | null;
+      sessionAt: string | null;
+      label: string;
+      recordsCount: number;
+      source: 'CREATED' | 'ATTENDANCE' | 'BOTH';
+      weekId: string | null;
+      weekName: string | null;
+    }>();
+
+    for (const session of createdSessions) {
+      const date = session.date.toISOString().split('T')[0];
+      const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
+        ? session.sessionTime
+        : '00:00';
+      const sessionCode = (session.sessionCode || '').trim() || null;
+      const sessionAt = session.sessionAt ? session.sessionAt.toISOString() : null;
+
+      const row = this.buildClassAttendanceSessionRow({
+        date,
+        sessionTime,
+        sessionCode,
+        sessionAt,
+        recordsCount: 0,
+        source: 'CREATED',
+        weekId: session.weekId || null,
+        weekName: session.week?.name || null,
+      });
+      sessionMap.set(row.key, row);
+    }
+
+    for (const record of records) {
+      const date = record.date.toISOString().split('T')[0];
+      const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(record.sessionTime || '')
+        ? record.sessionTime
+        : '00:00';
+      const key = `${date}|${sessionTime}`;
+      const sessionCode = (record.sessionCode || '').trim() || null;
+      const sessionAt = record.sessionAt ? record.sessionAt.toISOString() : null;
+
+      const existing = sessionMap.get(key);
+      if (!existing) {
+        const row = this.buildClassAttendanceSessionRow({
+          date,
+          sessionTime,
+          sessionCode,
+          sessionAt,
+          recordsCount: 1,
+          source: 'ATTENDANCE',
+          weekId: null,
+          weekName: null,
+        });
+        sessionMap.set(key, row);
+        continue;
+      }
+
+      existing.recordsCount += 1;
+      if (!existing.sessionCode && sessionCode) {
+        existing.sessionCode = sessionCode;
+        const timeSuffix = existing.sessionTime === '00:00' ? '' : ` ${existing.sessionTime}`;
+        existing.label = `${sessionCode} (${existing.date}${timeSuffix})`;
+      }
+      if (!existing.sessionAt && sessionAt) {
+        existing.sessionAt = sessionAt;
+      }
+      if (existing.source === 'CREATED') {
+        existing.source = 'BOTH';
+      }
+    }
+
+    return Array.from(sessionMap.values())
+      .sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date);
+        return b.sessionTime.localeCompare(a.sessionTime);
+      })
+      .slice(0, safeLimit);
+  }
+
+  /**
+   * Assign or clear week for a single class attendance session row.
+   * Uses session key format: YYYY-MM-DD|HH:mm
+   */
+  async updateClassAttendanceSessionWeek(
+    classId: string,
+    data: { sessionKey: string; weekId?: string | null },
+    updatedBy?: string,
+  ) {
+    const parsedSession = this.parseClassAttendanceSessionKey(data.sessionKey);
+    const requestedWeekId = (typeof data.weekId === 'string' ? data.weekId.trim() : '') || null;
+
+    const [targetWeek, existingSession, attendanceMeta, recordsCount] = await Promise.all([
+      requestedWeekId
+        ? this.prisma.classAttendanceWeek.findFirst({
+          where: { id: requestedWeekId, classId },
+          select: { id: true, name: true },
+        })
+        : Promise.resolve(null),
+      this.prisma.classAttendanceSession.findUnique({
+        where: {
+          classId_date_sessionTime: {
+            classId,
+            date: parsedSession.dateObj,
+            sessionTime: parsedSession.sessionTime,
+          },
+        },
+        select: {
+          date: true,
+          sessionTime: true,
+          sessionCode: true,
+          sessionAt: true,
+          weekId: true,
+          week: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.classAttendance.findFirst({
+        where: {
+          classId,
+          date: parsedSession.dateObj,
+          sessionTime: parsedSession.sessionTime,
+        },
+        select: {
+          sessionCode: true,
+          sessionAt: true,
+        },
+        orderBy: [
+          { updatedAt: 'desc' },
+        ],
+      }),
+      this.prisma.classAttendance.count({
+        where: {
+          classId,
+          date: parsedSession.dateObj,
+          sessionTime: parsedSession.sessionTime,
+        },
+      }),
+    ]);
+
+    if (requestedWeekId && !targetWeek) {
+      throw new NotFoundException('Week group not found');
+    }
+
+    if (!existingSession && !requestedWeekId) {
+      const attendanceSessionCode = (attendanceMeta?.sessionCode || '').trim() || null;
+      const attendanceSessionAt = attendanceMeta?.sessionAt
+        ? attendanceMeta.sessionAt.toISOString()
+        : null;
+
+      return this.buildClassAttendanceSessionRow({
+        date: parsedSession.date,
+        sessionTime: parsedSession.sessionTime,
+        sessionCode: attendanceSessionCode,
+        sessionAt: attendanceSessionAt,
+        recordsCount,
+        source: recordsCount > 0 ? 'ATTENDANCE' : 'CREATED',
+        weekId: null,
+        weekName: null,
+      });
+    }
+
+    const attendanceSessionCode = (attendanceMeta?.sessionCode || '').trim() || null;
+    const attendanceSessionAt = attendanceMeta?.sessionAt || null;
+
+    const session = await this.prisma.classAttendanceSession.upsert({
+      where: {
+        classId_date_sessionTime: {
+          classId,
+          date: parsedSession.dateObj,
+          sessionTime: parsedSession.sessionTime,
+        },
+      },
+      update: {
+        weekId: requestedWeekId,
+        createdBy: updatedBy || undefined,
+      },
+      create: {
+        classId,
+        weekId: requestedWeekId,
+        date: parsedSession.dateObj,
+        sessionTime: parsedSession.sessionTime,
+        sessionCode: attendanceSessionCode,
+        sessionAt: attendanceSessionAt,
+        createdBy: updatedBy || null,
+      },
+      select: {
+        date: true,
+        sessionTime: true,
+        sessionCode: true,
+        sessionAt: true,
+        weekId: true,
+        week: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const sessionCode = (session.sessionCode || '').trim() || attendanceSessionCode;
+    const sessionAt = session.sessionAt
+      ? session.sessionAt.toISOString()
+      : attendanceSessionAt
+        ? attendanceSessionAt.toISOString()
+        : null;
+
+    return this.buildClassAttendanceSessionRow({
+      date: session.date.toISOString().split('T')[0],
+      sessionTime: /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
+        ? session.sessionTime
+        : parsedSession.sessionTime,
+      sessionCode,
+      sessionAt,
+      recordsCount,
+      source: recordsCount > 0 ? 'BOTH' : 'CREATED',
+      weekId: session.weekId || null,
+      weekName: session.week?.name || targetWeek?.name || null,
+    });
+  }
+
+  /**
+   * Create a persisted attendance week and optionally link selected class sessions to it.
+   */
+  async createClassAttendanceWeek(
+    classId: string,
+    data: { name: string; sessionKeys?: string[] },
+    createdBy?: string,
+  ) {
+    const name = this.normalizeAttendanceWeekName(data.name);
+    const requestedSessionKeys = Array.isArray(data.sessionKeys) ? data.sessionKeys : [];
+    const parsedSessions = Array.from(
+      new Map(requestedSessionKeys.map((sessionKey) => {
+        const parsed = this.parseClassAttendanceSessionKey(sessionKey);
+        return [parsed.key, parsed] as const;
+      })).values(),
+    );
+
+    const existingLinkedSessions = parsedSessions.length > 0
+      ? await this.prisma.classAttendanceSession.findMany({
+        where: {
+          classId,
+          OR: parsedSessions.map((session) => ({
+            date: session.dateObj,
+            sessionTime: session.sessionTime,
+          })),
+          NOT: { weekId: null },
+        },
+        select: {
+          date: true,
+          sessionTime: true,
+          week: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      })
+      : [];
+
+    if (existingLinkedSessions.length > 0) {
+      const conflictSummary = existingLinkedSessions
+        .map((session) => {
+          const date = session.date.toISOString().split('T')[0];
+          const weekName = session.week?.name || 'another week';
+          return `${date}|${session.sessionTime} (${weekName})`;
+        })
+        .join(', ');
+      throw new BadRequestException(`Some sessions are already assigned: ${conflictSummary}`);
+    }
+
+    let createdWeekId = '';
+
+    try {
+      const createdWeek = await this.prisma.$transaction(async (tx) => {
+        const lastWeek = await tx.classAttendanceWeek.findFirst({
+          where: { classId },
+          orderBy: [
+            { orderNo: 'desc' },
+            { createdAt: 'desc' },
+          ],
+          select: { orderNo: true },
+        });
+
+        const week = await tx.classAttendanceWeek.create({
+          data: {
+            classId,
+            name,
+            orderNo: (lastWeek?.orderNo || 0) + 1,
+            createdBy: createdBy || null,
+          },
+          select: { id: true },
+        });
+
+        for (const session of parsedSessions) {
+          await tx.classAttendanceSession.upsert({
+            where: {
+              classId_date_sessionTime: {
+                classId,
+                date: session.dateObj,
+                sessionTime: session.sessionTime,
+              },
+            },
+            update: {
+              weekId: week.id,
+              createdBy: createdBy || undefined,
+            },
+            create: {
+              classId,
+              weekId: week.id,
+              date: session.dateObj,
+              sessionTime: session.sessionTime,
+              sessionCode: null,
+              sessionAt: null,
+              createdBy: createdBy || null,
+            },
+          });
+        }
+
+        return week;
+      });
+
+      createdWeekId = createdWeek.id;
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new BadRequestException(`Week name already exists: ${name}`);
+      }
+      throw error;
+    }
+
+    const weeks = await this.getClassAttendanceWeeks(classId);
+    const createdWeek = weeks.find((week) => week.id === createdWeekId);
+    if (!createdWeek) {
+      throw new NotFoundException('Created week could not be loaded');
+    }
+    return createdWeek;
+  }
+
+  /**
+   * List persisted attendance weeks for a class with linked sessions.
+   */
+  async getClassAttendanceWeeks(classId: string) {
+    const [weeks, counts] = await Promise.all([
+      this.prisma.classAttendanceWeek.findMany({
+        where: { classId },
+        select: {
+          id: true,
+          name: true,
+          orderNo: true,
+          sessions: {
+            select: {
+              date: true,
+              sessionTime: true,
+              sessionCode: true,
+              sessionAt: true,
+            },
+            orderBy: [
+              { date: 'asc' },
+              { sessionTime: 'asc' },
+            ],
+          },
+        },
+        orderBy: [
+          { orderNo: 'asc' },
+          { createdAt: 'asc' },
+        ],
+      }),
+      this.prisma.classAttendance.groupBy({
+        by: ['date', 'sessionTime'],
+        where: { classId },
+        _count: {
+          _all: true,
+        },
+      }),
+    ]);
+
+    const countBySessionKey = new Map<string, number>();
+    counts.forEach((item) => {
+      const date = item.date.toISOString().split('T')[0];
+      const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(item.sessionTime || '')
+        ? item.sessionTime
+        : '00:00';
+      countBySessionKey.set(`${date}|${sessionTime}`, item._count._all);
+    });
+
+    return weeks.map((week) => {
+      const sessions = week.sessions.map((session) => {
+        const date = session.date.toISOString().split('T')[0];
+        const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
+          ? session.sessionTime
+          : '00:00';
+        const sessionCode = (session.sessionCode || '').trim() || null;
+        const sessionAt = session.sessionAt ? session.sessionAt.toISOString() : null;
+        const recordsCount = countBySessionKey.get(`${date}|${sessionTime}`) || 0;
+
+        return this.buildClassAttendanceSessionRow({
+          date,
+          sessionTime,
+          sessionCode,
+          sessionAt,
+          recordsCount,
+          source: recordsCount > 0 ? 'BOTH' : 'CREATED',
+          weekId: week.id,
+          weekName: week.name,
+        });
+      });
+
+      return {
+        id: week.id,
+        name: week.name,
+        orderNo: week.orderNo,
+        sessions,
+        sessionCount: sessions.length,
+      };
+    });
+  }
+
+  /**
+   * Delete a persisted attendance week and unlink sessions from it.
+   */
+  async deleteClassAttendanceWeek(classId: string, weekId: string) {
+    const week = await this.prisma.classAttendanceWeek.findFirst({
+      where: { id: weekId, classId },
+      select: { id: true, name: true },
+    });
+
+    if (!week) {
+      throw new NotFoundException('Week group not found');
+    }
+
+    const unlinkedSessions = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.classAttendanceSession.updateMany({
+        where: { classId, weekId },
+        data: { weekId: null },
+      });
+
+      await tx.classAttendanceWeek.delete({ where: { id: weekId } });
+      return result.count;
+    });
+
+    return {
+      id: week.id,
+      name: week.name,
+      deleted: true,
+      unlinkedSessions,
+    };
   }
 
   /**
@@ -1844,6 +2455,7 @@ export class AttendanceService {
         instituteId: e.user.profile?.instituteId || '-',
         barcodeId: e.user.profile?.barcodeId || null,
         phone: e.user.profile?.phone || null,
+        avatarUrl: e.user.profile?.avatarUrl || null,
         studentStatus: e.user.profile?.status || null,
         months: studentPaymentsByMonth,
         paidCount,

@@ -287,6 +287,27 @@ export class UsersService {
     });
   }
 
+  async setInitialAvatar(userId: string, avatarUrl: string) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { userId },
+      select: { userId: true, avatarUrl: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Student profile not found');
+    }
+
+    const existingAvatar = typeof profile.avatarUrl === 'string' ? profile.avatarUrl.trim() : '';
+    if (existingAvatar) {
+      throw new ConflictException('Profile image already exists. Please contact admin to update it.');
+    }
+
+    return this.prisma.profile.update({
+      where: { userId },
+      data: { avatarUrl },
+    });
+  }
+
   async delete(userId: string) {
     return this.prisma.$transaction([
       this.prisma.watchSession.deleteMany({ where: { userId } }),

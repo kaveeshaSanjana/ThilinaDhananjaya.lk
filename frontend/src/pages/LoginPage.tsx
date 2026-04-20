@@ -63,7 +63,7 @@ export default function LoginPage() {
             <div className="mb-5 sm:mb-6">
               <img src={logoImg} alt="logo" className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 object-contain" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Eazy English</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Easy English</h1>
             <p className="text-gray-600 font-medium mt-1">Welcome back</p>
             <p className="text-gray-400 text-sm mt-0.5">Please enter your details</p>
           </div>

@@ -114,15 +114,31 @@ export default function AdminMarkAttendanceExternalDevice() {
   const { instituteId } = useParams<{ instituteId: string }>();
   const [searchParams] = useSearchParams();
   const requestedClassId = (searchParams.get('classId') || '').trim();
+  const requestedDate = (() => {
+    const value = (searchParams.get('date') || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+  })();
+  const requestedSessionTime = (() => {
+    const value = (searchParams.get('sessionTime') || '').trim();
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value) ? value : '';
+  })();
+  const requestedSessionCode = (searchParams.get('sessionCode') || '').trim();
+  const requestedSessionSummary = [
+    requestedDate || '',
+    requestedSessionTime || '',
+    requestedSessionCode ? `Code: ${requestedSessionCode}` : '',
+  ].filter(Boolean).join(' | ');
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
+  const [selectedDate, setSelectedDate] = useState(requestedDate || toDateStr(new Date()));
   const [status, setStatus] = useState<AttStatus>('PRESENT');
   const [entryMode, setEntryMode] = useState<'simple' | 'advanced'>('simple');
-  const [sessionTime, setSessionTime] = useState(toTimeStr(new Date()));
-  const [sessionCode, setSessionCode] = useState('');
-  const [sessionMessage, setSessionMessage] = useState('');
+  const [sessionTime, setSessionTime] = useState(requestedSessionTime || toTimeStr(new Date()));
+  const [sessionCode, setSessionCode] = useState(requestedSessionCode);
+  const [sessionMessage, setSessionMessage] = useState(
+    requestedSessionSummary ? `Selected session: ${requestedSessionSummary}` : '',
+  );
   const [closingSession, setClosingSession] = useState(false);
   const [rfidInput, setRfidInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -371,8 +387,20 @@ export default function AdminMarkAttendanceExternalDevice() {
   const selectedClass = classes.find((item) => item.id === selectedClassId);
   const adminBase = getInstituteAdminPath(instituteId);
   const classesPath = getInstituteAdminPath(instituteId, '/classes');
-  const scannerPath = getInstituteAdminPath(instituteId, '/mark-attendance');
-  const classAttendancePath = getInstituteAdminPath(instituteId, '/class-attendance');
+  const attendanceNavigationQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedClassId) params.set('classId', selectedClassId);
+    if (selectedDate) params.set('date', selectedDate);
+    if (normalizedSessionTime) params.set('sessionTime', normalizedSessionTime);
+    if (trimmedSessionCode) params.set('sessionCode', trimmedSessionCode);
+    return params.toString();
+  }, [normalizedSessionTime, selectedClassId, selectedDate, trimmedSessionCode]);
+  const scannerPath = attendanceNavigationQuery
+    ? getInstituteAdminPath(instituteId, `/mark-attendance?${attendanceNavigationQuery}`)
+    : getInstituteAdminPath(instituteId, '/mark-attendance');
+  const classAttendancePath = attendanceNavigationQuery
+    ? getInstituteAdminPath(instituteId, `/class-attendance?${attendanceNavigationQuery}`)
+    : getInstituteAdminPath(instituteId, '/class-attendance');
   const showAdvancedFields = entryMode === 'advanced';
   const filteredStudents = useMemo(() => {
     const query = studentFilter.trim().toLowerCase();

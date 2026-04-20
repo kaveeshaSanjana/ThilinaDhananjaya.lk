@@ -5,13 +5,17 @@ import { useInstitute } from '../context/InstituteContext';
 import api from '../lib/api';
 import { getInstitutePath } from '../lib/instituteRoutes';
 import teacherImg from '../assets/teacher.png';
+import CropImageInput from '../components/CropImageInput';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, refreshMe } = useAuth();
   const { selected } = useInstitute();
   const { instituteId: routeInstituteId } = useParams();
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState('');
+  const [avatarUploadSuccess, setAvatarUploadSuccess] = useState('');
 
   useEffect(() => {
     api.get('/classes').then(r => setClasses(r.data.slice(0, 6))).catch(() => {}).finally(() => setLoading(false));
@@ -21,6 +25,34 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
   const currentInstituteId = routeInstituteId || selected?.id || null;
+  const needsFirstAvatarUpload = user?.role === 'STUDENT' && !user?.profile?.avatarUrl;
+
+  const handleFirstAvatarUpload = async (file: File) => {
+    setUploadingAvatar(true);
+    setAvatarUploadError('');
+    setAvatarUploadSuccess('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      await api.post('/users/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      await refreshMe();
+      setAvatarUploadSuccess('Profile image uploaded successfully.');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setAvatarUploadError(message.join(', '));
+      } else {
+        setAvatarUploadError(typeof message === 'string' ? message : 'Failed to upload profile image.');
+      }
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
 
 
@@ -36,7 +68,7 @@ export default function DashboardPage() {
               <span className="text-lg">👋</span> {greeting},
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-white mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{name}!</h1>
-            <p className="text-white/50 text-sm mt-2 max-w-md">Welcome back to Eazy English. Continue where you left off.</p>
+            <p className="text-white/50 text-sm mt-2 max-w-md">Welcome back to Easy English. Continue where you left off.</p>
             {user?.profile?.instituteId && (
               <div className="inline-flex mt-3 px-3 py-1.5 rounded-lg bg-white/8 border border-white/10">
                 <span className="text-xs text-[hsl(var(--primary))] font-mono tracking-wide">ID: {user.profile.instituteId}</span>
@@ -48,6 +80,29 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {needsFirstAvatarUpload && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-900">Add Your Profile Image</h2>
+              <p className="text-xs text-amber-800/80 mt-1">
+                Upload your first profile image now. After this, image changes can only be done by admin.
+              </p>
+            </div>
+            <CropImageInput
+              onFile={handleFirstAvatarUpload}
+              loading={uploadingAvatar}
+              label="Upload My Image"
+              cropTitle="Crop Profile Image"
+              aspectRatio={1}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 bg-amber-100 text-amber-900 text-xs font-semibold hover:bg-amber-200 transition cursor-pointer"
+            />
+          </div>
+          {avatarUploadError && <p className="mt-2 text-xs font-medium text-red-700">{avatarUploadError}</p>}
+          {avatarUploadSuccess && <p className="mt-2 text-xs font-medium text-emerald-700">{avatarUploadSuccess}</p>}
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

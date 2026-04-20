@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { getInstituteAdminPath } from '../../lib/instituteRoutes';
@@ -387,6 +387,13 @@ export default function AdminPhysicalAttendanceView() {
   const [searchParams] = useSearchParams();
 
   const requestedClassId = (searchParams.get('classId') || '').trim();
+  const requestedDate = asIsoDate(searchParams.get('date'));
+  const requestedSessionTime = (() => {
+    const value = (searchParams.get('sessionTime') || '').trim();
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value) ? value : '';
+  })();
+  const requestedSessionCode = (searchParams.get('sessionCode') || '').trim();
+  const requestedSessionAutoLoadedRef = useRef(false);
   const now = new Date();
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -398,6 +405,7 @@ export default function AdminPhysicalAttendanceView() {
   const [calendarMonth, setCalendarMonth] = useState(now.getMonth());
   const [rangeFrom, setRangeFrom] = useState('');
   const [rangeTo, setRangeTo] = useState('');
+  const [sessionTimeFilter, setSessionTimeFilter] = useState(requestedSessionTime);
 
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -412,8 +420,6 @@ export default function AdminPhysicalAttendanceView() {
   const [tableFullscreen, setTableFullscreen] = useState(false);
 
   const adminBase = getInstituteAdminPath(instituteId);
-  const markAttendancePath = getInstituteAdminPath(instituteId, '/mark-attendance');
-  const externalDevicePath = getInstituteAdminPath(instituteId, '/mark-attendance/external-device');
 
   useEffect(() => {
     let active = true;
@@ -504,18 +510,26 @@ export default function AdminPhysicalAttendanceView() {
 
         const uniqueSorted = Array.from(new Set(rows)).sort();
         setAvailableDates(uniqueSorted);
-        setSelectedDates((prev) => prev.filter((item) => uniqueSorted.includes(item)));
+        const hasRequestedDate = Boolean(requestedDate) && uniqueSorted.includes(requestedDate);
 
-        if (uniqueSorted.length > 0) {
-          setRangeFrom((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[0]));
-          setRangeTo((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[uniqueSorted.length - 1]));
+        if (hasRequestedDate) {
+          setSelectedDates([requestedDate]);
+          setRangeFrom(requestedDate);
+          setRangeTo(requestedDate);
         } else {
-          setRangeFrom('');
-          setRangeTo('');
+          setSelectedDates((prev) => prev.filter((item) => uniqueSorted.includes(item)));
+          if (uniqueSorted.length > 0) {
+            setRangeFrom((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[0]));
+            setRangeTo((prev) => (prev && uniqueSorted.includes(prev) ? prev : uniqueSorted[uniqueSorted.length - 1]));
+          } else {
+            setRangeFrom('');
+            setRangeTo('');
+          }
         }
 
         if (uniqueSorted.length > 0) {
-          const lastDate = uniqueSorted[uniqueSorted.length - 1];
+          const focusDate = hasRequestedDate ? requestedDate : uniqueSorted[uniqueSorted.length - 1];
+          const lastDate = focusDate || uniqueSorted[uniqueSorted.length - 1];
           const date = new Date(`${lastDate}T00:00:00`);
           if (!Number.isNaN(date.getTime())) {
             setCalendarYear(date.getFullYear());
@@ -534,7 +548,7 @@ export default function AdminPhysicalAttendanceView() {
     return () => {
       active = false;
     };
-  }, [selectedClassId]);
+  }, [requestedDate, selectedClassId]);
 
   const selectedDateSet = useMemo(() => new Set(selectedDates), [selectedDates]);
   const availableDateSet = useMemo(() => new Set(availableDates), [availableDates]);
@@ -623,6 +637,10 @@ export default function AdminPhysicalAttendanceView() {
   const loadPreview = useCallback(async () => {
     if (!selectedClassId) return;
 
+    const normalizedSessionTimeFilter = /^([01]\d|2[0-3]):([0-5]\d)$/.test(sessionTimeFilter)
+      ? sessionTimeFilter
+      : '';
+
     const requestSelection = (() => {
       if (selectedDatesSorted.length > 0) {
         return {
@@ -678,6 +696,7 @@ export default function AdminPhysicalAttendanceView() {
         params: {
           from: requestSelection.from,
           to: requestSelection.to,
+          ...(normalizedSessionTimeFilter ? { sessionTime: normalizedSessionTimeFilter } : {}),
         },
       });
 
@@ -703,9 +722,23 @@ export default function AdminPhysicalAttendanceView() {
     isAdvancedMode,
     rangeFrom,
     rangeTo,
+    sessionTimeFilter,
     selectedClassId,
     selectedDatesSorted,
   ]);
+
+  useEffect(() => {
+    requestedSessionAutoLoadedRef.current = false;
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (requestedSessionAutoLoadedRef.current) return;
+    if (!requestedDate || !selectedClassId) return;
+    if (!availableDates.includes(requestedDate)) return;
+
+    requestedSessionAutoLoadedRef.current = true;
+    void loadPreview();
+  }, [availableDates, loadPreview, requestedDate, selectedClassId]);
 
   const selectedClass = useMemo(
     () => classes.find((item) => item.id === selectedClassId) || null,
@@ -740,6 +773,50 @@ export default function AdminPhysicalAttendanceView() {
     const allSlots = monitorData?.slots || [];
     return allSlots.filter((slot) => selectedDateSet.size === 0 || selectedDateSet.has(slot.date));
   }, [monitorData?.slots, selectedDateSet]);
+
+  const navigationSession = useMemo(() => {
+    if (selectedSlots.length === 1) {
+      const slot = selectedSlots[0];
+      return {
+        date: slot.date,
+        sessionTime: slot.sessionTime,
+        sessionCode: slot.sessionCode,
+      };
+    }
+
+    if (requestedDate) {
+      return {
+        date: requestedDate,
+        sessionTime: sessionTimeFilter || requestedSessionTime || '00:00',
+        sessionCode: requestedSessionCode || null,
+      };
+    }
+
+    return null;
+  }, [requestedDate, requestedSessionCode, requestedSessionTime, selectedSlots, sessionTimeFilter]);
+
+  const attendanceNavigationQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedClassId) params.set('classId', selectedClassId);
+
+    if (navigationSession) {
+      params.set('date', navigationSession.date);
+      params.set('sessionTime', navigationSession.sessionTime);
+      if (navigationSession.sessionCode) {
+        params.set('sessionCode', navigationSession.sessionCode);
+      }
+    }
+
+    return params.toString();
+  }, [navigationSession, selectedClassId]);
+
+  const markAttendancePath = attendanceNavigationQuery
+    ? getInstituteAdminPath(instituteId, `/mark-attendance?${attendanceNavigationQuery}`)
+    : getInstituteAdminPath(instituteId, '/mark-attendance');
+
+  const externalDevicePath = attendanceNavigationQuery
+    ? getInstituteAdminPath(instituteId, `/mark-attendance/external-device?${attendanceNavigationQuery}`)
+    : getInstituteAdminPath(instituteId, '/mark-attendance/external-device');
 
   const filteredStudents = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -1119,7 +1196,7 @@ export default function AdminPhysicalAttendanceView() {
 
               <div className="mt-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Date Range</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
                   <label className="text-[11px] text-[hsl(var(--muted-foreground))]">
                     From
                     <input
@@ -1135,6 +1212,15 @@ export default function AdminPhysicalAttendanceView() {
                       type="date"
                       value={rangeTo}
                       onChange={(event) => setRangeTo(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2.5 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                    Session Time (optional)
+                    <input
+                      type="time"
+                      value={sessionTimeFilter}
+                      onChange={(event) => setSessionTimeFilter(event.target.value)}
                       className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2.5 py-1.5 text-xs"
                     />
                   </label>
@@ -1158,6 +1244,10 @@ export default function AdminPhysicalAttendanceView() {
                     </button>
                   )}
                 </div>
+
+                <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">
+                  Leave session time empty to include all sessions in selected dates.
+                </p>
               </div>
 
               <p className="mt-3 text-[11px] text-[hsl(var(--muted-foreground))]">

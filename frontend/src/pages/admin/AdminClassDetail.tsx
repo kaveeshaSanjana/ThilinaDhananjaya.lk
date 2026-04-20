@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
@@ -75,6 +75,65 @@ interface PhysicalReportGroup {
   id: string;
   name: string;
   slotKeys: string[];
+  orderNo?: number;
+}
+
+interface PhysicalQuickSession {
+  key: string;
+  date: string;
+  sessionTime: string;
+  sessionCode: string | null;
+  sessionAt: string | null;
+  readableId: string;
+  label: string;
+  recordsCount: number;
+  source: 'CREATED' | 'ATTENDANCE' | 'BOTH';
+  weekId: string | null;
+  weekName: string | null;
+}
+
+interface PhysicalSessionStudentRow {
+  userId: string;
+  fullName: string;
+  instituteId: string;
+  phone: string;
+  barcodeId: string;
+  avatarUrl: string | null;
+  status: PhysicalCellStatus;
+}
+
+interface PhysicalWeekPreviewStudentRow {
+  userId: string;
+  fullName: string;
+  instituteId: string;
+  phone: string;
+  barcodeId: string;
+  avatarUrl: string | null;
+  statuses: Record<string, PhysicalCellStatus>;
+}
+
+type ClassPaymentStatus = 'PAID' | 'PENDING' | 'UNPAID';
+type ClassPaymentStatusFilter = 'ALL' | ClassPaymentStatus;
+
+interface ClassPaymentMonthRow {
+  monthId: string;
+  monthName: string;
+  year: number;
+  month: number;
+  status: ClassPaymentStatus;
+}
+
+interface ClassPaymentStudentRow {
+  userId: string;
+  fullName: string;
+  instituteId: string;
+  barcodeId: string;
+  phone: string;
+  avatarUrl: string | null;
+  paidCount: number;
+  pendingCount: number;
+  unpaidCount: number;
+  months: ClassPaymentMonthRow[];
 }
 
 const PHYSICAL_STATUS_LABEL: Record<PhysicalCellStatus, string> = {
@@ -85,12 +144,140 @@ const PHYSICAL_STATUS_LABEL: Record<PhysicalCellStatus, string> = {
   NOT_MARKED: 'Not Marked',
 };
 
+const PHYSICAL_STATUS_BADGE: Record<PhysicalCellStatus, string> = {
+  PRESENT: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  LATE: 'border-amber-200 bg-amber-50 text-amber-700',
+  ABSENT: 'border-red-200 bg-red-50 text-red-700',
+  EXCUSED: 'border-blue-200 bg-blue-50 text-blue-700',
+  NOT_MARKED: 'border-slate-200 bg-slate-50 text-slate-500',
+};
+
+const CLASS_PAYMENT_STATUS_BADGE: Record<ClassPaymentStatus, string> = {
+  PAID: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  PENDING: 'border-amber-200 bg-amber-50 text-amber-700',
+  UNPAID: 'border-rose-200 bg-rose-50 text-rose-700',
+};
+
+const CLASS_PAYMENT_STATUS_LABEL: Record<ClassPaymentStatus, string> = {
+  PAID: 'Paid',
+  PENDING: 'Pending',
+  UNPAID: 'Unpaid',
+};
+
+function resolveClassPaymentOverallStatus(row: ClassPaymentStudentRow): ClassPaymentStatus {
+  if (row.pendingCount > 0) return 'PENDING';
+  if (row.unpaidCount > 0) return 'UNPAID';
+  return 'PAID';
+}
+
 function formatPhysicalSlotLabel(slot: Pick<PhysicalMonitorSlot, 'date' | 'sessionTime' | 'sessionCode'>) {
   const code = typeof slot.sessionCode === 'string' ? slot.sessionCode.trim() : '';
   if (code) return code;
 
   const time = slot.sessionTime && slot.sessionTime !== '00:00' ? ` ${slot.sessionTime}` : '';
   return `${slot.date}${time}`;
+}
+
+function buildReadableSessionId(date: string, sessionTime: string, sessionCode: string | null) {
+  const datePart = date.replace(/-/g, '');
+  const timePart = /^([01]\d|2[0-3]):([0-5]\d)$/.test(sessionTime)
+    ? sessionTime.replace(':', '')
+    : '0000';
+  const codePart = (sessionCode || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '')
+    .slice(0, 10);
+
+  return codePart
+    ? `SES-${datePart}-${timePart}-${codePart}`
+    : `SES-${datePart}-${timePart}`;
+}
+
+function normalizePhysicalQuickSessionItem(item: unknown): PhysicalQuickSession | null {
+  if (!item || typeof item !== 'object') return null;
+  const row = item as Record<string, unknown>;
+
+  const date = asIsoDate(row.date);
+  if (!date) return null;
+
+  const sessionTime = typeof row.sessionTime === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(row.sessionTime.trim())
+    ? row.sessionTime.trim()
+    : '00:00';
+
+  const sessionCode = typeof row.sessionCode === 'string' && row.sessionCode.trim()
+    ? row.sessionCode.trim()
+    : null;
+  const sessionAt = typeof row.sessionAt === 'string' && row.sessionAt.trim()
+    ? row.sessionAt.trim()
+    : null;
+  const key = typeof row.key === 'string' && row.key.trim()
+    ? row.key.trim()
+    : `${date}|${sessionTime}`;
+  const weekId = typeof row.weekId === 'string' && row.weekId.trim()
+    ? row.weekId.trim()
+    : null;
+  const weekName = typeof row.weekName === 'string' && row.weekName.trim()
+    ? row.weekName.trim()
+    : null;
+  const recordsCount = typeof row.recordsCount === 'number' && Number.isFinite(row.recordsCount)
+    ? Math.max(0, Math.trunc(row.recordsCount))
+    : 0;
+
+  const rawSource = typeof row.source === 'string' ? row.source.trim().toUpperCase() : '';
+  const source = rawSource === 'CREATED' || rawSource === 'ATTENDANCE' || rawSource === 'BOTH'
+    ? rawSource
+    : recordsCount > 0
+      ? 'ATTENDANCE'
+      : 'CREATED';
+
+  const label = typeof row.label === 'string' && row.label.trim()
+    ? row.label.trim()
+    : formatPhysicalSlotLabel({ date, sessionTime, sessionCode });
+  const readableId = typeof row.readableId === 'string' && row.readableId.trim()
+    ? row.readableId.trim()
+    : buildReadableSessionId(date, sessionTime, sessionCode);
+
+  return {
+    key,
+    date,
+    sessionTime,
+    sessionCode,
+    sessionAt,
+    readableId,
+    label,
+    recordsCount,
+    source,
+    weekId,
+    weekName,
+  };
+}
+
+function normalizePhysicalWeekGroupItem(item: unknown): PhysicalReportGroup | null {
+  if (!item || typeof item !== 'object') return null;
+  const row = item as Record<string, unknown>;
+
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!id || !name) return null;
+
+  const orderNo = typeof row.orderNo === 'number' && Number.isFinite(row.orderNo)
+    ? Math.trunc(row.orderNo)
+    : undefined;
+
+  const slotKeys = Array.isArray(row.sessions)
+    ? Array.from(new Set(
+      row.sessions
+        .map((session) => normalizePhysicalQuickSessionItem(session)?.key)
+        .filter((key): key is string => Boolean(key)),
+    ))
+    : [];
+
+  return {
+    id,
+    name,
+    slotKeys,
+    orderNo,
+  };
 }
 
 function asIsoDate(value: unknown): string {
@@ -131,15 +318,39 @@ function csvEscape(value: unknown) {
 }
 
 type Tab = 'months' | 'recordings' | 'students' | 'attendance';
+type AttendanceViewTab = 'sessions' | 'payments';
 
 const emptyMonthForm = { name: '', year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), status: 'ANYONE' };
 const emptyRecForm = { monthId: '', title: '', description: '', videoUrl: '', thumbnail: '', topic: '', icon: '', materials: '', status: 'PAID_ONLY' };
 
 export default function AdminClassDetail() {
   const { id, instituteId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTabParam = (searchParams.get('tab') || '').trim().toLowerCase();
+  const rawAttendanceViewParam = (searchParams.get('attendanceView') || '').trim().toLowerCase();
+  const rawPaymentStatusParam = (searchParams.get('paymentStatus') || '').trim().toUpperCase();
+  const initialTabFromQuery: Tab = rawTabParam === 'months'
+    || rawTabParam === 'recordings'
+    || rawTabParam === 'students'
+    || rawTabParam === 'attendance'
+    ? rawTabParam
+    : rawTabParam === 'payments'
+      ? 'attendance'
+      : 'months';
+  const initialAttendanceView: AttendanceViewTab = rawTabParam === 'payments' || rawAttendanceViewParam === 'payments'
+    ? 'payments'
+    : 'sessions';
+  const initialPaymentStatusFilter: ClassPaymentStatusFilter = rawPaymentStatusParam === 'PAID'
+    || rawPaymentStatusParam === 'PENDING'
+    || rawPaymentStatusParam === 'UNPAID'
+    ? rawPaymentStatusParam
+    : 'ALL';
+  const initialPaymentSearchText = (searchParams.get('paymentSearch') || '').trim();
+
   const [cls, setCls] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>('months');
+  const [tab, setTab] = useState<Tab>(initialTabFromQuery);
+  const [attendanceView, setAttendanceView] = useState<AttendanceViewTab>(initialAttendanceView);
 
   // Months
   const [months, setMonths] = useState<any[]>([]);
@@ -220,13 +431,50 @@ export default function AdminClassDetail() {
   const [physicalGroupName, setPhysicalGroupName] = useState('');
   const [physicalGroupSelectedSlots, setPhysicalGroupSelectedSlots] = useState<string[]>([]);
   const [physicalGroupError, setPhysicalGroupError] = useState('');
+  const [physicalWeekBuilderOpen, setPhysicalWeekBuilderOpen] = useState(false);
   const [physicalReportGroups, setPhysicalReportGroups] = useState<PhysicalReportGroup[]>([]);
+  const [physicalSelectedWeekIds, setPhysicalSelectedWeekIds] = useState<string[]>([]);
+  const [physicalWeeksLoading, setPhysicalWeeksLoading] = useState(false);
+  const [physicalWeeksError, setPhysicalWeeksError] = useState('');
+  const [physicalSavingWeekGroup, setPhysicalSavingWeekGroup] = useState(false);
+  const [physicalDeletingWeekId, setPhysicalDeletingWeekId] = useState('');
+  const [physicalAssigningWeekSessionKey, setPhysicalAssigningWeekSessionKey] = useState('');
   const [physicalMonitor, setPhysicalMonitor] = useState<{
     slots: PhysicalMonitorSlot[];
     students: PhysicalMonitorStudent[];
   } | null>(null);
   const [physicalSearchText, setPhysicalSearchText] = useState('');
   const [physicalFocusedSlotKey, setPhysicalFocusedSlotKey] = useState('');
+  const [physicalQuickSessions, setPhysicalQuickSessions] = useState<PhysicalQuickSession[]>([]);
+  const [physicalQuickSessionKey, setPhysicalQuickSessionKey] = useState('');
+  const [physicalQuickSessionsLoading, setPhysicalQuickSessionsLoading] = useState(false);
+  const [physicalSessionFormOpen, setPhysicalSessionFormOpen] = useState(false);
+  const [physicalNewSessionDate, setPhysicalNewSessionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [physicalNewSessionTime, setPhysicalNewSessionTime] = useState('00:00');
+  const [physicalNewSessionName, setPhysicalNewSessionName] = useState('');
+  const [physicalCreatingSession, setPhysicalCreatingSession] = useState(false);
+  const [physicalCreateSessionError, setPhysicalCreateSessionError] = useState('');
+  const [physicalCreateSessionSuccess, setPhysicalCreateSessionSuccess] = useState('');
+  const [physicalSessionRows, setPhysicalSessionRows] = useState<PhysicalSessionStudentRow[]>([]);
+  const [physicalSessionLoading, setPhysicalSessionLoading] = useState(false);
+  const [physicalSessionError, setPhysicalSessionError] = useState('');
+  const [physicalSessionClosing, setPhysicalSessionClosing] = useState(false);
+  const [physicalSessionCloseMessage, setPhysicalSessionCloseMessage] = useState('');
+  const [physicalWeekPreviewRows, setPhysicalWeekPreviewRows] = useState<PhysicalWeekPreviewStudentRow[]>([]);
+  const [physicalWeekPreviewLoading, setPhysicalWeekPreviewLoading] = useState(false);
+  const [physicalWeekPreviewError, setPhysicalWeekPreviewError] = useState('');
+  const [physicalWeekPreviewLoaded, setPhysicalWeekPreviewLoaded] = useState(false);
+  const [physicalPaymentMonths, setPhysicalPaymentMonths] = useState<Array<{
+    id: string;
+    name: string;
+    year: number;
+    month: number;
+  }>>([]);
+  const [physicalPaymentRows, setPhysicalPaymentRows] = useState<ClassPaymentStudentRow[]>([]);
+  const [physicalPaymentLoading, setPhysicalPaymentLoading] = useState(false);
+  const [physicalPaymentError, setPhysicalPaymentError] = useState('');
+  const [physicalPaymentStatusFilter, setPhysicalPaymentStatusFilter] = useState<ClassPaymentStatusFilter>(initialPaymentStatusFilter);
+  const [physicalPaymentSearchText, setPhysicalPaymentSearchText] = useState(initialPaymentSearchText);
 
   const loadClass = () => api.get(`/classes/${id}`).then(r => setCls(r.data)).catch(() => {});
   const loadMonths = () => api.get(`/classes/${id}/months`).then(r => setMonths(r.data)).catch(() => {});
@@ -317,6 +565,49 @@ export default function AdminClassDetail() {
   }, [enrollments]);
 
   useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (tab === 'attendance') {
+      nextParams.set('tab', attendanceView === 'payments' ? 'payments' : 'attendance');
+      nextParams.set('attendanceView', attendanceView);
+
+      if (attendanceView === 'payments') {
+        if (physicalPaymentStatusFilter === 'ALL') {
+          nextParams.delete('paymentStatus');
+        } else {
+          nextParams.set('paymentStatus', physicalPaymentStatusFilter);
+        }
+
+        const trimmedSearch = physicalPaymentSearchText.trim();
+        if (trimmedSearch) {
+          nextParams.set('paymentSearch', trimmedSearch);
+        } else {
+          nextParams.delete('paymentSearch');
+        }
+      } else {
+        nextParams.delete('paymentStatus');
+        nextParams.delete('paymentSearch');
+      }
+    } else {
+      nextParams.set('tab', tab);
+      nextParams.delete('attendanceView');
+      nextParams.delete('paymentStatus');
+      nextParams.delete('paymentSearch');
+    }
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [
+    attendanceView,
+    physicalPaymentSearchText,
+    physicalPaymentStatusFilter,
+    searchParams,
+    setSearchParams,
+    tab,
+  ]);
+
+  useEffect(() => {
     if (tab !== 'attendance' || !id) {
       setPhysicalAvailableDates([]);
       setPhysicalFromDate('');
@@ -326,13 +617,114 @@ export default function AdminClassDetail() {
       setPhysicalGroupName('');
       setPhysicalGroupSelectedSlots([]);
       setPhysicalGroupError('');
+      setPhysicalWeekBuilderOpen(false);
       setPhysicalReportGroups([]);
+      setPhysicalSelectedWeekIds([]);
+      setPhysicalWeeksLoading(false);
+      setPhysicalWeeksError('');
+      setPhysicalSavingWeekGroup(false);
+      setPhysicalDeletingWeekId('');
+      setPhysicalAssigningWeekSessionKey('');
       setPhysicalMonitor(null);
       setPhysicalFocusedSlotKey('');
+      setPhysicalQuickSessions([]);
+      setPhysicalQuickSessionKey('');
+      setPhysicalQuickSessionsLoading(false);
+      setPhysicalSessionFormOpen(false);
+      setPhysicalNewSessionDate(new Date().toISOString().split('T')[0]);
+      setPhysicalNewSessionTime('00:00');
+      setPhysicalNewSessionName('');
+      setPhysicalCreatingSession(false);
+      setPhysicalCreateSessionError('');
+      setPhysicalCreateSessionSuccess('');
+      setPhysicalSessionRows([]);
+      setPhysicalSessionLoading(false);
+      setPhysicalSessionError('');
+      setPhysicalSessionClosing(false);
+      setPhysicalSessionCloseMessage('');
+      setPhysicalWeekPreviewRows([]);
+      setPhysicalWeekPreviewLoading(false);
+      setPhysicalWeekPreviewError('');
+      setPhysicalWeekPreviewLoaded(false);
+      setPhysicalPaymentMonths([]);
+      setPhysicalPaymentRows([]);
+      setPhysicalPaymentLoading(false);
+      setPhysicalPaymentError('');
       return;
     }
 
     let active = true;
+
+    setPhysicalQuickSessionsLoading(true);
+    api.get(`/attendance/class-attendance/class/${id}/sessions`, { params: { limit: 1000 } })
+      .then((response) => {
+        if (!active) return;
+
+        const rows = Array.isArray(response.data)
+          ? response.data
+            .map((item: unknown) => normalizePhysicalQuickSessionItem(item))
+            .filter((item: PhysicalQuickSession | null): item is PhysicalQuickSession => Boolean(item))
+          : [];
+
+        const uniqueRows = Array.from(new Map(rows.map((item) => [item.key, item])).values())
+          .sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return b.sessionTime.localeCompare(a.sessionTime);
+          });
+
+        setPhysicalQuickSessions(uniqueRows);
+        setPhysicalQuickSessionKey((prev) => (
+          prev && uniqueRows.some((item) => item.key === prev)
+            ? prev
+            : uniqueRows[0]?.key || ''
+        ));
+        setPhysicalNewSessionDate(uniqueRows[0]?.date || new Date().toISOString().split('T')[0]);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPhysicalQuickSessions([]);
+        setPhysicalQuickSessionKey('');
+      })
+      .finally(() => {
+        if (!active) return;
+        setPhysicalQuickSessionsLoading(false);
+      });
+
+    setPhysicalWeeksLoading(true);
+    setPhysicalWeeksError('');
+    api.get(`/attendance/class-attendance/class/${id}/weeks`)
+      .then((response) => {
+        if (!active) return;
+
+        const groups = Array.isArray(response.data)
+          ? response.data
+            .map((item: unknown) => normalizePhysicalWeekGroupItem(item))
+            .filter((item: PhysicalReportGroup | null): item is PhysicalReportGroup => Boolean(item))
+            .sort((a, b) => {
+              const leftOrder = typeof a.orderNo === 'number' ? a.orderNo : Number.MAX_SAFE_INTEGER;
+              const rightOrder = typeof b.orderNo === 'number' ? b.orderNo : Number.MAX_SAFE_INTEGER;
+              if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+              return a.name.localeCompare(b.name);
+            })
+          : [];
+
+        setPhysicalReportGroups(groups);
+        setPhysicalSelectedWeekIds((prev) => {
+          const valid = new Set(groups.map((group) => group.id));
+          const retained = prev.filter((weekId) => valid.has(weekId));
+          return retained.length > 0 ? retained : groups.map((group) => group.id);
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setPhysicalReportGroups([]);
+        setPhysicalSelectedWeekIds([]);
+        setPhysicalWeeksError('Failed to load saved week groups.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setPhysicalWeeksLoading(false);
+      });
 
     api.get(`/attendance/class-attendance/class/${id}/dates`)
       .then((response) => {
@@ -353,7 +745,7 @@ export default function AdminClassDetail() {
         setPhysicalGroupName('');
         setPhysicalGroupSelectedSlots([]);
         setPhysicalGroupError('');
-        setPhysicalReportGroups([]);
+        setPhysicalWeekBuilderOpen(false);
         setPhysicalMonitor(null);
         setPhysicalFocusedSlotKey('');
       })
@@ -367,9 +759,133 @@ export default function AdminClassDetail() {
         setPhysicalGroupName('');
         setPhysicalGroupSelectedSlots([]);
         setPhysicalGroupError('');
-        setPhysicalReportGroups([]);
+        setPhysicalWeekBuilderOpen(false);
         setPhysicalMonitor(null);
         setPhysicalFocusedSlotKey('');
+      });
+
+    setPhysicalPaymentLoading(true);
+    setPhysicalPaymentError('');
+    api.get(`/attendance/class-attendance/class/${id}/payments`)
+      .then((response) => {
+        if (!active) return;
+
+        const payload = response?.data && typeof response.data === 'object'
+          ? (response.data as Record<string, unknown>)
+          : {};
+
+        const monthsRaw = Array.isArray(payload.months) ? payload.months : [];
+        const normalizedMonths = monthsRaw
+          .map((item) => {
+            if (!item || typeof item !== 'object') return null;
+            const row = item as Record<string, unknown>;
+            const idValue = typeof row.id === 'string' ? row.id.trim() : '';
+            const nameValue = typeof row.name === 'string' ? row.name.trim() : '';
+            const yearValue = typeof row.year === 'number' && Number.isFinite(row.year)
+              ? Math.trunc(row.year)
+              : Number(row.year);
+            const monthValue = typeof row.month === 'number' && Number.isFinite(row.month)
+              ? Math.trunc(row.month)
+              : Number(row.month);
+
+            if (!idValue || !nameValue || !Number.isFinite(yearValue) || !Number.isFinite(monthValue)) {
+              return null;
+            }
+
+            return {
+              id: idValue,
+              name: nameValue,
+              year: yearValue,
+              month: monthValue,
+            };
+          })
+          .filter((item): item is { id: string; name: string; year: number; month: number } => Boolean(item));
+
+        setPhysicalPaymentMonths(normalizedMonths);
+
+        const studentsRaw = Array.isArray(payload.students) ? payload.students : [];
+        const normalizedRows = studentsRaw
+          .map((item): ClassPaymentStudentRow | null => {
+            if (!item || typeof item !== 'object') return null;
+            const row = item as Record<string, unknown>;
+
+            const userId = typeof row.userId === 'string' ? row.userId.trim() : '';
+            const fullName = typeof row.fullName === 'string' ? row.fullName.trim() : '';
+            const instituteId = typeof row.instituteId === 'string' ? row.instituteId.trim() : '';
+
+            if (!userId || !fullName) return null;
+
+            const monthRows = Array.isArray(row.months)
+              ? row.months
+                .map((monthItem): ClassPaymentMonthRow | null => {
+                  if (!monthItem || typeof monthItem !== 'object') return null;
+                  const monthRow = monthItem as Record<string, unknown>;
+
+                  const monthId = typeof monthRow.monthId === 'string' ? monthRow.monthId.trim() : '';
+                  const monthName = typeof monthRow.monthName === 'string' ? monthRow.monthName.trim() : '';
+                  if (!monthId || !monthName) return null;
+
+                  const year = typeof monthRow.year === 'number' && Number.isFinite(monthRow.year)
+                    ? Math.trunc(monthRow.year)
+                    : Number(monthRow.year);
+                  const month = typeof monthRow.month === 'number' && Number.isFinite(monthRow.month)
+                    ? Math.trunc(monthRow.month)
+                    : Number(monthRow.month);
+                  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+
+                  const rawStatus = typeof monthRow.status === 'string' ? monthRow.status.trim().toUpperCase() : '';
+                  const status: ClassPaymentStatus = rawStatus === 'PAID' || rawStatus === 'PENDING' || rawStatus === 'UNPAID'
+                    ? rawStatus
+                    : 'UNPAID';
+
+                  return {
+                    monthId,
+                    monthName,
+                    year,
+                    month,
+                    status,
+                  };
+                })
+                .filter((monthItem): monthItem is ClassPaymentMonthRow => Boolean(monthItem))
+              : [];
+
+            const paidCount = typeof row.paidCount === 'number' && Number.isFinite(row.paidCount)
+              ? Math.max(0, Math.trunc(row.paidCount))
+              : monthRows.filter((monthItem) => monthItem.status === 'PAID').length;
+            const pendingCount = typeof row.pendingCount === 'number' && Number.isFinite(row.pendingCount)
+              ? Math.max(0, Math.trunc(row.pendingCount))
+              : monthRows.filter((monthItem) => monthItem.status === 'PENDING').length;
+            const unpaidCount = typeof row.unpaidCount === 'number' && Number.isFinite(row.unpaidCount)
+              ? Math.max(0, Math.trunc(row.unpaidCount))
+              : monthRows.filter((monthItem) => monthItem.status === 'UNPAID').length;
+
+            return {
+              userId,
+              fullName,
+              instituteId: instituteId || '-',
+              barcodeId: typeof row.barcodeId === 'string' ? row.barcodeId.trim() : '',
+              phone: typeof row.phone === 'string' ? row.phone.trim() : '',
+              avatarUrl: typeof row.avatarUrl === 'string' && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
+              paidCount,
+              pendingCount,
+              unpaidCount,
+              months: monthRows,
+            };
+          })
+          .filter((item): item is ClassPaymentStudentRow => Boolean(item))
+          .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+        setPhysicalPaymentRows(normalizedRows);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPhysicalPaymentMonths([]);
+        setPhysicalPaymentRows([]);
+        setPhysicalPaymentError('Failed to load class payment status.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setPhysicalPaymentLoading(false);
       });
 
     return () => {
@@ -425,34 +941,86 @@ export default function AdminClassDetail() {
     });
   };
 
-  const addPhysicalReportGroup = () => {
-    const slotKeySet = new Set((physicalMonitor?.slots || []).map((slot) => slot.key));
-    const selectedKeys = physicalGroupSelectedSlots.filter((slotKey) => slotKeySet.has(slotKey));
-
-    if (selectedKeys.length === 0) {
-      setPhysicalGroupError('Select at least one session or date before creating a group.');
-      return;
-    }
+  const addPhysicalReportGroup = async () => {
+    if (!id) return;
 
     const trimmedName = physicalGroupName.trim();
-    const groupName = trimmedName || `Group ${physicalReportGroups.length + 1}`;
+    const groupName = trimmedName || `Week ${physicalReportGroups.length + 1}`;
 
-    setPhysicalReportGroups((prev) => ([
-      ...prev,
-      {
-        id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        name: groupName,
-        slotKeys: selectedKeys,
-      },
-    ]));
-
-    setPhysicalGroupName('');
-    setPhysicalGroupSelectedSlots([]);
+    setPhysicalSavingWeekGroup(true);
     setPhysicalGroupError('');
+
+    try {
+      const response = await api.post(`/attendance/class-attendance/class/${id}/weeks`, {
+        name: groupName,
+      });
+
+      const createdGroup = normalizePhysicalWeekGroupItem(response.data);
+      if (!createdGroup) {
+        throw new Error('Invalid week group payload');
+      }
+
+      setPhysicalReportGroups((prev) => {
+        const map = new Map(prev.map((group) => [group.id, group]));
+        map.set(createdGroup.id, createdGroup);
+        return Array.from(map.values()).sort((a, b) => {
+          const leftOrder = typeof a.orderNo === 'number' ? a.orderNo : Number.MAX_SAFE_INTEGER;
+          const rightOrder = typeof b.orderNo === 'number' ? b.orderNo : Number.MAX_SAFE_INTEGER;
+          if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+          return a.name.localeCompare(b.name);
+        });
+      });
+
+      setPhysicalSelectedWeekIds((prev) => (
+        prev.includes(createdGroup.id)
+          ? prev
+          : [...prev, createdGroup.id]
+      ));
+
+      setPhysicalGroupName('');
+      setPhysicalGroupSelectedSlots([]);
+      setPhysicalGroupError('');
+      setPhysicalWeeksError('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalGroupError(message.join(', '));
+      } else {
+        setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to save week group.');
+      }
+    } finally {
+      setPhysicalSavingWeekGroup(false);
+    }
   };
 
-  const removePhysicalReportGroup = (groupId: string) => {
-    setPhysicalReportGroups((prev) => prev.filter((group) => group.id !== groupId));
+  const removePhysicalReportGroup = async (groupId: string) => {
+    if (!id) return;
+
+    setPhysicalDeletingWeekId(groupId);
+    setPhysicalGroupError('');
+
+    try {
+      await api.delete(`/attendance/class-attendance/class/${id}/weeks/${groupId}`);
+
+      setPhysicalReportGroups((prev) => prev.filter((group) => group.id !== groupId));
+      setPhysicalSelectedWeekIds((prev) => prev.filter((weekId) => weekId !== groupId));
+      setPhysicalQuickSessions((prev) => prev.map((session) => (
+        session.weekId === groupId
+          ? { ...session, weekId: null, weekName: null }
+          : session
+      )));
+      setPhysicalGroupSelectedSlots([]);
+      setPhysicalWeeksError('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalGroupError(message.join(', '));
+      } else {
+        setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to delete week group.');
+      }
+    } finally {
+      setPhysicalDeletingWeekId('');
+    }
   };
 
   const loadPhysicalAttendancePreview = async () => {
@@ -514,8 +1082,8 @@ export default function AdminClassDetail() {
         slots = rawDates
           .map((value: unknown) => asIsoDate(value))
           .filter((value: string): value is string => Boolean(value))
-          .filter((date) => date >= from && date <= to)
-          .map((date) => ({
+          .filter((date: string) => date >= from && date <= to)
+          .map((date: string) => ({
             key: `${date}|00:00|fallback`,
             date,
             sessionTime: '00:00',
@@ -649,6 +1217,759 @@ export default function AdminClassDetail() {
 
     return summary;
   }, [physicalDisplaySlots.length, physicalFilteredStudents, physicalMonitor]);
+
+  const physicalQuickSelectedSession = useMemo(
+    () => physicalQuickSessions.find((session) => session.key === physicalQuickSessionKey) || null,
+    [physicalQuickSessionKey, physicalQuickSessions],
+  );
+  const selectedPhysicalSessionKey = physicalQuickSelectedSession?.key || '';
+  const selectedPhysicalSessionDate = physicalQuickSelectedSession?.date || '';
+  const selectedPhysicalSessionTime = physicalQuickSelectedSession?.sessionTime || '00:00';
+
+  const physicalQuickSessionByKey = useMemo(
+    () => new Map(physicalQuickSessions.map((session) => [session.key, session] as const)),
+    [physicalQuickSessions],
+  );
+
+  const physicalSelectedWeekIdSet = useMemo(
+    () => new Set(physicalSelectedWeekIds),
+    [physicalSelectedWeekIds],
+  );
+
+  const physicalWeekGroups = useMemo(() => (
+    physicalReportGroups
+      .filter((group) => physicalSelectedWeekIdSet.has(group.id))
+      .map((group) => ({
+        ...group,
+        sessions: group.slotKeys
+          .map((slotKey) => physicalQuickSessionByKey.get(slotKey))
+          .filter((session): session is PhysicalQuickSession => Boolean(session)),
+      }))
+      .filter((group) => group.sessions.length > 0)
+  ), [physicalQuickSessionByKey, physicalReportGroups, physicalSelectedWeekIdSet]);
+
+  const physicalWeekOrderedSessions = useMemo(
+    () => physicalWeekGroups.flatMap((group) => group.sessions),
+    [physicalWeekGroups],
+  );
+
+  const physicalAssignedWeekBySessionKey = useMemo(() => {
+    const map = new Map<string, string>();
+    physicalReportGroups.forEach((group) => {
+      group.slotKeys.forEach((slotKey) => {
+        if (!map.has(slotKey)) {
+          map.set(slotKey, group.name);
+        }
+      });
+    });
+    return map;
+  }, [physicalReportGroups]);
+
+  const togglePhysicalReportWeekSelection = (groupId: string) => {
+    setPhysicalSelectedWeekIds((prev) => (
+      prev.includes(groupId)
+        ? prev.filter((id) => id !== groupId)
+        : [...prev, groupId]
+    ));
+  };
+
+  const selectAllPhysicalReportWeeks = () => {
+    setPhysicalSelectedWeekIds(physicalReportGroups.map((group) => group.id));
+  };
+
+  const clearPhysicalReportWeekSelection = () => {
+    setPhysicalSelectedWeekIds([]);
+  };
+
+  const buildPhysicalSessionQuery = (session: PhysicalQuickSession | null) => {
+    const params = new URLSearchParams();
+    params.set('classId', id || '');
+
+    if (session) {
+      params.set('date', session.date);
+      params.set('sessionTime', session.sessionTime);
+      if (session.sessionCode) {
+        params.set('sessionCode', session.sessionCode);
+      }
+    }
+
+    return params.toString();
+  };
+
+  const physicalAttendanceSelectionQuery = buildPhysicalSessionQuery(physicalQuickSelectedSession);
+
+  const markAttendanceScannerPath = getInstituteAdminPath(instituteId, `/mark-attendance?${physicalAttendanceSelectionQuery}`);
+
+  const markAttendanceExternalPath = getInstituteAdminPath(instituteId, `/mark-attendance/external-device?${physicalAttendanceSelectionQuery}`);
+
+  const handleSelectPhysicalQuickSession = (session: PhysicalQuickSession) => {
+    setPhysicalQuickSessionKey(session.key);
+    setPhysicalFromDate(session.date);
+    setPhysicalToDate(session.date);
+    setPhysicalFocusedSlotKey(session.key);
+    setPhysicalSessionError('');
+    setPhysicalSessionCloseMessage('');
+  };
+
+  const focusPhysicalSessionPreview = () => {
+    if (typeof window === 'undefined') return;
+    const panel = document.getElementById('physical-selected-session-preview');
+    if (panel) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handlePreviewPhysicalSession = (session: PhysicalQuickSession) => {
+    handleSelectPhysicalQuickSession(session);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        focusPhysicalSessionPreview();
+      });
+    }
+  };
+
+  const getMarkAttendancePathForSession = (session: PhysicalQuickSession) => (
+    getInstituteAdminPath(instituteId, `/mark-attendance?${buildPhysicalSessionQuery(session)}`)
+  );
+
+  const handleCreatePhysicalSession = async () => {
+    if (!id) return;
+
+    const date = asIsoDate(physicalNewSessionDate);
+    if (!date) {
+      setPhysicalCreateSessionError('Select a valid session date.');
+      return;
+    }
+
+    const normalizedSessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(physicalNewSessionTime)
+      ? physicalNewSessionTime
+      : '00:00';
+
+    setPhysicalCreatingSession(true);
+    setPhysicalCreateSessionError('');
+    setPhysicalCreateSessionSuccess('');
+
+    try {
+      const response = await api.post(`/attendance/class-attendance/class/${id}/sessions`, {
+        date,
+        sessionTime: normalizedSessionTime,
+        sessionCode: physicalNewSessionName.trim() || undefined,
+      });
+
+      const createdSession = normalizePhysicalQuickSessionItem(response.data);
+      if (!createdSession) {
+        throw new Error('Invalid session payload');
+      }
+
+      setPhysicalQuickSessions((prev) => {
+        const map = new Map(prev.map((item) => [item.key, item]));
+        map.set(createdSession.key, createdSession);
+        return Array.from(map.values()).sort((a, b) => {
+          if (a.date !== b.date) return b.date.localeCompare(a.date);
+          return b.sessionTime.localeCompare(a.sessionTime);
+        });
+      });
+      setPhysicalQuickSessionKey(createdSession.key);
+      setPhysicalFromDate(createdSession.date);
+      setPhysicalToDate(createdSession.date);
+      setPhysicalFocusedSlotKey(createdSession.key);
+      setPhysicalAvailableDates((prev) => Array.from(new Set([...prev, createdSession.date])).sort());
+      setPhysicalSessionFormOpen(false);
+      setPhysicalNewSessionName('');
+      setPhysicalNewSessionTime(createdSession.sessionTime || '00:00');
+      setPhysicalSessionCloseMessage('');
+      setPhysicalCreateSessionSuccess(`Session created: ${formatPhysicalSlotLabel(createdSession)}`);
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalCreateSessionError(message.join(', '));
+      } else {
+        setPhysicalCreateSessionError(typeof message === 'string' ? message : 'Failed to create session.');
+      }
+    } finally {
+      setPhysicalCreatingSession(false);
+    }
+  };
+
+  const handleAssignPhysicalSessionWeek = async (session: PhysicalQuickSession, nextWeekIdRaw: string) => {
+    if (!id) return;
+
+    const nextWeekId = nextWeekIdRaw.trim();
+    const currentWeekId = (session.weekId || '').trim();
+
+    if (nextWeekId === currentWeekId) return;
+
+    setPhysicalAssigningWeekSessionKey(session.key);
+    setPhysicalGroupError('');
+    setPhysicalWeeksError('');
+
+    try {
+      const payload: { sessionKey: string; weekId?: string } = {
+        sessionKey: session.key,
+      };
+      if (nextWeekId) {
+        payload.weekId = nextWeekId;
+      }
+
+      const response = await api.patch(`/attendance/class-attendance/class/${id}/sessions/week`, payload);
+      const updatedSession = normalizePhysicalQuickSessionItem(response.data);
+
+      if (!updatedSession) {
+        throw new Error('Invalid session payload');
+      }
+
+      setPhysicalQuickSessions((prev) => prev.map((item) => (
+        item.key === session.key
+          ? { ...item, ...updatedSession }
+          : item
+      )));
+
+      setPhysicalReportGroups((prev) => {
+        const nextGroups = prev.map((group) => ({
+          ...group,
+          slotKeys: group.slotKeys.filter((slotKey) => slotKey !== session.key),
+        }));
+
+        if (!updatedSession.weekId) {
+          return nextGroups;
+        }
+
+        return nextGroups.map((group) => (
+          group.id === updatedSession.weekId
+            ? {
+              ...group,
+              slotKeys: group.slotKeys.includes(session.key)
+                ? group.slotKeys
+                : [...group.slotKeys, session.key],
+            }
+            : group
+        ));
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalGroupError(message.join(', '));
+      } else {
+        setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to assign week to session.');
+      }
+    } finally {
+      setPhysicalAssigningWeekSessionKey('');
+    }
+  };
+
+  const loadSelectedPhysicalSessionAttendance = useCallback(async () => {
+    if (!id || !selectedPhysicalSessionKey || !selectedPhysicalSessionDate) {
+      setPhysicalSessionRows([]);
+      setPhysicalSessionError('');
+      return;
+    }
+
+    setPhysicalSessionLoading(true);
+    setPhysicalSessionError('');
+
+    try {
+      const [studentsResponse, attendanceResponse] = await Promise.all([
+        api.get(`/attendance/class-attendance/class/${id}/students`),
+        api.get(`/attendance/class-attendance/class/${id}/date/${selectedPhysicalSessionDate}`, {
+          params: {
+            sessionTime: selectedPhysicalSessionTime,
+          },
+        }),
+      ]);
+
+      const studentPayload = studentsResponse.data;
+      const studentItems = Array.isArray(studentPayload)
+        ? studentPayload
+        : Array.isArray(studentPayload?.students)
+          ? studentPayload.students
+          : [];
+
+      const statusByUserId = new Map<string, PhysicalCellStatus>();
+      const attendanceItems = Array.isArray(attendanceResponse.data) ? attendanceResponse.data : [];
+
+      attendanceItems.forEach((item: any) => {
+        const userId = typeof item?.userId === 'string' ? item.userId : '';
+        const status = item?.status;
+
+        if (!userId) return;
+        if (status === 'PRESENT' || status === 'LATE' || status === 'ABSENT' || status === 'EXCUSED') {
+          statusByUserId.set(userId, status);
+        }
+      });
+
+      const rows = studentItems
+        .map((item: any): PhysicalSessionStudentRow | null => {
+          const userId = typeof item?.userId === 'string' ? item.userId : '';
+          if (!userId) return null;
+
+          const fullNameRaw = typeof item?.fullName === 'string' ? item.fullName : '';
+          const fullName = fullNameRaw.trim();
+          const instituteIdRaw = typeof item?.instituteId === 'string' ? item.instituteId : '';
+          const instituteId = instituteIdRaw.trim();
+          const phone = typeof item?.phone === 'string' ? item.phone : '';
+          const barcodeId = typeof item?.barcodeId === 'string' ? item.barcodeId : '';
+          const avatarUrl = typeof item?.avatarUrl === 'string' && item.avatarUrl.trim() ? item.avatarUrl : null;
+          const status = statusByUserId.get(userId) || 'NOT_MARKED';
+
+          return {
+            userId,
+            fullName: fullName || 'Unknown Student',
+            instituteId: instituteId || '-',
+            phone,
+            barcodeId,
+            avatarUrl,
+            status,
+          };
+        })
+        .filter((row: PhysicalSessionStudentRow | null): row is PhysicalSessionStudentRow => Boolean(row))
+        .sort((a: PhysicalSessionStudentRow, b: PhysicalSessionStudentRow) => a.fullName.localeCompare(b.fullName));
+
+      setPhysicalSessionRows(rows);
+      setPhysicalQuickSessions((prev) => {
+        let changed = false;
+        const next = prev.map((session) => {
+          if (session.key !== selectedPhysicalSessionKey) return session;
+          if (session.recordsCount === attendanceItems.length) return session;
+          changed = true;
+          return { ...session, recordsCount: attendanceItems.length };
+        });
+
+        return changed ? next : prev;
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalSessionError(message.join(', '));
+      } else {
+        setPhysicalSessionError(typeof message === 'string' ? message : 'Failed to load selected session attendance.');
+      }
+      setPhysicalSessionRows([]);
+    } finally {
+      setPhysicalSessionLoading(false);
+    }
+  }, [id, selectedPhysicalSessionDate, selectedPhysicalSessionKey, selectedPhysicalSessionTime]);
+
+  useEffect(() => {
+    if (tab !== 'attendance' || !id || !selectedPhysicalSessionKey) {
+      setPhysicalSessionRows([]);
+      setPhysicalSessionError('');
+      setPhysicalSessionCloseMessage('');
+      setPhysicalSessionLoading(false);
+      setPhysicalSessionClosing(false);
+      return;
+    }
+
+    void loadSelectedPhysicalSessionAttendance();
+  }, [id, loadSelectedPhysicalSessionAttendance, selectedPhysicalSessionKey, tab]);
+
+  const loadPhysicalWeekPreview = useCallback(async () => {
+    if (!id) return;
+
+    if (physicalWeekOrderedSessions.length === 0) {
+      setPhysicalWeekPreviewRows([]);
+      setPhysicalWeekPreviewLoaded(false);
+      setPhysicalWeekPreviewError('Select at least one saved week before loading preview.');
+      return;
+    }
+
+    setPhysicalWeekPreviewLoading(true);
+    setPhysicalWeekPreviewError('');
+
+    try {
+      const attendanceRequests = physicalWeekOrderedSessions.map((session) => (
+        api.get(`/attendance/class-attendance/class/${id}/date/${session.date}`, {
+          params: {
+            sessionTime: session.sessionTime,
+          },
+        })
+      ));
+
+      const [studentsResponse, ...attendanceResponses] = await Promise.all([
+        api.get(`/attendance/class-attendance/class/${id}/students`),
+        ...attendanceRequests,
+      ]);
+
+      const studentPayload = studentsResponse.data;
+      const studentItems = Array.isArray(studentPayload)
+        ? studentPayload
+        : Array.isArray(studentPayload?.students)
+          ? studentPayload.students
+          : [];
+
+      const sessionStatusByUserId = new Map<string, Map<string, PhysicalCellStatus>>();
+      const sessionCountByKey = new Map<string, number>();
+
+      physicalWeekOrderedSessions.forEach((session, index) => {
+        const attendanceItems = Array.isArray(attendanceResponses[index]?.data)
+          ? attendanceResponses[index].data
+          : [];
+
+        const statusByUser = new Map<string, PhysicalCellStatus>();
+        attendanceItems.forEach((item: any) => {
+          const userId = typeof item?.userId === 'string' ? item.userId : '';
+          const status = item?.status;
+          if (!userId) return;
+          if (status === 'PRESENT' || status === 'LATE' || status === 'ABSENT' || status === 'EXCUSED') {
+            statusByUser.set(userId, status);
+          }
+        });
+
+        sessionStatusByUserId.set(session.key, statusByUser);
+        sessionCountByKey.set(session.key, attendanceItems.length);
+      });
+
+      const rows = studentItems
+        .map((item: any): PhysicalWeekPreviewStudentRow | null => {
+          const userId = typeof item?.userId === 'string' ? item.userId : '';
+          if (!userId) return null;
+
+          const fullNameRaw = typeof item?.fullName === 'string' ? item.fullName : '';
+          const fullName = fullNameRaw.trim();
+          const instituteIdRaw = typeof item?.instituteId === 'string' ? item.instituteId : '';
+          const instituteId = instituteIdRaw.trim();
+          const phone = typeof item?.phone === 'string' ? item.phone : '';
+          const barcodeId = typeof item?.barcodeId === 'string' ? item.barcodeId : '';
+          const avatarUrl = typeof item?.avatarUrl === 'string' && item.avatarUrl.trim() ? item.avatarUrl : null;
+
+          const statuses = physicalWeekOrderedSessions.reduce((acc, session) => {
+            const status = sessionStatusByUserId.get(session.key)?.get(userId) || 'NOT_MARKED';
+            acc[session.key] = status;
+            return acc;
+          }, {} as Record<string, PhysicalCellStatus>);
+
+          return {
+            userId,
+            fullName: fullName || 'Unknown Student',
+            instituteId: instituteId || '-',
+            phone,
+            barcodeId,
+            avatarUrl,
+            statuses,
+          };
+        })
+        .filter((row: PhysicalWeekPreviewStudentRow | null): row is PhysicalWeekPreviewStudentRow => Boolean(row))
+        .sort((a: PhysicalWeekPreviewStudentRow, b: PhysicalWeekPreviewStudentRow) => a.fullName.localeCompare(b.fullName));
+
+      setPhysicalWeekPreviewRows(rows);
+      setPhysicalWeekPreviewLoaded(true);
+
+      setPhysicalQuickSessions((prev) => {
+        let changed = false;
+        const next = prev.map((session) => {
+          const count = sessionCountByKey.get(session.key);
+          if (typeof count !== 'number' || count === session.recordsCount) {
+            return session;
+          }
+          changed = true;
+          return { ...session, recordsCount: count };
+        });
+        return changed ? next : prev;
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalWeekPreviewError(message.join(', '));
+      } else {
+        setPhysicalWeekPreviewError(typeof message === 'string' ? message : 'Failed to load week-wise attendance preview.');
+      }
+      setPhysicalWeekPreviewRows([]);
+      setPhysicalWeekPreviewLoaded(false);
+    } finally {
+      setPhysicalWeekPreviewLoading(false);
+    }
+  }, [id, physicalWeekOrderedSessions]);
+
+  const exportPhysicalWeekPreviewXlsx = async () => {
+    if (physicalWeekOrderedSessions.length === 0 || physicalVisibleWeekPreviewRows.length === 0) {
+      setPhysicalWeekPreviewError('Load week preview with at least one student before exporting XLSX.');
+      return;
+    }
+
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const workbook = new ExcelJSImport.Workbook();
+      workbook.creator = 'Suraksha LMS';
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet('Week Attendance');
+
+      const headerFill = 'FFE2E8F0';
+      const headerText = 'FF1E293B';
+      const statusXlsxStyle: Record<PhysicalCellStatus, { fill: string; text: string }> = {
+        PRESENT: { fill: 'FFD1FAE5', text: 'FF047857' },
+        LATE: { fill: 'FFFEF3C7', text: 'FFB45309' },
+        ABSENT: { fill: 'FFFEE2E2', text: 'FFB91C1C' },
+        EXCUSED: { fill: 'FFDBEAFE', text: 'FF1D4ED8' },
+        NOT_MARKED: { fill: 'FFE2E8F0', text: 'FF475569' },
+      };
+
+      const border = {
+        top: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+        left: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+        bottom: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+        right: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+      };
+
+      const fixedHeaders = ['Student Name', 'Institute ID', 'Phone', 'Barcode ID'];
+      fixedHeaders.forEach((header, index) => {
+        const column = index + 1;
+        worksheet.getCell(1, column).value = header;
+        worksheet.mergeCells(1, column, 2, column);
+
+        const topCell = worksheet.getCell(1, column);
+        topCell.font = { bold: true, color: { argb: headerText } };
+        topCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerFill } };
+        topCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        topCell.border = border;
+
+        const mergedCell = worksheet.getCell(2, column);
+        mergedCell.border = border;
+      });
+
+      let columnCursor = fixedHeaders.length + 1;
+      physicalWeekGroups.forEach((group) => {
+        const startColumn = columnCursor;
+
+        group.sessions.forEach((session) => {
+          const sessionLabel = session.sessionCode
+            ? `${session.date} ${session.sessionTime} · ${session.sessionCode}`
+            : `${session.date}${session.sessionTime !== '00:00' ? ` ${session.sessionTime}` : ''}`;
+
+          const sessionCell = worksheet.getCell(2, columnCursor);
+          sessionCell.value = sessionLabel;
+          sessionCell.font = { bold: true, color: { argb: headerText } };
+          sessionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerFill } };
+          sessionCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          sessionCell.border = border;
+
+          columnCursor += 1;
+        });
+
+        const endColumn = columnCursor - 1;
+        const weekHeaderCell = worksheet.getCell(1, startColumn);
+        weekHeaderCell.value = group.name;
+        weekHeaderCell.font = { bold: true, color: { argb: headerText } };
+        weekHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        weekHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerFill } };
+
+        if (endColumn > startColumn) {
+          worksheet.mergeCells(1, startColumn, 1, endColumn);
+        }
+
+        for (let column = startColumn; column <= endColumn; column += 1) {
+          worksheet.getCell(1, column).border = border;
+        }
+      });
+
+      physicalVisibleWeekPreviewRows.forEach((student) => {
+        const rowValues: Array<string> = [
+          student.fullName,
+          student.instituteId,
+          student.phone,
+          student.barcodeId,
+          ...physicalWeekOrderedSessions.map((session) => {
+            const status = student.statuses?.[session.key] || 'NOT_MARKED';
+            return PHYSICAL_STATUS_LABEL[status];
+          }),
+        ];
+
+        const row = worksheet.addRow(rowValues);
+        row.height = 20;
+
+        row.eachCell((cell) => {
+          cell.border = border;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+
+        physicalWeekOrderedSessions.forEach((session, index) => {
+          const status = student.statuses?.[session.key] || 'NOT_MARKED';
+          const style = statusXlsxStyle[status];
+          const cell = row.getCell(index + 5);
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: style.fill },
+          };
+          cell.font = { bold: true, color: { argb: style.text } };
+        });
+      });
+
+      const legendStartRow = physicalVisibleWeekPreviewRows.length + 4;
+      worksheet.getCell(`A${legendStartRow}`).value = 'Status Legend';
+      worksheet.getCell(`A${legendStartRow}`).font = { bold: true, color: { argb: headerText } };
+
+      (Object.keys(PHYSICAL_STATUS_LABEL) as PhysicalCellStatus[]).forEach((status, index) => {
+        const rowNumber = legendStartRow + index + 1;
+        const labelCell = worksheet.getCell(`A${rowNumber}`);
+        const styleCell = worksheet.getCell(`B${rowNumber}`);
+        const style = statusXlsxStyle[status];
+
+        labelCell.value = PHYSICAL_STATUS_LABEL[status];
+        labelCell.border = border;
+
+        styleCell.value = status;
+        styleCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: style.fill },
+        };
+        styleCell.font = { bold: true, color: { argb: style.text } };
+        styleCell.border = border;
+      });
+
+      worksheet.getRow(1).height = 22;
+      worksheet.getRow(2).height = 32;
+      worksheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 2 }];
+
+      worksheet.getColumn(1).width = 28;
+      worksheet.getColumn(2).width = 16;
+      worksheet.getColumn(3).width = 16;
+      worksheet.getColumn(4).width = 18;
+      for (let col = 5; col < 5 + physicalWeekOrderedSessions.length; col += 1) {
+        worksheet.getColumn(col).width = 18;
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const classSlug = (cls?.name || 'class')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      const weekSlug = `weeks-${physicalWeekGroups.length}`;
+      const stamp = new Date().toISOString().slice(0, 10);
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `physical-attendance-${classSlug || 'class'}-${weekSlug}-${stamp}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setPhysicalWeekPreviewError('');
+    } catch {
+      setPhysicalWeekPreviewError('Failed to export week-wise XLSX file. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    setPhysicalWeekPreviewRows([]);
+    setPhysicalWeekPreviewError('');
+    setPhysicalWeekPreviewLoaded(false);
+  }, [physicalWeekGroups]);
+
+  const physicalVisibleSessionRows = useMemo(() => {
+    const query = physicalSearchText.trim().toLowerCase();
+    if (!query) return physicalSessionRows;
+
+    return physicalSessionRows.filter((student) => (
+      [student.fullName, student.instituteId, student.phone, student.barcodeId]
+        .some((value) => value.toLowerCase().includes(query))
+    ));
+  }, [physicalSearchText, physicalSessionRows]);
+
+  const physicalVisibleWeekPreviewRows = useMemo(() => {
+    const query = physicalSearchText.trim().toLowerCase();
+    if (!query) return physicalWeekPreviewRows;
+
+    return physicalWeekPreviewRows.filter((student) => (
+      [student.fullName, student.instituteId, student.phone, student.barcodeId]
+        .some((value) => value.toLowerCase().includes(query))
+    ));
+  }, [physicalSearchText, physicalWeekPreviewRows]);
+
+  const physicalVisiblePaymentRows = useMemo(() => {
+    const query = physicalPaymentSearchText.trim().toLowerCase();
+
+    return physicalPaymentRows.filter((student) => {
+      const overallStatus = resolveClassPaymentOverallStatus(student);
+      if (physicalPaymentStatusFilter !== 'ALL' && overallStatus !== physicalPaymentStatusFilter) {
+        return false;
+      }
+
+      if (!query) return true;
+      return [student.fullName, student.instituteId, student.phone, student.barcodeId]
+        .some((value) => value.toLowerCase().includes(query));
+    });
+  }, [physicalPaymentRows, physicalPaymentSearchText, physicalPaymentStatusFilter]);
+
+  const physicalPaymentSummary = useMemo(() => {
+    const summary = {
+      total: physicalVisiblePaymentRows.length,
+      paid: 0,
+      pending: 0,
+      unpaid: 0,
+    };
+
+    physicalVisiblePaymentRows.forEach((student) => {
+      const status = resolveClassPaymentOverallStatus(student);
+      if (status === 'PAID') summary.paid += 1;
+      else if (status === 'PENDING') summary.pending += 1;
+      else summary.unpaid += 1;
+    });
+
+    return summary;
+  }, [physicalVisiblePaymentRows]);
+
+  const physicalSessionStatusSummary = useMemo(() => {
+    const summary = {
+      total: physicalVisibleSessionRows.length,
+      present: 0,
+      late: 0,
+      absent: 0,
+      excused: 0,
+      notMarked: 0,
+    };
+
+    physicalVisibleSessionRows.forEach((student) => {
+      if (student.status === 'PRESENT') summary.present += 1;
+      else if (student.status === 'LATE') summary.late += 1;
+      else if (student.status === 'ABSENT') summary.absent += 1;
+      else if (student.status === 'EXCUSED') summary.excused += 1;
+      else summary.notMarked += 1;
+    });
+
+    return summary;
+  }, [physicalVisibleSessionRows]);
+
+  const handleCloseSelectedPhysicalSession = async () => {
+    if (!id || !physicalQuickSelectedSession) return;
+
+    setPhysicalSessionClosing(true);
+    setPhysicalSessionError('');
+    setPhysicalSessionCloseMessage('');
+
+    try {
+      const response = await api.post(`/attendance/class-attendance/class/${id}/close-session`, {
+        date: physicalQuickSelectedSession.date,
+        sessionTime: physicalQuickSelectedSession.sessionTime,
+        sessionCode: physicalQuickSelectedSession.sessionCode || undefined,
+      });
+
+      const markedRaw = response?.data?.marked;
+      const marked = typeof markedRaw === 'number' && Number.isFinite(markedRaw) ? markedRaw : 0;
+      setPhysicalSessionCloseMessage(
+        `Session closed. ${marked} unmarked student${marked === 1 ? '' : 's'} moved to absent.`,
+      );
+
+      await loadSelectedPhysicalSessionAttendance();
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      if (Array.isArray(message)) {
+        setPhysicalSessionError(message.join(', '));
+      } else {
+        setPhysicalSessionError(typeof message === 'string' ? message : 'Failed to close this session.');
+      }
+    } finally {
+      setPhysicalSessionClosing(false);
+    }
+  };
 
   const exportPhysicalAttendanceCsv = () => {
     if (!physicalMonitor || !physicalPreviewLoaded || physicalFilteredStudents.length === 0) return;
@@ -2097,6 +3418,22 @@ export default function AdminClassDetail() {
     return [...baseColumns, ...groupColumns];
   }, [physicalFocusedSlot, physicalReportGroups]);
 
+  // Keep legacy physical preview helpers type-checked while the simplified selected-session UI is active.
+  void [
+    physicalLoadingPreview,
+    physicalPreviewError,
+    physicalGroupError,
+    physicalGroupSelectedSlots,
+    togglePhysicalGroupSlot,
+    togglePhysicalGroupDate,
+    addPhysicalReportGroup,
+    removePhysicalReportGroup,
+    loadPhysicalAttendancePreview,
+    physicalSummary,
+    exportPhysicalAttendanceCsv,
+    physicalAttendanceColumns,
+  ];
+
   const enrollmentColumnsForView: readonly StickyColumn<any>[] = studentsViewMode === 'ADVANCED'
     ? enrollmentColumns
     : enrollmentColumns.filter((col) => !['select', 'email', 'fee'].includes(col.id));
@@ -3042,300 +4379,978 @@ export default function AdminClassDetail() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Physical Attendance (Class Wise)</h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Create attendance report groups from selected sessions or dates, then compare grouped attendance quickly.
+                  Select a session, mark/view attendance, review students with images, and close the session when done.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  to={getInstituteAdminPath(instituteId, `/mark-attendance?classId=${encodeURIComponent(id || '')}`)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                >
-                  Mark Attendance (Scanner)
-                </Link>
-                <Link
-                  to={getInstituteAdminPath(instituteId, `/mark-attendance/external-device?classId=${encodeURIComponent(id || '')}`)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                >
-                  Mark Attendance (External)
-                </Link>
-                <Link
-                  to={getInstituteAdminPath(instituteId, `/mark-attendance?classId=${encodeURIComponent(id || '')}&mode=advanced`)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhysicalSessionFormOpen((prev) => !prev);
+                    setPhysicalCreateSessionError('');
+                    setPhysicalCreateSessionSuccess('');
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
                 >
-                  Create Session
-                </Link>
+                  {physicalSessionFormOpen ? 'Cancel Session Create' : 'Create Session'}
+                </button>
                 <Link
-                  to={getInstituteAdminPath(instituteId, `/class-attendance?classId=${encodeURIComponent(id || '')}`)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                  to={markAttendanceScannerPath}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                 >
-                  Full Attendance View + XLSX
+                  Mark Selected Session
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (physicalQuickSelectedSession) {
+                      handlePreviewPhysicalSession(physicalQuickSelectedSession);
+                    }
+                  }}
+                  disabled={!physicalQuickSelectedSession}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  Preview Selected Session
+                </button>
+                <Link
+                  to={markAttendanceExternalPath}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                >
+                  External Device
                 </Link>
               </div>
             </div>
 
+            <div className="inline-flex w-fit items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setAttendanceView('sessions')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${attendanceView === 'sessions' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Sessions
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttendanceView('payments')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${attendanceView === 'payments' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Payments
+              </button>
+            </div>
+
+            <div className={attendanceView === 'sessions' ? 'space-y-3' : 'hidden'}>
+
+            {physicalSessionFormOpen && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3">
+                <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Create Session (Standalone)</p>
+                <p className="text-[11px] text-violet-700/80">
+                  This creates a class session only. Attendance can be imported or marked later.
+                </p>
+
+                <div className="grid gap-2 md:grid-cols-[160px_140px_minmax(0,1fr)_auto]">
+                  <label className="text-[11px] font-semibold text-violet-700">
+                    Date
+                    <input
+                      type="date"
+                      value={physicalNewSessionDate}
+                      onChange={(event) => setPhysicalNewSessionDate(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                    />
+                  </label>
+
+                  <label className="text-[11px] font-semibold text-violet-700">
+                    Time
+                    <input
+                      type="time"
+                      value={physicalNewSessionTime}
+                      onChange={(event) => setPhysicalNewSessionTime(event.target.value || '00:00')}
+                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                    />
+                  </label>
+
+                  <label className="text-[11px] font-semibold text-violet-700">
+                    Name
+                    <input
+                      type="text"
+                      value={physicalNewSessionName}
+                      onChange={(event) => setPhysicalNewSessionName(event.target.value)}
+                      placeholder="e.g. Week 04 - Group A"
+                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                    />
+                  </label>
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreatePhysicalSession()}
+                      disabled={physicalCreatingSession}
+                      className="rounded-lg border border-violet-300 bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {physicalCreatingSession ? 'Creating...' : 'Save Session'}
+                    </button>
+                  </div>
+                </div>
+
+                {physicalCreateSessionError && (
+                  <p className="text-xs font-medium text-red-600">{physicalCreateSessionError}</p>
+                )}
+                {physicalCreateSessionSuccess && (
+                  <p className="text-xs font-medium text-emerald-700">{physicalCreateSessionSuccess}</p>
+                )}
+              </div>
+            )}
+
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-              <div className="grid gap-2 md:grid-cols-[160px_160px_minmax(0,1fr)]">
-                <label className="text-[11px] font-semibold text-slate-500">
-                  From
-                  <input
-                    type="date"
-                    value={physicalFromDate}
-                    min={physicalAvailableDates[0] || undefined}
-                    max={physicalAvailableDates[physicalAvailableDates.length - 1] || undefined}
-                    onChange={(event) => setPhysicalFromDate(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                  />
-                </label>
-                <label className="text-[11px] font-semibold text-slate-500">
-                  To
-                  <input
-                    type="date"
-                    value={physicalToDate}
-                    min={physicalAvailableDates[0] || undefined}
-                    max={physicalAvailableDates[physicalAvailableDates.length - 1] || undefined}
-                    onChange={(event) => setPhysicalToDate(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                  />
-                </label>
-                <label className="text-[11px] font-semibold text-slate-500">
-                  Search students
-                  <input
-                    type="text"
-                    value={physicalSearchText}
-                    onChange={(event) => setPhysicalSearchText(event.target.value)}
-                    placeholder="Name, ID, phone, barcode"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                  />
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Attendance Sessions (Class Level)</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Select one session, assign week from row dropdown, then mark or preview attendance.
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {physicalQuickSelectedSession
+                    ? `Selected: ${formatPhysicalSlotLabel(physicalQuickSelectedSession)}`
+                    : 'Selected: None'}
+                </p>
+              </div>
+
+              {physicalQuickSessionsLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-500">
+                  Loading sessions...
+                </div>
+              ) : physicalQuickSessions.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-500">
+                  No attendance sessions found for this class.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="space-y-2 md:hidden">
+                    {physicalQuickSessions.map((session) => {
+                      const selected = session.key === physicalQuickSessionKey;
+                      const sessionName = session.sessionCode || formatPhysicalSlotLabel(session);
+                      const linkedWeekName = session.weekName || physicalAssignedWeekBySessionKey.get(session.key) || '';
+                      const assigningWeek = physicalAssigningWeekSessionKey === session.key;
+                      const selectedWeekId = session.weekId || '';
+
+                      return (
+                        <div
+                          key={`session-mobile-${session.key}`}
+                          className={`rounded-lg border p-3 ${selected ? 'border-indigo-200 bg-indigo-50/60' : 'border-slate-200 bg-white'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-slate-800">{sessionName}</p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">
+                                {session.date}{session.sessionTime !== '00:00' ? ` ${session.sessionTime}` : ''} | Count: {session.recordsCount}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">
+                                Session ID: <span className="font-mono text-slate-700">{session.readableId}</span>
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPhysicalQuickSession(session)}
+                              className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
+                                selected
+                                  ? 'border-indigo-300 bg-indigo-600 text-white'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
+                              }`}
+                            >
+                              {selected ? 'Selected' : 'Select'}
+                            </button>
+                          </div>
+
+                          <div className="mt-2.5 space-y-1.5">
+                            <p className="text-[11px] font-semibold text-slate-600">Week Assign</p>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={selectedWeekId}
+                                onChange={(event) => {
+                                  void handleAssignPhysicalSessionWeek(session, event.target.value);
+                                }}
+                                disabled={assigningWeek || physicalSavingWeekGroup || physicalDeletingWeekId.length > 0}
+                                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:bg-slate-100"
+                              >
+                                <option value="">No Week</option>
+                                {physicalReportGroups.map((group) => (
+                                  <option key={`mobile-${session.key}-${group.id}`} value={group.id}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {assigningWeek ? (
+                                <span className="text-[10px] font-semibold text-indigo-600">Saving...</span>
+                              ) : linkedWeekName ? (
+                                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap">
+                                  {linkedWeekName}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <Link
+                              to={getMarkAttendancePathForSession(session)}
+                              className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                            >
+                              Mark
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewPhysicalSession(session)}
+                              className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Preview
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden rounded-lg border border-slate-200 bg-white md:block">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">Select</th>
+                          <th className="px-3 py-2 text-left font-semibold">Date</th>
+                          <th className="px-3 py-2 text-left font-semibold">Count</th>
+                          <th className="px-3 py-2 text-left font-semibold">Name</th>
+                          <th className="px-3 py-2 text-left font-semibold">Week Assign</th>
+                          <th className="px-3 py-2 text-left font-semibold">Session ID</th>
+                          <th className="px-3 py-2 text-left font-semibold">Mark Attendance</th>
+                          <th className="px-3 py-2 text-left font-semibold">Preview</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {physicalQuickSessions.map((session) => {
+                          const selected = session.key === physicalQuickSessionKey;
+                          const sessionName = session.sessionCode || formatPhysicalSlotLabel(session);
+                          const linkedWeekName = session.weekName || physicalAssignedWeekBySessionKey.get(session.key) || '';
+                          const assigningWeek = physicalAssigningWeekSessionKey === session.key;
+                          const selectedWeekId = session.weekId || '';
+
+                          return (
+                            <tr key={session.key} className={selected ? 'bg-indigo-50/70' : 'bg-white'}>
+                              <td className="px-3 py-2 align-middle">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectPhysicalQuickSession(session)}
+                                  className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
+                                    selected
+                                      ? 'border-indigo-300 bg-indigo-600 text-white'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
+                                  }`}
+                                >
+                                  {selected ? 'Selected' : 'Select'}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 align-middle font-medium text-slate-700">{session.date}</td>
+                              <td className="px-3 py-2 align-middle text-slate-700">{session.recordsCount}</td>
+                              <td className="px-3 py-2 align-middle text-slate-700">{sessionName}</td>
+                              <td className="px-3 py-2 align-middle text-slate-700">
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={selectedWeekId}
+                                    onChange={(event) => {
+                                      void handleAssignPhysicalSessionWeek(session, event.target.value);
+                                    }}
+                                    disabled={assigningWeek || physicalSavingWeekGroup || physicalDeletingWeekId.length > 0}
+                                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:bg-slate-100"
+                                  >
+                                    <option value="">No Week</option>
+                                    {physicalReportGroups.map((group) => (
+                                      <option key={`${session.key}-${group.id}`} value={group.id}>
+                                        {group.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {assigningWeek ? (
+                                    <span className="text-[10px] font-semibold text-indigo-600">Saving...</span>
+                                  ) : linkedWeekName ? (
+                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap">
+                                      {linkedWeekName}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-700">
+                                  {session.readableId}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <Link
+                                  to={getMarkAttendancePathForSession(session)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                                >
+                                  Mark Attendance
+                                </Link>
+                              </td>
+                              <td className="px-3 py-2 align-middle">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePreviewPhysicalSession(session)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                                >
+                                  Preview Here
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Week Group Builder</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Create week names here, then assign sessions from the session-table dropdown.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void loadPhysicalWeekPreview()}
+                    disabled={physicalWeekPreviewLoading || physicalWeekGroups.length === 0}
+                    className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                  >
+                    {physicalWeekPreviewLoading ? 'Loading Week Preview...' : 'Load Week Preview'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void exportPhysicalWeekPreviewXlsx()}
+                    disabled={
+                      physicalWeekPreviewLoading
+                      || !physicalWeekPreviewLoaded
+                      || physicalWeekOrderedSessions.length === 0
+                      || physicalVisibleWeekPreviewRows.length === 0
+                    }
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Export Week XLSX
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => void loadPhysicalAttendancePreview()}
-                  disabled={physicalLoadingPreview}
-                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  onClick={() => {
+                    setPhysicalWeekBuilderOpen((prev) => !prev);
+                    setPhysicalGroupError('');
+                  }}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                 >
-                  {physicalLoadingPreview ? 'Loading...' : 'Load Preview'}
+                  {physicalWeekBuilderOpen ? 'Close Group Builder' : 'Create Group'}
                 </button>
-                <button
-                  type="button"
-                  onClick={exportPhysicalAttendanceCsv}
-                  disabled={!physicalPreviewLoaded || !physicalMonitor || physicalFilteredStudents.length === 0}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                >
-                  Export CSV
-                </button>
+                <p className="text-[11px] text-slate-500">
+                  Weeks appear below. Select only the weeks you need for week-wise report.
+                </p>
               </div>
 
-              <p className="text-[11px] text-slate-500">
-                Available dates: <span className="font-semibold text-slate-700">{physicalAvailableDates.length}</span>
-                {' '}| Loaded sessions: <span className="font-semibold text-slate-700">{physicalMonitor?.slots.length || 0}</span>
-                {' '}| Report groups: <span className="font-semibold text-slate-700">{physicalReportGroups.length}</span>
-              </p>
+              {physicalGroupError && (
+                <p className="text-xs font-medium text-red-600">{physicalGroupError}</p>
+              )}
+              {physicalWeeksError && (
+                <p className="text-xs font-medium text-red-600">{physicalWeeksError}</p>
+              )}
+              {physicalWeeksLoading && (
+                <p className="text-xs text-slate-500">Loading saved weeks...</p>
+              )}
 
-              {physicalPreviewLoaded && physicalMonitor && physicalMonitor.slots.length > 0 && (
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-indigo-800 uppercase tracking-wide">Session List (Preview Scope)</p>
-                    <p className="text-[11px] text-indigo-700">
-                      Viewing:{' '}
-                      <span className="font-semibold">
-                        {physicalFocusedSlot ? formatPhysicalSlotLabel(physicalFocusedSlot) : `All sessions (${physicalMonitor.slots.length})`}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
+              <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                    Select Weeks For Report ({physicalSelectedWeekIds.length}/{physicalReportGroups.length})
+                  </p>
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setPhysicalFocusedSlotKey('')}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                        !physicalFocusedSlot
-                          ? 'border-indigo-300 bg-indigo-600 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
-                      }`}
+                      onClick={selectAllPhysicalReportWeeks}
+                      disabled={physicalReportGroups.length === 0}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                     >
-                      All Sessions
+                      Select All
                     </button>
-                    {physicalMonitor.slots.map((slot) => {
-                      const selected = physicalFocusedSlotKey === slot.key;
-                      const slotLabel = slot.sessionCode
-                        ? `${slot.date} · ${slot.sessionCode}`
-                        : `${slot.date}${slot.sessionTime !== '00:00' ? ` ${slot.sessionTime}` : ''}`;
+                    <button
+                      type="button"
+                      onClick={clearPhysicalReportWeekSelection}
+                      disabled={physicalSelectedWeekIds.length === 0}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {physicalReportGroups.length === 0 ? (
+                  <p className="text-xs text-slate-500">No saved week groups yet. Use Create Group to create a week, then assign sessions from the session table.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {physicalReportGroups.map((group) => {
+                      const selected = physicalSelectedWeekIds.includes(group.id);
 
                       return (
-                        <button
-                          key={slot.key}
-                          type="button"
-                          onClick={() => setPhysicalFocusedSlotKey(slot.key)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                        <span
+                          key={group.id}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                             selected
-                              ? 'border-indigo-300 bg-indigo-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-200 bg-slate-50 text-slate-500'
                           }`}
                         >
-                          {slotLabel}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePhysicalReportWeekSelection(group.id)}
+                            className="font-semibold"
+                            aria-label={`Toggle ${group.name}`}
+                          >
+                            {selected ? 'Selected: ' : ''}{group.name} ({group.slotKeys.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removePhysicalReportGroup(group.id)}
+                            disabled={physicalDeletingWeekId === group.id}
+                            className="text-rose-600/80 hover:text-rose-700 disabled:opacity-50"
+                            aria-label={`Remove ${group.name}`}
+                          >
+                            {physicalDeletingWeekId === group.id ? '...' : 'x'}
+                          </button>
+                        </span>
                       );
                     })}
                   </div>
+                )}
+              </div>
 
-                  <p className="text-[11px] text-indigo-700">
-                    Select one session to view student attendance for that day/session only, or keep all sessions for full-range reporting.
+              {physicalWeekBuilderOpen && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="text-[11px] font-semibold text-slate-500">
+                      Week Name
+                      <input
+                        type="text"
+                        value={physicalGroupName}
+                        onChange={(event) => setPhysicalGroupName(event.target.value)}
+                        placeholder={`Week ${physicalReportGroups.length + 1}`}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                      />
+                    </label>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => void addPhysicalReportGroup()}
+                        disabled={physicalSavingWeekGroup}
+                        className="rounded-lg border border-indigo-200 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {physicalSavingWeekGroup ? 'Creating...' : 'Create Week'}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-indigo-800/80">
+                    After creating a week, go to <span className="font-semibold">Attendance Sessions (Class Level)</span> and use the <span className="font-semibold">Week Assign</span> dropdown in each row.
                   </p>
                 </div>
               )}
 
-              {physicalPreviewLoaded && physicalMonitor && physicalMonitor.slots.length > 0 && (
-                <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Create Report Group</p>
-                    <p className="text-[11px] text-blue-700">Selected sessions: {physicalGroupSelectedSlots.length}</p>
-                  </div>
+              {physicalWeekPreviewError && (
+                <p className="text-xs font-medium text-red-600">{physicalWeekPreviewError}</p>
+              )}
 
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-                    <input
-                      type="text"
-                      value={physicalGroupName}
-                      onChange={(event) => setPhysicalGroupName(event.target.value)}
-                      placeholder="Group name (e.g. Week 1)"
-                      className="w-full rounded-lg border border-blue-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPhysicalGroupSelectedSlots([])}
-                      disabled={physicalGroupSelectedSlots.length === 0}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      Clear Selection
-                    </button>
-                    <button
-                      type="button"
-                      onClick={addPhysicalReportGroup}
-                      className="rounded-lg border border-blue-200 bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                    >
-                      Add Group
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {Array.from(physicalSlotsByDate.keys()).sort().map((date) => {
-                      const dateSlots = physicalSlotsByDate.get(date) || [];
-                      const everySelected = dateSlots.length > 0 && dateSlots.every((slot) => physicalGroupSelectedSlots.includes(slot.key));
-                      return (
-                        <button
-                          key={date}
-                          type="button"
-                          onClick={() => togglePhysicalGroupDate(date)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                            everySelected
-                              ? 'border-indigo-300 bg-indigo-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
-                          }`}
+              {physicalWeekPreviewLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  Loading week-wise attendance preview...
+                </div>
+              ) : !physicalWeekPreviewLoaded ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-medium text-slate-500">Week-wise preview is not loaded</p>
+                  <p className="text-xs text-slate-400 mt-1">Select saved weeks and click Load Week Preview.</p>
+                </div>
+              ) : physicalWeekOrderedSessions.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-medium text-slate-500">No grouped sessions to display</p>
+                </div>
+              ) : physicalVisibleWeekPreviewRows.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-medium text-slate-500">No students found for this search</p>
+                  <p className="text-xs text-slate-400 mt-1">Change search text to show students.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                  <table className="min-w-full text-xs border-separate border-spacing-0">
+                    <thead className="bg-slate-100 text-slate-600">
+                      <tr>
+                        <th
+                          rowSpan={2}
+                          className="sticky left-0 z-10 border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold"
                         >
-                          {date} ({dateSlots.length})
-                        </button>
+                          Student
+                        </th>
+                        {physicalWeekGroups.map((group) => (
+                          <th
+                            key={`${group.id}-header`}
+                            colSpan={group.sessions.length}
+                            className="border-l border-slate-200 px-3 py-2 text-center font-semibold whitespace-nowrap"
+                          >
+                            {group.name}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr>
+                        {physicalWeekGroups.flatMap((group) => group.sessions.map((session) => {
+                          const sessionLabel = session.sessionCode
+                            ? `${session.date} ${session.sessionTime} · ${session.sessionCode}`
+                            : `${session.date}${session.sessionTime !== '00:00' ? ` ${session.sessionTime}` : ''}`;
+
+                          return (
+                            <th
+                              key={`${group.id}-${session.key}-session-header`}
+                              className="border-l border-slate-200 px-2.5 py-2 text-center font-semibold whitespace-nowrap"
+                            >
+                              {sessionLabel}
+                            </th>
+                          );
+                        }))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {physicalVisibleWeekPreviewRows.map((student) => {
+                        const initials = student.fullName
+                          .split(' ')
+                          .map((part) => part.trim())
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() || '')
+                          .join('') || '?';
+
+                        return (
+                          <tr key={`week-preview-${student.userId}`} className="border-t border-slate-100">
+                            <td className="sticky left-0 z-[1] border-r border-slate-200 bg-white px-3 py-2.5 align-middle">
+                              <div className="flex min-w-[240px] items-center gap-2.5">
+                                {student.avatarUrl ? (
+                                  <img
+                                    src={student.avatarUrl}
+                                    alt={student.fullName}
+                                    className="h-8 w-8 rounded-full object-cover border border-slate-200"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-100 text-slate-600 text-[10px] font-semibold flex items-center justify-center">
+                                    {initials}
+                                  </div>
+                                )}
+
+                                <div className="min-w-0">
+                                  <p className="truncate font-semibold text-slate-800">{student.fullName}</p>
+                                  <p className="truncate text-[11px] text-slate-500">
+                                    ID: {student.instituteId}
+                                    {student.phone ? ` | ${student.phone}` : ''}
+                                    {student.barcodeId ? ` | ${student.barcodeId}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {physicalWeekOrderedSessions.map((session) => {
+                              const status = student.statuses?.[session.key] || 'NOT_MARKED';
+                              return (
+                                <td key={`week-preview-${student.userId}-${session.key}`} className="border-l border-slate-100 px-2.5 py-2 text-center align-middle">
+                                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${PHYSICAL_STATUS_BADGE[status]}`}>
+                                    {PHYSICAL_STATUS_LABEL[status]}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div id="physical-selected-session-preview" className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Selected Session Attendance</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {physicalQuickSelectedSession
+                      ? formatPhysicalSlotLabel(physicalQuickSelectedSession)
+                      : 'Select one session from the table above to view student attendance.'}
+                  </p>
+                  {physicalQuickSelectedSession && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Session ID: <span className="font-mono text-slate-700">{physicalQuickSelectedSession.readableId}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleCloseSelectedPhysicalSession()}
+                  disabled={!physicalQuickSelectedSession || physicalSessionClosing || physicalSessionLoading}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  {physicalSessionClosing ? 'Closing Session...' : 'Close Session'}
+                </button>
+              </div>
+
+              <label className="text-[11px] font-semibold text-slate-500">
+                Search students
+                <input
+                  type="text"
+                  value={physicalSearchText}
+                  onChange={(event) => setPhysicalSearchText(event.target.value)}
+                  placeholder="Name, ID, phone, barcode"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                />
+              </label>
+
+              {physicalSessionError && (
+                <p className="text-xs font-medium text-red-600">{physicalSessionError}</p>
+              )}
+              {physicalSessionCloseMessage && (
+                <p className="text-xs font-medium text-emerald-700">{physicalSessionCloseMessage}</p>
+              )}
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] text-slate-500">Students</p>
+                  <p className="text-sm font-semibold text-slate-700">{physicalSessionStatusSummary.total}</p>
+                </div>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <p className="text-[11px] text-emerald-700">Present</p>
+                  <p className="text-sm font-semibold text-emerald-700">{physicalSessionStatusSummary.present}</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] text-amber-700">Late</p>
+                  <p className="text-sm font-semibold text-amber-700">{physicalSessionStatusSummary.late}</p>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                  <p className="text-[11px] text-red-700">Absent</p>
+                  <p className="text-sm font-semibold text-red-700">{physicalSessionStatusSummary.absent}</p>
+                </div>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                  <p className="text-[11px] text-blue-700">Excused</p>
+                  <p className="text-sm font-semibold text-blue-700">{physicalSessionStatusSummary.excused}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+                  <p className="text-[11px] text-slate-600">Not Marked</p>
+                  <p className="text-sm font-semibold text-slate-700">{physicalSessionStatusSummary.notMarked}</p>
+                </div>
+              </div>
+
+              {!physicalQuickSelectedSession ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-medium text-slate-500">Select a session to view attendance list</p>
+                  <p className="text-xs text-slate-400 mt-1">Use the Select button in the table above.</p>
+                </div>
+              ) : physicalSessionLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  Loading selected session attendance...
+                </div>
+              ) : physicalVisibleSessionRows.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-medium text-slate-500">No students found for this search</p>
+                  <p className="text-xs text-slate-400 mt-1">Change the search text to show students.</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                  <div className="max-h-[430px] overflow-y-auto divide-y divide-slate-100">
+                    {physicalVisibleSessionRows.map((student) => {
+                      const initials = student.fullName
+                        .split(' ')
+                        .map((part) => part.trim())
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0]?.toUpperCase() || '')
+                        .join('') || '?';
+
+                      return (
+                        <div key={student.userId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                          <div className="flex min-w-0 items-center gap-3">
+                            {student.avatarUrl ? (
+                              <img
+                                src={student.avatarUrl}
+                                alt={student.fullName}
+                                className="h-10 w-10 rounded-full object-cover border border-slate-200"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-full border border-slate-200 bg-slate-100 text-slate-600 text-xs font-semibold flex items-center justify-center">
+                                {initials}
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-800">{student.fullName}</p>
+                              <p className="truncate text-[11px] text-slate-500">
+                                ID: {student.instituteId}
+                                {student.phone ? ` | ${student.phone}` : ''}
+                                {student.barcodeId ? ` | ${student.barcodeId}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${PHYSICAL_STATUS_BADGE[student.status]}`}>
+                            {PHYSICAL_STATUS_LABEL[student.status]}
+                          </span>
+                        </div>
                       );
                     })}
                   </div>
+                </div>
+              )}
+            </div>
+            </div>
 
-                  <div className="max-h-28 overflow-auto rounded-lg border border-blue-100 bg-white p-2">
-                    <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {physicalMonitor.slots.map((slot) => {
-                        const selected = physicalGroupSelectedSlots.includes(slot.key);
+            {attendanceView === 'payments' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Class Payment Status</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      View paid, pending, and unpaid students at class level with month-wise status.
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Months: {physicalPaymentMonths.length}</p>
+                </div>
+
+                <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+                  <label className="text-[11px] font-semibold text-slate-500">
+                    Overall Status
+                    <select
+                      value={physicalPaymentStatusFilter}
+                      onChange={(event) => setPhysicalPaymentStatusFilter(event.target.value as ClassPaymentStatusFilter)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                    >
+                      <option value="ALL">All</option>
+                      <option value="PAID">Paid</option>
+                      <option value="PENDING">Pending</option>
+                      <option value="UNPAID">Unpaid</option>
+                    </select>
+                  </label>
+
+                  <label className="text-[11px] font-semibold text-slate-500">
+                    Search students
+                    <input
+                      type="text"
+                      value={physicalPaymentSearchText}
+                      onChange={(event) => setPhysicalPaymentSearchText(event.target.value)}
+                      placeholder="Name, ID, phone, barcode"
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                    />
+                  </label>
+                </div>
+
+                {physicalPaymentError && (
+                  <p className="text-xs font-medium text-red-600">{physicalPaymentError}</p>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[11px] text-slate-500">Students</p>
+                    <p className="text-sm font-semibold text-slate-700">{physicalPaymentSummary.total}</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <p className="text-[11px] text-emerald-700">Paid</p>
+                    <p className="text-sm font-semibold text-emerald-700">{physicalPaymentSummary.paid}</p>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-[11px] text-amber-700">Pending</p>
+                    <p className="text-sm font-semibold text-amber-700">{physicalPaymentSummary.pending}</p>
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                    <p className="text-[11px] text-rose-700">Unpaid</p>
+                    <p className="text-sm font-semibold text-rose-700">{physicalPaymentSummary.unpaid}</p>
+                  </div>
+                </div>
+
+                {physicalPaymentLoading ? (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                    Loading class payment status...
+                  </div>
+                ) : physicalVisiblePaymentRows.length === 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
+                    <p className="text-sm font-medium text-slate-500">No payment rows found</p>
+                    <p className="text-xs text-slate-400 mt-1">Change status filter or search text.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="space-y-2 md:hidden">
+                      {physicalVisiblePaymentRows.map((student) => {
+                        const initials = student.fullName
+                          .split(' ')
+                          .map((part) => part.trim())
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() || '')
+                          .join('') || '?';
+                        const overallStatus = resolveClassPaymentOverallStatus(student);
+
                         return (
-                          <button
-                            key={slot.key}
-                            type="button"
-                            onClick={() => togglePhysicalGroupSlot(slot.key)}
-                            className={`rounded-md border px-2 py-1.5 text-left text-[11px] transition ${
-                              selected
-                                ? 'border-blue-300 bg-blue-600 text-white'
-                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
-                            }`}
-                          >
-                            {formatPhysicalSlotLabel(slot)}
-                          </button>
+                          <div key={`payment-mobile-${student.userId}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex items-start gap-2.5">
+                              {student.avatarUrl ? (
+                                <img
+                                  src={student.avatarUrl}
+                                  alt={student.fullName}
+                                  className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="h-9 w-9 rounded-full border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-600 flex items-center justify-center">
+                                  {initials}
+                                </div>
+                              )}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-semibold text-slate-800">{student.fullName}</p>
+                                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[overallStatus]}`}>
+                                    {CLASS_PAYMENT_STATUS_LABEL[overallStatus]}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 break-words text-[11px] text-slate-500">
+                                  ID: {student.instituteId}
+                                  {student.phone ? ` | ${student.phone}` : ''}
+                                  {student.barcodeId ? ` | ${student.barcodeId}` : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1">
+                                <p className="text-[10px] text-emerald-700">Paid</p>
+                                <p className="text-xs font-semibold text-emerald-700">{student.paidCount}</p>
+                              </div>
+                              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+                                <p className="text-[10px] text-amber-700">Pending</p>
+                                <p className="text-xs font-semibold text-amber-700">{student.pendingCount}</p>
+                              </div>
+                              <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1">
+                                <p className="text-[10px] text-rose-700">Unpaid</p>
+                                <p className="text-xs font-semibold text-rose-700">{student.unpaidCount}</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-2">
+                              {student.months.length === 0 ? (
+                                <span className="text-[11px] text-slate-400">No months</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {student.months.map((month) => (
+                                    <span
+                                      key={`mobile-${student.userId}-${month.monthId}`}
+                                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[month.status]}`}
+                                    >
+                                      {month.monthName}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
-                  </div>
 
-                  {physicalGroupError && (
-                    <p className="text-xs font-medium text-red-600">{physicalGroupError}</p>
-                  )}
+                    <div className="hidden rounded-lg border border-slate-200 bg-white md:block">
+                      <table className="w-full table-fixed text-xs">
+                        <thead className="bg-slate-100 text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">Student</th>
+                            <th className="px-3 py-2 text-left font-semibold">Paid</th>
+                            <th className="px-3 py-2 text-left font-semibold">Pending</th>
+                            <th className="px-3 py-2 text-left font-semibold">Unpaid</th>
+                            <th className="px-3 py-2 text-left font-semibold">Overall</th>
+                            <th className="px-3 py-2 text-left font-semibold">Monthly Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {physicalVisiblePaymentRows.map((student) => {
+                            const initials = student.fullName
+                              .split(' ')
+                              .map((part) => part.trim())
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase() || '')
+                              .join('') || '?';
+                            const overallStatus = resolveClassPaymentOverallStatus(student);
 
-                  {physicalReportGroups.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {physicalReportGroups.map((group) => (
-                        <span
-                          key={group.id}
-                          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-                        >
-                          {group.name} ({group.slotKeys.length})
-                          <button
-                            type="button"
-                            onClick={() => removePhysicalReportGroup(group.id)}
-                            className="text-emerald-700/80 hover:text-emerald-900"
-                            aria-label={`Remove ${group.name}`}
-                          >
-                            x
-                          </button>
-                        </span>
-                      ))}
+                            return (
+                              <tr key={`payment-${student.userId}`} className="border-t border-slate-100">
+                                <td className="px-3 py-2.5 align-middle">
+                                  <div className="flex items-center gap-2.5">
+                                    {student.avatarUrl ? (
+                                      <img
+                                        src={student.avatarUrl}
+                                        alt={student.fullName}
+                                        className="h-8 w-8 rounded-full border border-slate-200 object-cover"
+                                        loading="lazy"
+                                      />
+                                    ) : (
+                                      <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-600 flex items-center justify-center">
+                                        {initials}
+                                      </div>
+                                    )}
+
+                                    <div className="min-w-0">
+                                      <p className="truncate font-semibold text-slate-800">{student.fullName}</p>
+                                      <p className="break-words text-[11px] text-slate-500">
+                                        ID: {student.instituteId}
+                                        {student.phone ? ` | ${student.phone}` : ''}
+                                        {student.barcodeId ? ` | ${student.barcodeId}` : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 align-middle text-emerald-700 font-semibold">{student.paidCount}</td>
+                                <td className="px-3 py-2.5 align-middle text-amber-700 font-semibold">{student.pendingCount}</td>
+                                <td className="px-3 py-2.5 align-middle text-rose-700 font-semibold">{student.unpaidCount}</td>
+                                <td className="px-3 py-2.5 align-middle">
+                                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[overallStatus]}`}>
+                                    {CLASS_PAYMENT_STATUS_LABEL[overallStatus]}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 align-middle">
+                                  {student.months.length === 0 ? (
+                                    <span className="text-[11px] text-slate-400">No months</span>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                      {student.months.slice(0, 6).map((month) => (
+                                        <span
+                                          key={`${student.userId}-${month.monthId}`}
+                                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CLASS_PAYMENT_STATUS_BADGE[month.status]}`}
+                                        >
+                                          {month.monthName}
+                                        </span>
+                                      ))}
+                                      {student.months.length > 6 && (
+                                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                                          +{student.months.length - 6} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {physicalPreviewError && (
-                <p className="text-xs font-medium text-red-600">{physicalPreviewError}</p>
-              )}
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] text-slate-500">Sessions In View</p>
-                <p className="text-sm font-semibold text-slate-700">{physicalDisplaySlots.length}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] text-slate-500">Students</p>
-                <p className="text-sm font-semibold text-slate-700">{physicalFilteredStudents.length}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] text-slate-500">Total Cells</p>
-                <p className="text-sm font-semibold text-slate-700">{physicalSummary.totalCells}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] text-slate-500">Avg Attendance</p>
-                <p className="text-sm font-semibold text-emerald-700">{physicalSummary.avgAttendance}%</p>
-              </div>
-            </div>
-
-            {!physicalPreviewLoaded ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                <p className="text-sm font-medium text-slate-500">Load preview to see class-wise physical attendance.</p>
-                <p className="text-xs text-slate-400 mt-1">Select a date range first, then build report groups from sessions or dates.</p>
-              </div>
-            ) : !physicalMonitor || physicalMonitor.slots.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                <p className="text-sm font-medium text-slate-500">No attendance sessions found</p>
-                <p className="text-xs text-slate-400 mt-1">Try another date range.</p>
-              </div>
-            ) : physicalFilteredStudents.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                <p className="text-sm font-medium text-slate-500">No students match your search</p>
-                <p className="text-xs text-slate-400 mt-1">Change search text to view rows.</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-slate-100 overflow-hidden">
-                <StickyDataTable
-                  columns={physicalAttendanceColumns}
-                  rows={physicalFilteredStudents}
-                  getRowId={(row) => row.userId}
-                  tableHeight="calc(100vh - 520px)"
-                />
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request, Patch } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto, CloseClassAttendanceSessionDto } from './dto/attendance.dto';
+import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto, CloseClassAttendanceSessionDto, CreateClassAttendanceSessionDto, CreateClassAttendanceWeekDto, UpdateClassAttendanceSessionWeekDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -410,6 +410,76 @@ export class AttendanceController {
   @Get('class-attendance/class/:classId/payments')
   getClassStudentPayments(@Param('classId') classId: string) {
     return this.attendanceService.getClassStudentPayments(classId);
+  }
+
+  /** Admin: create a class attendance session without marking attendance rows */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/class/:classId/sessions')
+  createClassAttendanceSession(
+    @Param('classId') classId: string,
+    @Body() body: CreateClassAttendanceSessionDto,
+    @Request() req: any,
+  ) {
+    return this.attendanceService.createClassAttendanceSession(classId, body, req.user.sub);
+  }
+
+  /** Admin: get class attendance sessions (date + session time) for quick selection */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/sessions')
+  getClassAttendanceSessions(
+    @Param('classId') classId: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = Number.parseInt(limit || '', 10);
+    return this.attendanceService.getClassAttendanceSessions(
+      classId,
+      Number.isFinite(parsedLimit) ? parsedLimit : 200,
+    );
+  }
+
+  /** Admin: assign or clear week on one class attendance session row */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch('class-attendance/class/:classId/sessions/week')
+  updateClassAttendanceSessionWeek(
+    @Param('classId') classId: string,
+    @Body() body: UpdateClassAttendanceSessionWeekDto,
+    @Request() req: any,
+  ) {
+    return this.attendanceService.updateClassAttendanceSessionWeek(classId, body, req.user.sub);
+  }
+
+  /** Admin: create a persisted week group and link selected sessions to this week */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('class-attendance/class/:classId/weeks')
+  createClassAttendanceWeek(
+    @Param('classId') classId: string,
+    @Body() body: CreateClassAttendanceWeekDto,
+    @Request() req: any,
+  ) {
+    return this.attendanceService.createClassAttendanceWeek(classId, body, req.user.sub);
+  }
+
+  /** Admin: list persisted week groups for a class */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('class-attendance/class/:classId/weeks')
+  getClassAttendanceWeeks(@Param('classId') classId: string) {
+    return this.attendanceService.getClassAttendanceWeeks(classId);
+  }
+
+  /** Admin: delete a persisted week group and unlink its sessions */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Delete('class-attendance/class/:classId/weeks/:weekId')
+  deleteClassAttendanceWeek(
+    @Param('classId') classId: string,
+    @Param('weekId') weekId: string,
+  ) {
+    return this.attendanceService.deleteClassAttendanceWeek(classId, weekId);
   }
 
   /** Admin: get all dates that have at least one attendance record (for calendar) */

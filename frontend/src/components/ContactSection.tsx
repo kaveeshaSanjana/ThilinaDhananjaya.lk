@@ -30,7 +30,7 @@ const ContactSection = () => (
           </p>
           {[
             { icon: Phone, label: "+94 77 123 4567" },
-            { icon: Mail, label: "info@eazyenglish.lk" },
+            { icon: Mail, label: "info@easyenglish.lk" },
             { icon: MapPin, label: "Colombo, Sri Lanka" },
           ].map((c) => (
             <div key={c.label} className="flex items-center gap-4">

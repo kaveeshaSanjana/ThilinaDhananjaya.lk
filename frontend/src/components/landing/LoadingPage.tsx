@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import logoImg from "../../assets/landing/logo.png";
 import post1 from "../../assets/landing/post-1.jpeg";
@@ -52,7 +52,7 @@ const LoadingPage = ({ onLoadComplete }: LoadingPageProps) => {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="flex justify-center mb-8"
         >
-          <img src={logoImg} alt="Eazy English" className="w-20 h-20 object-contain" />
+          <img src={logoImg} alt="Easy English" className="w-20 h-20 object-contain" />
         </motion.div>
 
         <motion.h1
@@ -62,7 +62,7 @@ const LoadingPage = ({ onLoadComplete }: LoadingPageProps) => {
           className="text-4xl font-extrabold text-foreground mb-2"
           style={{ fontFamily: "var(--font-heading)" }}
         >
-          Eazy English
+          Easy English
         </motion.h1>
 
         <motion.p

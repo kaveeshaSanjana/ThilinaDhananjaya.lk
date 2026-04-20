@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards, UploadedFile, UseInterceptors, Headers, HttpCode, HttpStatus, Request, ForbiddenException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UsersService } from './users.service';
@@ -153,6 +153,33 @@ export class UsersController {
   ) {
     const uploaded = await this.uploadService.uploadImage(file, 'avatars');
     await this.usersService.updateProfile(id, { avatarUrl: uploaded.responseUrl });
+    return {
+      avatarUrl: uploaded.responseUrl,
+      incomingUrl: uploaded.incomingUrl,
+      responseUrl: uploaded.responseUrl,
+    };
+  }
+
+  /** Student: upload first profile avatar (allowed only when avatar is not set yet) */
+  @UseGuards(JwtAuthGuard)
+  @Post('me/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadMyFirstAvatar(
+    @Request() req: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (req?.user?.role !== 'STUDENT') {
+      throw new ForbiddenException('Only students can upload their own profile image.');
+    }
+
+    const uploaded = await this.uploadService.uploadImage(file, 'avatars');
+    await this.usersService.setInitialAvatar(req.user.sub, uploaded.responseUrl);
+
     return {
       avatarUrl: uploaded.responseUrl,
       incomingUrl: uploaded.incomingUrl,

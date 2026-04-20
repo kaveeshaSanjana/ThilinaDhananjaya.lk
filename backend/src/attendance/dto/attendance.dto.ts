@@ -297,3 +297,45 @@ export class CloseClassAttendanceSessionDto {
   @IsDateString()
   sessionAt?: string;
 }
+
+export class CreateClassAttendanceSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+}
+
+export class CreateClassAttendanceWeekDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  sessionKeys?: string[];
+}
+
+export class UpdateClassAttendanceSessionWeekDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionKey: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  weekId?: string;
+}

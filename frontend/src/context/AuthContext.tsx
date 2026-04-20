@@ -21,6 +21,7 @@ interface AuthContextType {
   login: (identifier: string, password: string) => Promise<User>;
   register: (data: Record<string, string | undefined>) => Promise<User>;
   logout: () => Promise<void>;
+  refreshMe: () => Promise<void>;
   loading: boolean;
 }
 
@@ -95,8 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const refreshMe = async () => {
+    const res = await api.get('/auth/me');
+    setUser(res.data);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, refreshMe, loading }}>
       {children}
     </AuthContext.Provider>
   );
