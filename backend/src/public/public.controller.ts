@@ -1,7 +1,10 @@
-import { Controller, Post, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf } from 'class-validator';
+import { Controller, Post, Body, Headers, HttpCode, HttpStatus, NotFoundException } from '@nestjs/common';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf, IsIn } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { AttendanceService } from '../attendance/attendance.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 enum Gender {
   MALE = 'MALE',
@@ -82,11 +85,66 @@ class PublicRegisterDto {
   @IsOptional()
   @IsString()
   orgId?: string; // Institute ID to assign the student to
+
+  @IsOptional()
+  @IsString()
+  classId?: string; // Optional class id to auto-enroll after registration
+}
+
+class PublicImportAttendanceByBarcodeDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  barcodeId: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+class PublicImportAttendanceByInstituteIdDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  instituteId: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status?: string;
+
+  @IsOptional()
+  @IsDateString()
+  sessionAt?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 @Controller('public')
 export class PublicController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private attendanceService: AttendanceService,
+    private enrollmentsService: EnrollmentsService,
+    private prisma: PrismaService,
+  ) {}
 
   /**
    * Public endpoint — no authentication required.
@@ -101,6 +159,19 @@ export class PublicController {
     @Body() body: PublicRegisterDto,
     @Headers('x-institute-id') headerOrgId?: string,
   ) {
+    const classId = (body.classId || '').trim();
+
+    if (classId) {
+      const targetClass = await this.prisma.class.findUnique({
+        where: { id: classId },
+        select: { id: true },
+      });
+
+      if (!targetClass) {
+        throw new NotFoundException(`Class not found: ${classId}`);
+      }
+    }
+
     const hashed = await bcrypt.hash(body.password, 12);
     const instituteUserId = body.instituteUserId || body.instituteId;
 
@@ -123,6 +194,16 @@ export class PublicController {
       gender: body.gender,
       orgId: body.orgId || headerOrgId || undefined,
     });
+
+    let enrollment: any = null;
+    if (classId) {
+      try {
+        enrollment = await this.enrollmentsService.enroll(user.id, classId);
+      } catch (error) {
+        await this.usersService.delete(user.id).catch(() => null);
+        throw error;
+      }
+    }
 
     return {
       message: 'Student registered successfully',
@@ -148,6 +229,69 @@ export class PublicController {
         enrolledDate: user.profile?.enrolledDate,
         createdAt: user.createdAt,
       },
+      enrollment: enrollment
+        ? {
+          id: enrollment.id,
+          classId: enrollment.classId,
+          paymentType: enrollment.paymentType,
+          customMonthlyFee: enrollment.customMonthlyFee,
+          defaultMonthlyFee: enrollment.defaultMonthlyFee,
+          effectiveMonthlyFee: enrollment.effectiveMonthlyFee,
+          hasCustomMonthlyFee: enrollment.hasCustomMonthlyFee,
+          class: enrollment.class
+            ? {
+              id: enrollment.class.id,
+              name: enrollment.class.name,
+              subject: enrollment.class.subject,
+              monthlyFee: enrollment.class.monthlyFee,
+            }
+            : null,
+          createdAt: enrollment.createdAt,
+          updatedAt: enrollment.updatedAt,
+        }
+        : null,
+    };
+  }
+
+  /**
+   * Public endpoint for external systems:
+   * Import one class attendance entry by barcode for a given attendance session id.
+   */
+  @Post('attendance/import/by-barcode')
+  @HttpCode(HttpStatus.OK)
+  async importAttendanceByBarcode(@Body() body: PublicImportAttendanceByBarcodeDto) {
+    const result = await this.attendanceService.importPublicClassAttendanceBySessionBarcode({
+      sessionId: body.sessionId,
+      barcode: body.barcodeId,
+      status: body.status || 'PRESENT',
+      sessionAt: body.sessionAt,
+      note: body.note,
+    });
+
+    return {
+      message: 'Attendance imported successfully',
+      ...result,
+    };
+  }
+
+  /**
+   * Public endpoint for external systems:
+   * Import one class attendance entry by institute student id for a given attendance session id.
+   */
+  @Post('attendance/import/by-institute-id')
+  @HttpCode(HttpStatus.OK)
+  async importAttendanceByInstituteId(@Body() body: PublicImportAttendanceByInstituteIdDto) {
+    const result = await this.attendanceService.importPublicClassAttendanceBySessionInstituteId({
+      sessionId: body.sessionId,
+      instituteId: body.instituteId,
+      status: body.status || 'PRESENT',
+      sessionAt: body.sessionAt,
+      note: body.note,
+    });
+
+    return {
+      message: 'Attendance imported successfully',
+      ...result,
     };
   }
 }

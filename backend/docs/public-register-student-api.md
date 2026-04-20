@@ -8,7 +8,7 @@ This endpoint creates a **new public student user** without authentication.
 - Auth: `None` (public)
 - Controller: `backend/src/public/public.controller.ts`
 - Service flow: `backend/src/users/users.service.ts#create`
-- DB tables: `User` + `Profile`
+- DB tables: `User` + `Profile` (+ optional `Enrollment` when `classId` is provided)
 
 ## What It Does Internally
 
@@ -21,7 +21,10 @@ This endpoint creates a **new public student user** without authentication.
    - Checks unique barcode ID (`profile.barcodeId`) if provided.
    - Creates `User` row with role `STUDENT`.
    - Creates linked `Profile` row with student details.
-5. Returns created student data (without password).
+5. If `classId` is provided:
+  - Verifies class exists.
+  - Auto-enrolls the created student into that class.
+6. Returns created student data (without password) and optional enrollment payload.
 
 ## Headers
 
@@ -54,7 +57,8 @@ If both are provided, `orgId` from body has higher priority than header:
   "occupation": "Student",
   "avatarUrl": "https://example.com/avatar.jpg",
   "gender": "MALE",
-  "orgId": "institute-uuid"
+  "orgId": "institute-uuid",
+  "classId": "class-uuid"
 }
 ```
 
@@ -77,6 +81,7 @@ Optional:
 - `avatarUrl`
 - `gender` (`MALE`, `FEMALE`, `OTHER`)
 - `orgId`
+- `classId` (if provided, newly created student is automatically enrolled to this class)
 
 ## Success Response (`201 Created`)
 
@@ -104,9 +109,28 @@ Optional:
     "status": "PENDING",
     "enrolledDate": "2026-04-19T09:00:00.000Z",
     "createdAt": "2026-04-19T09:00:00.000Z"
+  },
+  "enrollment": {
+    "id": "uuid",
+    "classId": "class-uuid",
+    "paymentType": "FULL",
+    "customMonthlyFee": null,
+    "defaultMonthlyFee": 3500,
+    "effectiveMonthlyFee": 3500,
+    "hasCustomMonthlyFee": false,
+    "class": {
+      "id": "class-uuid",
+      "name": "Grade 10 Maths",
+      "subject": "Mathematics",
+      "monthlyFee": 3500
+    },
+    "createdAt": "2026-04-19T09:00:00.000Z",
+    "updatedAt": "2026-04-19T09:00:00.000Z"
   }
 }
 ```
+
+If `classId` is not provided, `enrollment` is returned as `null`.
 
 ## Error Cases
 
@@ -130,6 +154,10 @@ From `UsersService.create(...)`:
 - `Email already registered`
 - `Institute user ID already exists`
 - `Barcode ID already exists`
+
+### `404 Not Found`
+
+- `Class not found: <classId>` (when `classId` is provided but does not exist)
 
 ### `500 Internal Server Error`
 
@@ -181,6 +209,7 @@ $body = @{
   occupation = "Student"
   avatarUrl = "https://example.com/avatar.jpg"
   gender = "MALE"
+  classId = "class-uuid"
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/public/register-student" -ContentType "application/json" -Body $body

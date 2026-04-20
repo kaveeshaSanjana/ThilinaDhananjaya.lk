@@ -762,6 +762,7 @@ export class AttendanceService {
   }
 
   private buildClassAttendanceSessionRow(data: {
+    sessionId?: string | null;
     date: string;
     sessionTime: string;
     sessionCode: string | null;
@@ -775,6 +776,7 @@ export class AttendanceService {
     const labelCore = data.sessionCode || `${data.date}${timeSuffix}`;
 
     return {
+      sessionId: data.sessionId || null,
       key: `${data.date}|${data.sessionTime}`,
       date: data.date,
       sessionTime: data.sessionTime,
@@ -840,6 +842,177 @@ export class AttendanceService {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
       },
     });
+  }
+
+  private async getClassAttendanceSessionForPublicImport(sessionId: string) {
+    const session = await this.prisma.classAttendanceSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        classId: true,
+        date: true,
+        sessionTime: true,
+        sessionCode: true,
+        sessionAt: true,
+        class: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Class attendance session not found: ${sessionId}`);
+    }
+
+    return {
+      id: session.id,
+      classId: session.classId,
+      className: session.class?.name || null,
+      date: session.date.toISOString().split('T')[0],
+      sessionTime: this.normalizeSessionTime(session.sessionTime),
+      sessionCode: (session.sessionCode || '').trim() || null,
+      sessionAt: session.sessionAt ? session.sessionAt.toISOString() : null,
+    };
+  }
+
+  private async assertStudentEnrolledForSessionClass(userId: string, classId: string) {
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: {
+        userId_classId: {
+          userId,
+          classId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!enrollment) {
+      throw new BadRequestException('Student is not enrolled in the class for this session');
+    }
+  }
+
+  async importPublicClassAttendanceBySessionBarcode(data: {
+    sessionId: string;
+    barcode: string;
+    status: string;
+    sessionAt?: string;
+    note?: string;
+  }) {
+    const [session, profile] = await Promise.all([
+      this.getClassAttendanceSessionForPublicImport(data.sessionId),
+      this.prisma.profile.findUnique({
+        where: { barcodeId: data.barcode },
+        select: {
+          userId: true,
+          fullName: true,
+          instituteId: true,
+          barcodeId: true,
+        },
+      }),
+    ]);
+
+    if (!profile) {
+      throw new NotFoundException(`No student found for barcode: ${data.barcode}`);
+    }
+
+    await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+    const markedAt = (data.sessionAt || '').trim() ? data.sessionAt : new Date().toISOString();
+    const record = await this.doUpsertClassAttendance(profile.userId, {
+      classId: session.classId,
+      date: session.date,
+      sessionTime: session.sessionTime,
+      sessionCode: session.sessionCode || undefined,
+      sessionAt: markedAt,
+      status: data.status,
+      note: data.note,
+      method: 'public_import_barcode',
+    });
+
+    return {
+      session,
+      student: {
+        userId: profile.userId,
+        fullName: profile.fullName || null,
+        instituteId: profile.instituteId || null,
+        barcodeId: profile.barcodeId || null,
+      },
+      attendance: {
+        id: record.id,
+        status: record.status,
+        date: record.date.toISOString().split('T')[0],
+        sessionTime: record.sessionTime,
+        sessionCode: record.sessionCode || null,
+        sessionAt: record.sessionAt ? record.sessionAt.toISOString() : null,
+        method: record.method || null,
+        note: record.note || null,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      },
+    };
+  }
+
+  async importPublicClassAttendanceBySessionInstituteId(data: {
+    sessionId: string;
+    instituteId: string;
+    status: string;
+    sessionAt?: string;
+    note?: string;
+  }) {
+    const [session, profile] = await Promise.all([
+      this.getClassAttendanceSessionForPublicImport(data.sessionId),
+      this.prisma.profile.findUnique({
+        where: { instituteId: data.instituteId },
+        select: {
+          userId: true,
+          fullName: true,
+          instituteId: true,
+          barcodeId: true,
+        },
+      }),
+    ]);
+
+    if (!profile) {
+      throw new NotFoundException(`No student found for institute ID: ${data.instituteId}`);
+    }
+
+    await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+    const markedAt = (data.sessionAt || '').trim() ? data.sessionAt : new Date().toISOString();
+    const record = await this.doUpsertClassAttendance(profile.userId, {
+      classId: session.classId,
+      date: session.date,
+      sessionTime: session.sessionTime,
+      sessionCode: session.sessionCode || undefined,
+      sessionAt: markedAt,
+      status: data.status,
+      note: data.note,
+      method: 'public_import_institute_id',
+    });
+
+    return {
+      session,
+      student: {
+        userId: profile.userId,
+        fullName: profile.fullName || null,
+        instituteId: profile.instituteId || null,
+        barcodeId: profile.barcodeId || null,
+      },
+      attendance: {
+        id: record.id,
+        status: record.status,
+        date: record.date.toISOString().split('T')[0],
+        sessionTime: record.sessionTime,
+        sessionCode: record.sessionCode || null,
+        sessionAt: record.sessionAt ? record.sessionAt.toISOString() : null,
+        method: record.method || null,
+        note: record.note || null,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      },
+    };
   }
 
   /** Mark by barcodeId — single index lookup, fastest path (used by QR/barcode scanner) */
@@ -1257,6 +1430,7 @@ export class AttendanceService {
     });
 
     return this.buildClassAttendanceSessionRow({
+      sessionId: session.id,
       date: session.date.toISOString().split('T')[0],
       sessionTime,
       sessionCode: session.sessionCode || null,
@@ -1280,6 +1454,7 @@ export class AttendanceService {
       this.prisma.classAttendanceSession.findMany({
         where: { classId },
         select: {
+          id: true,
           date: true,
           sessionTime: true,
           sessionCode: true,
@@ -1316,6 +1491,7 @@ export class AttendanceService {
     ]);
 
     const sessionMap = new Map<string, {
+      sessionId: string | null;
       key: string;
       date: string;
       sessionTime: string;
@@ -1337,6 +1513,7 @@ export class AttendanceService {
       const sessionAt = session.sessionAt ? session.sessionAt.toISOString() : null;
 
       const row = this.buildClassAttendanceSessionRow({
+        sessionId: session.id,
         date,
         sessionTime,
         sessionCode,
@@ -1361,6 +1538,7 @@ export class AttendanceService {
       const existing = sessionMap.get(key);
       if (!existing) {
         const row = this.buildClassAttendanceSessionRow({
+          sessionId: null,
           date,
           sessionTime,
           sessionCode,
@@ -1424,6 +1602,7 @@ export class AttendanceService {
           },
         },
         select: {
+          id: true,
           date: true,
           sessionTime: true,
           sessionCode: true,
@@ -1470,6 +1649,7 @@ export class AttendanceService {
         : null;
 
       return this.buildClassAttendanceSessionRow({
+        sessionId: null,
         date: parsedSession.date,
         sessionTime: parsedSession.sessionTime,
         sessionCode: attendanceSessionCode,
@@ -1506,6 +1686,7 @@ export class AttendanceService {
         createdBy: updatedBy || null,
       },
       select: {
+        id: true,
         date: true,
         sessionTime: true,
         sessionCode: true,
@@ -1527,6 +1708,7 @@ export class AttendanceService {
         : null;
 
     return this.buildClassAttendanceSessionRow({
+      sessionId: session.id,
       date: session.date.toISOString().split('T')[0],
       sessionTime: /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
         ? session.sessionTime
@@ -1670,6 +1852,7 @@ export class AttendanceService {
           orderNo: true,
           sessions: {
             select: {
+              id: true,
               date: true,
               sessionTime: true,
               sessionCode: true,
@@ -1715,6 +1898,7 @@ export class AttendanceService {
         const recordsCount = countBySessionKey.get(`${date}|${sessionTime}`) || 0;
 
         return this.buildClassAttendanceSessionRow({
+          sessionId: session.id,
           date,
           sessionTime,
           sessionCode,
