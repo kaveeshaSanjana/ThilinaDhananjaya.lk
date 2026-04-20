@@ -380,7 +380,38 @@ function csvEscape(value: unknown) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
-type Tab = 'months' | 'recordings' | 'students' | 'attendance' | 'payments';
+interface LiveLectureListRow {
+  id: string;
+  monthId: string;
+  monthName: string;
+  monthYear: number | null;
+  monthNumber: number | null;
+  title: string;
+  description: string;
+  mode: string;
+  platform: string;
+  status: string;
+  startTime: string | null;
+  endTime: string | null;
+  liveToken: string | null;
+  sessionLink: string | null;
+}
+
+function formatLectureDateTimeLabel(value: string | null | undefined): string {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+
+  return parsed.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+type Tab = 'months' | 'recordings' | 'liveLectures' | 'students' | 'attendance' | 'payments';
 
 const emptyMonthForm = { name: '', year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString(), status: 'ANYONE' };
 const emptyRecForm = { monthId: '', title: '', description: '', videoUrl: '', thumbnail: '', topic: '', icon: '', materials: '', status: 'PAID_ONLY' };
@@ -393,6 +424,8 @@ export default function AdminClassDetail() {
   const rawPaymentStatusParam = (searchParams.get('paymentStatus') || '').trim().toUpperCase();
   const initialTabFromQuery: Tab = rawTabParam === 'attendance' && rawAttendanceViewParam === 'payments'
     ? 'payments'
+    : rawTabParam === 'livelectures' || rawTabParam === 'live-lessons'
+    ? 'liveLectures'
     : rawTabParam === 'months'
     || rawTabParam === 'recordings'
     || rawTabParam === 'students'
@@ -429,6 +462,13 @@ export default function AdminClassDetail() {
   const [uploadingRecThumbnail, setUploadingRecThumbnail] = useState(false);
   const [filterMonth, setFilterMonth] = useState('');
   const [recordingsViewMode, setRecordingsViewMode] = useState<'LIST' | 'CARDS'>('LIST');
+
+  // Live lectures (class-wide)
+  const [liveLecturesByMonth, setLiveLecturesByMonth] = useState<Record<string, any[]>>({});
+  const [liveLecturesLoading, setLiveLecturesLoading] = useState(false);
+  const [liveLectureFilterMonth, setLiveLectureFilterMonth] = useState('');
+  const [liveLectureSearchText, setLiveLectureSearchText] = useState('');
+  const [liveLecturesViewMode, setLiveLecturesViewMode] = useState<'LIST' | 'CARDS'>('LIST');
 
   // Students
   const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -553,6 +593,38 @@ export default function AdminClassDetail() {
   }).catch(() => {});
   const loadWatchSessions = () => api.get(`/attendance/watch-sessions/class/${id}`).then(r => setWatchSessions(r.data || [])).catch(() => {});
 
+  const loadClassLiveLectures = async () => {
+    if (!months.length) {
+      setLiveLecturesByMonth({});
+      return;
+    }
+
+    setLiveLecturesLoading(true);
+    try {
+      const entries = await Promise.all(months.map(async (m: any) => {
+        try {
+          const res = await api.get(`/lectures/month/${m.id}`);
+          const payload = res.data;
+          const list = Array.isArray(payload)
+            ? payload
+            : (payload?.lectures ?? payload?.data ?? []);
+          return [m.id, Array.isArray(list) ? list : []] as const;
+        } catch {
+          return [m.id, []] as const;
+        }
+      }));
+
+      const next: Record<string, any[]> = {};
+      entries.forEach(([monthId, list]) => {
+        next[monthId] = [...list];
+      });
+
+      setLiveLecturesByMonth(next);
+    } finally {
+      setLiveLecturesLoading(false);
+    }
+  };
+
   const getWatchSessionMeta = (session: any) => {
     const profile = session?.user?.profile || {};
     const userId = typeof session?.userId === 'string' && session.userId
@@ -625,6 +697,16 @@ export default function AdminClassDetail() {
   useEffect(() => {
     if (tab === 'students' && allStudents.length === 0) loadStudents();
   }, [tab]);
+
+  // Load class-wide lectures only when live lectures tab is opened.
+  useEffect(() => {
+    if (tab !== 'liveLectures') return;
+    if (months.length === 0) {
+      setLiveLecturesByMonth({});
+      return;
+    }
+    void loadClassLiveLectures();
+  }, [tab, months]);
 
   useEffect(() => {
     const validUserIds = new Set(enrollments.map((row: any) => row.userId));
@@ -3310,6 +3392,66 @@ export default function AdminClassDetail() {
 
   const filteredRecs = filterMonth ? recordings.filter((r: any) => r.monthId === filterMonth) : recordings;
 
+  const liveLectureRows = useMemo<LiveLectureListRow[]>(() => {
+    const monthMap = new Map(months.map((m: any) => [m.id, m]));
+
+    const rows = Object.entries(liveLecturesByMonth).flatMap(([monthId, lectures]) => {
+      const month = monthMap.get(monthId);
+      return (lectures || []).map((lec: any) => ({
+        id: lec.id,
+        monthId,
+        monthName: month?.name || lec?.month?.name || '-',
+        monthYear: typeof month?.year === 'number' ? month.year : null,
+        monthNumber: typeof month?.month === 'number' ? month.month : null,
+        title: lec.title || '-',
+        description: lec.description || '',
+        mode: lec.mode || 'ONLINE',
+        platform: lec.platform || '',
+        status: lec.status || 'STUDENTS_ONLY',
+        startTime: lec.startTime || null,
+        endTime: lec.endTime || null,
+        liveToken: lec.liveToken || null,
+        sessionLink: lec.sessionLink || null,
+      }));
+    });
+
+    return rows.sort((a, b) => {
+      const aMonthKey = `${a.monthYear ?? 0}-${String(a.monthNumber ?? 0).padStart(2, '0')}`;
+      const bMonthKey = `${b.monthYear ?? 0}-${String(b.monthNumber ?? 0).padStart(2, '0')}`;
+      if (aMonthKey !== bMonthKey) return bMonthKey.localeCompare(aMonthKey);
+
+      const aStart = a.startTime ? new Date(a.startTime).getTime() : 0;
+      const bStart = b.startTime ? new Date(b.startTime).getTime() : 0;
+      return bStart - aStart;
+    });
+  }, [liveLecturesByMonth, months]);
+
+  const liveLectureMonthCounts = useMemo(() => (
+    months.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      count: (liveLecturesByMonth[m.id] || []).length,
+    }))
+  ), [months, liveLecturesByMonth]);
+
+  const filteredLiveLectures = useMemo(() => {
+    const monthFiltered = liveLectureFilterMonth
+      ? liveLectureRows.filter((row) => row.monthId === liveLectureFilterMonth)
+      : liveLectureRows;
+
+    const q = liveLectureSearchText.trim().toLowerCase();
+    if (!q) return monthFiltered;
+
+    return monthFiltered.filter((row) =>
+      row.title.toLowerCase().includes(q)
+      || row.description.toLowerCase().includes(q)
+      || row.monthName.toLowerCase().includes(q)
+      || row.mode.toLowerCase().includes(q)
+      || row.platform.toLowerCase().includes(q)
+      || row.status.toLowerCase().includes(q)
+    );
+  }, [liveLectureFilterMonth, liveLectureRows, liveLectureSearchText]);
+
   const monthColumns: readonly StickyColumn<any>[] = [
     { id: 'name', label: 'Name', minWidth: 180, render: (m) => <span className="font-medium text-slate-800">{m.name}</span> },
     { id: 'period', label: 'Period', minWidth: 140, render: (m) => <span className="text-slate-500">{MONTH_NAMES[(m.month || 1) - 1]} {m.year}</span> },
@@ -3437,6 +3579,113 @@ export default function AdminClassDetail() {
           >
             Delete
           </button>
+        </div>
+      ),
+    },
+  ];
+
+  const liveLectureColumns: readonly StickyColumn<LiveLectureListRow>[] = [
+    {
+      id: 'title',
+      label: 'Lecture',
+      minWidth: 260,
+      render: (row) => (
+        <div>
+          <p className="font-semibold text-slate-800 text-sm">{row.title}</p>
+          {row.description && <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{row.description}</p>}
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.mode === 'OFFLINE' ? 'bg-orange-100 text-orange-700' : 'bg-violet-100 text-violet-700'}`}>
+              {row.mode === 'OFFLINE' ? 'Offline' : 'Online'}
+            </span>
+            {row.platform && (
+              <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600">
+                {row.platform}
+              </span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'month',
+      label: 'Month',
+      minWidth: 160,
+      render: (row) => (
+        <div>
+          <p className="text-sm text-slate-600">{row.monthName}</p>
+          <p className="text-[11px] text-slate-400">
+            {row.monthYear && row.monthNumber ? `${MONTH_NAMES[(row.monthNumber || 1) - 1]} ${row.monthYear}` : '-'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'schedule',
+      label: 'Schedule',
+      minWidth: 210,
+      render: (row) => (
+        <div>
+          <p className="text-sm text-slate-600">{formatLectureDateTimeLabel(row.startTime)}</p>
+          <p className="text-[11px] text-slate-400">to {formatLectureDateTimeLabel(row.endTime)}</p>
+        </div>
+      ),
+    },
+    {
+      id: 'status',
+      label: 'Visibility',
+      minWidth: 130,
+      render: (row) => (
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadge(row.status || 'STUDENTS_ONLY')}`}>
+          {(row.status || 'STUDENTS_ONLY').replace(/_/g, ' ')}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      minWidth: 470,
+      align: 'right',
+      render: (row) => (
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <Link
+            to={getInstituteAdminPath(instituteId, `/classes/${id}/months/${row.monthId}/manage?tab=liveLessons`)}
+            className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition"
+          >
+            Manage
+          </Link>
+
+          <Link
+            to={getInstituteAdminPath(instituteId, `/classes/${id}/months/${row.monthId}/manage?tab=attendance&attendanceType=lectures`)}
+            className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+          >
+            Attendance / Export
+          </Link>
+
+          {row.liveToken ? (
+            <a
+              href={`/lecture-live/${row.liveToken}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition"
+            >
+              Join Page
+            </a>
+          ) : (
+            <span className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-400">Join Page</span>
+          )}
+
+          {row.sessionLink ? (
+            <a
+              href={row.sessionLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 transition"
+            >
+              Session Link
+            </a>
+          ) : (
+            <span className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-400">Session Link</span>
+          )}
         </div>
       ),
     },
@@ -3890,12 +4139,13 @@ export default function AdminClassDetail() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200 overflow-x-auto">
-        {([['months', 'Months'], ['recordings', 'Recordings'], ['students', 'Students'], ['attendance', 'Attendance'], ['payments', 'Payments']] as [Tab, string][]).map(([key, lbl]) => (
+        {([['months', 'Months'], ['recordings', 'Recordings'], ['liveLectures', 'Live Lectures'], ['students', 'Students'], ['attendance', 'Attendance'], ['payments', 'Payments']] as [Tab, string][]).map(([key, lbl]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex-1 min-w-[4.5rem] px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${tab === key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {lbl}
             {key === 'months' && <span className="ml-1.5 text-slate-400">({months.length})</span>}
             {key === 'recordings' && <span className="ml-1.5 text-slate-400">({recordings.length})</span>}
+            {key === 'liveLectures' && <span className="ml-1.5 text-slate-400">({months.length})</span>}
             {key === 'students' && <span className="ml-1.5 text-slate-400">({enrollments.length})</span>}
             {key === 'attendance' && <span className="ml-1.5 text-slate-400">({physicalMonitor?.slots.length || physicalAvailableDates.length})</span>}
             {key === 'payments' && <span className="ml-1.5 text-slate-400">({physicalPaymentRows.length})</span>}
@@ -4191,6 +4441,175 @@ export default function AdminClassDetail() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════ LIVE LECTURES TAB ═══════════════ */}
+      {tab === 'liveLectures' && (
+        <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700">Class-wise Live Lecture Management</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Manage all class lectures with month separation, just like recordings.
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {liveLectureRows.length} lecture{liveLectureRows.length !== 1 ? 's' : ''} across {months.length} month{months.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                  <button
+                    onClick={() => setLiveLecturesViewMode('LIST')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${liveLecturesViewMode === 'LIST' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    List
+                  </button>
+                  <button
+                    onClick={() => setLiveLecturesViewMode('CARDS')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${liveLecturesViewMode === 'CARDS' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Cards
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => void loadClassLiveLectures()}
+                  disabled={liveLecturesLoading || months.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  <svg className={`w-3.5 h-3.5 ${liveLecturesLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {months.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setLiveLectureFilterMonth('')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${!liveLectureFilterMonth ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                All Months ({liveLectureRows.length})
+              </button>
+              {liveLectureMonthCounts.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setLiveLectureFilterMonth(m.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${liveLectureFilterMonth === m.id ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {m.name} ({m.count})
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="relative max-w-sm">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={liveLectureSearchText}
+              onChange={(e) => setLiveLectureSearchText(e.target.value)}
+              placeholder="Search lecture, month, platform..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+            />
+          </div>
+
+          {months.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              </div>
+              <p className="text-sm font-medium text-slate-500">No months yet</p>
+              <p className="text-xs text-slate-400 mt-1">Add a month first, then create live lectures inside that month.</p>
+            </div>
+          ) : liveLecturesLoading ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-2.5">
+              {[1, 2, 3, 4].map((item) => (
+                <div key={item} className="h-12 rounded-xl bg-slate-100 animate-pulse" />
+              ))}
+            </div>
+          ) : filteredLiveLectures.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+              <p className="text-sm font-medium text-slate-500">No live lectures found</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {liveLectureSearchText.trim() || liveLectureFilterMonth
+                  ? 'Try clearing filters or search text.'
+                  : 'Create live lectures in a month to manage them here.'}
+              </p>
+            </div>
+          ) : liveLecturesViewMode === 'LIST' ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <StickyDataTable
+                columns={liveLectureColumns}
+                rows={filteredLiveLectures}
+                getRowId={(row) => row.id}
+                tableHeight="calc(100vh - 430px)"
+              />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {(liveLectureFilterMonth
+                ? liveLectureMonthCounts.filter((m) => m.id === liveLectureFilterMonth)
+                : liveLectureMonthCounts
+              ).map((month) => {
+                const monthRows = filteredLiveLectures.filter((row) => row.monthId === month.id);
+                if (monthRows.length === 0) return null;
+
+                return (
+                  <div key={month.id} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-slate-700">{month.name}</h4>
+                      <span className="text-xs text-slate-400">{monthRows.length} lecture{monthRows.length !== 1 ? 's' : ''}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {monthRows.map((row) => (
+                        <div key={row.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-bold text-slate-800 line-clamp-2">{row.title}</p>
+                              {row.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{row.description}</p>}
+                            </div>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadge(row.status || 'STUDENTS_ONLY')}`}>
+                              {(row.status || 'STUDENTS_ONLY').replace(/_/g, ' ')}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 text-xs text-slate-500 space-y-0.5">
+                            <p>{formatLectureDateTimeLabel(row.startTime)}</p>
+                            <p>to {formatLectureDateTimeLabel(row.endTime)}</p>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+                            <Link
+                              to={getInstituteAdminPath(instituteId, `/classes/${id}/months/${row.monthId}/manage?tab=liveLessons`)}
+                              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 text-violet-700 text-xs font-semibold hover:bg-violet-100 transition"
+                            >
+                              Manage
+                            </Link>
+                            <Link
+                              to={getInstituteAdminPath(instituteId, `/classes/${id}/months/${row.monthId}/manage?tab=attendance&attendanceType=lectures`)}
+                              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition"
+                            >
+                              Attendance / Export
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

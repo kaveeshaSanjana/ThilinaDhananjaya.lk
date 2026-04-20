@@ -4,16 +4,16 @@ import { motion } from "framer-motion";
 
 const Footer = () => {
   const quickLinks = [
-    { label: "Home", href: "#" },
-    { label: "Reviews", href: "#reviews" },
+    { label: "Home", href: "#home" },
+    { label: "Classes", href: "#classes" },
+    { label: "Results", href: "#results" },
     { label: "About", href: "#about" },
-    { label: "Videos", href: "#videos" },
-    { label: "Gallery", href: "#gallery" },
+    { label: "Contact", href: "#contact" },
   ];
 
   return (
   <motion.footer
-    id="contact"
+    id="footer"
     className="bg-foreground pt-12 pb-24 sm:pb-12"
     initial={{ opacity: 0, y: 40 }}
     whileInView={{ opacity: 1, y: 0 }}
@@ -59,7 +59,7 @@ const Footer = () => {
         <p className="text-primary-foreground/70 text-xs mt-2">
           Powered by{' '}
           <a href="https://suraksha.lk" target="_blank" rel="noreferrer" className="font-semibold hover:underline">
-            Suraksha LMS Pvt Ltd
+            Suraksha LMS
           </a>
         </p>
       </div>

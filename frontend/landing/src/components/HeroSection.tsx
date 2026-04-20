@@ -26,6 +26,7 @@ const HandDrawnUnderline = () => (
 const HeroSection = () => {
   return (
     <section
+      id="home"
       className="relative min-h-screen flex items-start md:items-center overflow-hidden pt-4 md:pt-0 pb-0"
       style={{ background: "var(--hero-gradient)" }}
     >

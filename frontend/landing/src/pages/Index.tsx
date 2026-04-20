@@ -3,9 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import PostSection from "@/components/PostSection";
+import ClassesSection from "@/components/ClassesSection";
+import ResultsSection from "@/components/ResultsSection";
 import AboutSection from "@/components/AboutSection";
 import CourseTypesSection from "@/components/CourseTypesSection";
 import AboutTeacherSection from "@/components/AboutTeacherSection";
+import ContactSection from "@/components/ContactSection";
 import LoadingPage from "@/components/LoadingPage";
 
 // Lazy load non-critical components
@@ -50,6 +53,8 @@ const Index = () => {
           <Navbar />
           <HeroSection />
           <PostSection />
+          <ClassesSection />
+          <ResultsSection />
           <AboutSection />
           <CourseTypesSection />
 
@@ -63,6 +68,7 @@ const Index = () => {
           </Suspense>
 
           <AboutTeacherSection />
+          <ContactSection />
 
           <Suspense fallback={null}>
             <Footer />

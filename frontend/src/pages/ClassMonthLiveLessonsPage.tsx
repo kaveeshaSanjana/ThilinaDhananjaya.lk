@@ -54,6 +54,16 @@ function lectureTiming(lec: Lecture): 'upcoming' | 'ongoing' | 'ended' {
   return 'ongoing';
 }
 
+interface LectureStudentJoinRow {
+  userId: string;
+  fullName: string;
+  instituteId: string;
+  email: string;
+  phone: string;
+  joined: boolean;
+  joinedAt: string | null;
+}
+
 /* ─── Lecture Card ─────────────────────────────────────── */
 
 function LectureLessonCard({
@@ -887,17 +897,350 @@ function DeleteConfirmModal({
 /*              LECTURE STATS MODAL                        */
 /* ═══════════════════════════════════════════════════════ */
 
-function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void }) {
+function LectureStatsModal({ lec, classId, onClose }: { lec: Lecture; classId?: string; onClose: () => void }) {
   const [data, setData]       = useState<any>(null);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    api.get(`/lectures/${lec.id}/stats`)
-      .then(r => setData(r.data))
-      .catch(() => setError('Failed to load statistics'))
-      .finally(() => setLoading(false));
-  }, [lec.id]);
+    let active = true;
+
+    const loadStats = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const statsRes = await api.get(`/lectures/${lec.id}/stats`);
+        if (!active) return;
+
+        setData(statsRes.data);
+        if (classId) {
+          try {
+            const enrollRes = await api.get(`/enrollments/class/${classId}`);
+            if (!active) return;
+            setEnrollments(Array.isArray(enrollRes.data) ? enrollRes.data : []);
+          } catch {
+            if (!active) return;
+            setEnrollments([]);
+          }
+        } else {
+          setEnrollments([]);
+        }
+      } catch {
+        if (!active) return;
+        setError('Failed to load statistics');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadStats();
+    return () => {
+      active = false;
+    };
+  }, [lec.id, classId]);
+
+  const registeredJoins = useMemo(() => Array.isArray(data?.registeredJoins) ? data.registeredJoins : [], [data]);
+  const guestJoins = useMemo(() => Array.isArray(data?.guestJoins) ? data.guestJoins : [], [data]);
+
+  const enrolledStudentRows = useMemo<LectureStudentJoinRow[]>(() => {
+    const joinedByUserId = new Map<string, any>();
+    registeredJoins.forEach((join: any) => {
+      const joinedUserId = (join?.user?.id || join?.userId || '') as string;
+      if (joinedUserId) joinedByUserId.set(joinedUserId, join);
+    });
+
+    const rows: LectureStudentJoinRow[] = (Array.isArray(enrollments) ? enrollments : []).map((enr: any) => {
+      const user = enr?.user || {};
+      const profile = user?.profile || {};
+      const userId = (enr?.userId || user?.id || '') as string;
+      const joined = userId ? joinedByUserId.get(userId) : null;
+
+      return {
+        userId,
+        fullName: profile?.fullName || user?.email || 'Unknown',
+        instituteId: profile?.instituteId || '-',
+        email: user?.email || '-',
+        phone: profile?.phone || '-',
+        joined: Boolean(joined),
+        joinedAt: joined?.joinedAt || null,
+      };
+    });
+
+    if (rows.length === 0 && registeredJoins.length > 0) {
+      return registeredJoins.map((join: any) => {
+        const user = join?.user || {};
+        const profile = user?.profile || {};
+
+        return {
+          userId: (user?.id || join?.userId || '') as string,
+          fullName: profile?.fullName || user?.email || 'Unknown',
+          instituteId: profile?.instituteId || '-',
+          email: user?.email || '-',
+          phone: profile?.phone || '-',
+          joined: true,
+          joinedAt: join?.joinedAt || null,
+        };
+      });
+    }
+
+    return rows.sort((a, b) => {
+      if (a.joined !== b.joined) return a.joined ? -1 : 1;
+      return a.fullName.localeCompare(b.fullName);
+    });
+  }, [enrollments, registeredJoins]);
+
+  const joinedRegisteredCount = enrolledStudentRows.filter((row) => row.joined).length;
+  const notJoinedCount = Math.max(enrolledStudentRows.length - joinedRegisteredCount, 0);
+  const joinedRatePct = enrolledStudentRows.length > 0
+    ? Math.round((joinedRegisteredCount / enrolledStudentRows.length) * 100)
+    : 0;
+
+  const handleExport = async () => {
+    if (!data || exporting) return;
+    setExporting(true);
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const workbook = new ExcelJSImport.Workbook();
+      workbook.creator = 'Thilina Dhananjaya';
+      workbook.created = new Date();
+
+      const XLSX_BORDER_STYLE = {
+        top: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+        left: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+        right: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+      };
+
+      const applyHeaderStyle = (row: any) => {
+        row.height = 22;
+        row.eachCell((cell: any) => {
+          cell.font = { bold: true, color: { argb: 'FF1E293B' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          cell.border = XLSX_BORDER_STYLE;
+        });
+      };
+
+      const applyRowBorderRange = (worksheet: any, fromRow: number, toRow: number) => {
+        for (let rowNo = fromRow; rowNo <= toRow; rowNo += 1) {
+          const row = worksheet.getRow(rowNo);
+          row.eachCell({ includeEmpty: true }, (cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            if (!cell.alignment) {
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+          });
+        }
+      };
+
+      const autoFitColumns = (worksheet: any, minWidth = 10, maxWidth = 60) => {
+        if (!worksheet?.columns) return;
+
+        worksheet.columns.forEach((column: any) => {
+          let maxLen = 0;
+          column.eachCell({ includeEmpty: true }, (cell: any) => {
+            const value = cell.value;
+            let text = '';
+
+            if (value == null) {
+              text = '';
+            } else if (typeof value === 'object') {
+              if ('text' in value) text = String((value as { text?: unknown }).text ?? '');
+              else if ('richText' in value) text = String((value as { richText?: Array<{ text?: string }> }).richText?.map((item) => item.text || '').join('') || '');
+              else text = String(value);
+            } else {
+              text = String(value);
+            }
+
+            maxLen = Math.max(maxLen, text.length);
+          });
+
+          column.width = Math.max(minWidth, Math.min(maxLen + 2, maxWidth));
+        });
+      };
+
+      const styleJoinStatusCell = (cell: any, joined: boolean) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: joined ? 'FFE8F7ED' : 'FFFDE8E8' },
+        };
+        cell.font = {
+          bold: true,
+          color: { argb: joined ? 'FF166534' : 'FFB91C1C' },
+        };
+      };
+
+      const lectureTitle = (lec.title || 'Lecture').trim();
+      const date = new Date().toISOString().split('T')[0];
+      const safeLecture = lectureTitle.replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'lecture';
+
+      const summarySheet = workbook.addWorksheet('Summary');
+      applyHeaderStyle(summarySheet.addRow(['Metric', 'Value']));
+      [
+        ['Lecture', lectureTitle],
+        ['Total Joined', data.totalCount ?? 0],
+        ['Registered Students Joined', data.registeredCount ?? 0],
+        ['Enrolled Students', enrolledStudentRows.length],
+        ['Not Joined Students', notJoinedCount],
+        ['Student Join Rate', `${joinedRatePct}%`],
+        ['Public Guests', data.guestCount ?? 0],
+      ].forEach((entry) => summarySheet.addRow(entry));
+
+      summarySheet.addRow([]);
+      const sectionTitleRow = summarySheet.addRow(['Student Attendance Details']);
+      summarySheet.mergeCells(sectionTitleRow.number, 1, sectionTitleRow.number, 6);
+      const sectionCell = summarySheet.getCell(sectionTitleRow.number, 1);
+      sectionCell.font = { bold: true, color: { argb: 'FF1E293B' } };
+      sectionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      sectionCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      sectionCell.border = XLSX_BORDER_STYLE;
+
+      const summaryDetailsHeader = summarySheet.addRow(['Name', 'Student ID', 'Email', 'Phone', 'Status', 'Joined At']);
+      applyHeaderStyle(summaryDetailsHeader);
+      if (enrolledStudentRows.length > 0) {
+        enrolledStudentRows.forEach((student) => {
+          const row = summarySheet.addRow([
+            student.fullName || '-',
+            student.instituteId || '-',
+            student.email || '-',
+            student.phone || '-',
+            student.joined ? 'Joined' : 'Not joined',
+            student.joinedAt ? new Date(student.joinedAt).toLocaleString() : '-',
+          ]);
+          row.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          styleJoinStatusCell(row.getCell(5), student.joined);
+          row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        const row = summarySheet.addRow(['No enrolled students found for this class.', '-', '-', '-', '-', '-']);
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+        });
+      }
+
+      autoFitColumns(summarySheet, 12, 40);
+      summarySheet.getColumn(1).width = Math.max(summarySheet.getColumn(1).width || 26, 26);
+      summarySheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const statusSheet = workbook.addWorksheet('Student Status');
+      applyHeaderStyle(statusSheet.addRow(['Name', 'Student ID', 'Email', 'Phone', 'Attendance', 'Joined At']));
+      if (enrolledStudentRows.length > 0) {
+        enrolledStudentRows.forEach((student) => {
+          const row = statusSheet.addRow([
+            student.fullName || '-',
+            student.instituteId || '-',
+            student.email || '-',
+            student.phone || '-',
+            student.joined ? 'Joined' : 'Not joined',
+            student.joinedAt ? new Date(student.joinedAt).toLocaleString() : '-',
+          ]);
+          row.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          styleJoinStatusCell(row.getCell(5), student.joined);
+          row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        statusSheet.addRow(['No enrolled students found for this class.', '-', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(statusSheet, 2, statusSheet.rowCount);
+      autoFitColumns(statusSheet, 10, 42);
+      statusSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const joinedSheet = workbook.addWorksheet('Joined Students');
+      applyHeaderStyle(joinedSheet.addRow(['Name', 'Student ID', 'Email', 'Phone', 'Status', 'Joined At']));
+      if (registeredJoins.length > 0) {
+        registeredJoins.forEach((join: any) => {
+          const row = joinedSheet.addRow([
+            join?.user?.profile?.fullName || join?.user?.email || '-',
+            join?.user?.profile?.instituteId || '-',
+            join?.user?.email || '-',
+            join?.user?.profile?.phone || '-',
+            'Joined',
+            join?.joinedAt ? new Date(join.joinedAt).toLocaleString() : '-',
+          ]);
+          row.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          styleJoinStatusCell(row.getCell(5), true);
+          row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        joinedSheet.addRow(['No registered students joined.', '-', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(joinedSheet, 2, joinedSheet.rowCount);
+      autoFitColumns(joinedSheet, 10, 42);
+      joinedSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const notJoinedSheet = workbook.addWorksheet('Not Joined');
+      applyHeaderStyle(notJoinedSheet.addRow(['Name', 'Student ID', 'Email', 'Phone', 'Status']));
+      const notJoinedRows = enrolledStudentRows.filter((student) => !student.joined);
+      if (notJoinedRows.length > 0) {
+        notJoinedRows.forEach((student) => {
+          const row = notJoinedSheet.addRow([
+            student.fullName || '-',
+            student.instituteId || '-',
+            student.email || '-',
+            student.phone || '-',
+            'Not joined',
+          ]);
+          row.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          styleJoinStatusCell(row.getCell(5), false);
+          row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        notJoinedSheet.addRow(['All enrolled students joined this lecture.', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(notJoinedSheet, 2, notJoinedSheet.rowCount);
+      autoFitColumns(notJoinedSheet, 10, 42);
+      notJoinedSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const guestSheet = workbook.addWorksheet('Guests');
+      applyHeaderStyle(guestSheet.addRow(['Name', 'Phone', 'Email', 'Note', 'Joined At']));
+      if (guestJoins.length > 0) {
+        guestJoins.forEach((guest: any) => {
+          guestSheet.addRow([
+            guest?.fullName || '-',
+            guest?.phone || '-',
+            guest?.email || '-',
+            guest?.note || '-',
+            guest?.joinedAt ? new Date(guest.joinedAt).toLocaleString() : '-',
+          ]);
+        });
+      } else {
+        guestSheet.addRow(['No public guests joined.', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(guestSheet, 2, guestSheet.rowCount);
+      autoFitColumns(guestSheet, 10, 42);
+      guestSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${safeLecture}_join_stats_${date}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -916,9 +1259,23 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
               <p className="text-xs text-slate-500 truncate max-w-xs">{lec.title}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExport}
+              disabled={loading || !!error || !data || exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <svg className={`w-3.5 h-3.5 ${exporting ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {exporting
+                  ? <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v4m0 8v4m8-8h-4M8 12H4m14.364 5.657l-2.828-2.828M8.464 8.464 5.636 5.636m12.728 0-2.828 2.828M8.464 15.536l-2.828 2.828" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />}
+              </svg>
+              {exporting ? 'Exporting...' : 'Export'}
+            </button>
+            <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         <div className="p-6">
@@ -931,14 +1288,18 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
           {!loading && !error && data && (
             <div className="space-y-6">
               {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
                   <p className="text-2xl font-bold text-slate-800">{data.totalCount}</p>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">Total Joined</p>
                 </div>
                 <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
-                  <p className="text-2xl font-bold text-blue-700">{data.registeredCount}</p>
-                  <p className="text-xs text-blue-600 font-medium mt-0.5">Registered Students</p>
+                  <p className="text-2xl font-bold text-blue-700">{joinedRegisteredCount}</p>
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">Students Joined</p>
+                </div>
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-center">
+                  <p className="text-2xl font-bold text-rose-700">{notJoinedCount}</p>
+                  <p className="text-xs text-rose-600 font-medium mt-0.5">Not Joined</p>
                 </div>
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
                   <p className="text-2xl font-bold text-emerald-700">{data.guestCount}</p>
@@ -946,12 +1307,61 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
                 </div>
               </div>
 
+              <div className="px-4 py-3 rounded-xl border border-blue-100 bg-blue-50/60 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-blue-700">Student Join Rate</p>
+                <p className="text-sm font-bold text-blue-800">{joinedRatePct}% ({joinedRegisteredCount}/{enrolledStudentRows.length || 0})</p>
+              </div>
+
+              {/* Student attendance table */}
+              {enrolledStudentRows.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500" />
+                    Student Attendance ({enrolledStudentRows.length})
+                  </h3>
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Name</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">ID</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Phone</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Status</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Joined At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {enrolledStudentRows.map((student) => (
+                          <tr key={student.userId || `${student.instituteId}-${student.fullName}`} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-medium text-slate-800">{student.fullName || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{student.instituteId || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{student.phone || '—'}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold border ${
+                                student.joined
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-100 text-rose-700 border-rose-200'
+                              }`}>
+                                {student.joined ? 'Joined' : 'Not joined'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">
+                              {student.joinedAt ? new Date(student.joinedAt).toLocaleString() : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Registered students table */}
-              {data.registeredJoins.length > 0 && (
+              {registeredJoins.length > 0 && (
                 <div>
                   <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    Registered Students ({data.registeredCount})
+                    Joined Students ({registeredJoins.length})
                   </h3>
                   <div className="rounded-xl border border-slate-200 overflow-hidden">
                     <table className="w-full text-sm">
@@ -964,7 +1374,7 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {data.registeredJoins.map((j: any) => (
+                        {registeredJoins.map((j: any) => (
                           <tr key={j.id} className="hover:bg-slate-50">
                             <td className="px-4 py-2.5 font-medium text-slate-800">{j.user?.profile?.fullName || j.user?.email || '—'}</td>
                             <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{j.user?.profile?.instituteId || '—'}</td>
@@ -979,7 +1389,7 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
               )}
 
               {/* Public guests table */}
-              {data.guestJoins.length > 0 && (
+              {guestJoins.length > 0 && (
                 <div>
                   <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -997,7 +1407,7 @@ function LectureStatsModal({ lec, onClose }: { lec: Lecture; onClose: () => void
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {data.guestJoins.map((g: any) => (
+                        {guestJoins.map((g: any) => (
                           <tr key={g.id} className="hover:bg-slate-50">
                             <td className="px-4 py-2.5 font-medium text-slate-800">{g.fullName}</td>
                             <td className="px-4 py-2.5 text-slate-600">{g.phone}</td>
@@ -1223,6 +1633,7 @@ export default function ClassMonthLiveLessonsPage({ embedded = false, hideBackLi
       {statsLec && (
         <LectureStatsModal
           lec={statsLec}
+          classId={classId}
           onClose={() => setStatsLec(null)}
         />
       )}

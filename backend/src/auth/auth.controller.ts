@@ -52,13 +52,20 @@ export class AuthController {
   async refresh(@Request() req: any, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!refreshToken) {
+      res.clearCookie(REFRESH_COOKIE_NAME, REFRESH_COOKIE_CLEAR_OPTIONS);
       res.status(401).json({ statusCode: 401, message: 'No refresh token' });
       return;
     }
 
-    const result = await this.authService.refreshTokens(refreshToken);
-    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, REFRESH_COOKIE_OPTIONS);
-    return { user: result.user, accessToken: result.accessToken };
+    try {
+      const result = await this.authService.refreshTokens(refreshToken);
+      res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, REFRESH_COOKIE_OPTIONS);
+      return { user: result.user, accessToken: result.accessToken };
+    } catch (error) {
+      // Clear stale cookie so client can re-auth cleanly after refresh failure.
+      res.clearCookie(REFRESH_COOKIE_NAME, REFRESH_COOKIE_CLEAR_OPTIONS);
+      throw error;
+    }
   }
 
   @Post('logout')

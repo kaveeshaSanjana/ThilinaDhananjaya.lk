@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../../lib/api';
 import { uploadImage, uploadRecordingThumbnail } from '../../lib/imageUpload';
 import CropImageInput from '../../components/CropImageInput';
@@ -55,7 +55,7 @@ interface StudentRow {
   user: {
     id: string;
     email: string;
-    profile: { fullName: string; instituteId: string; avatarUrl?: string | null };
+    profile: { fullName: string; instituteId: string; avatarUrl?: string | null; phone?: string | null };
   };
   enrolled: boolean;
   recordings: RecordingCell[];
@@ -64,6 +64,42 @@ interface StudentRow {
 interface GridData {
   months: { month: any; recordings: RecordingMeta[] }[];
   students: StudentRow[];
+}
+
+interface LiveLectureMeta {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  status?: string;
+  mode?: 'ONLINE' | 'OFFLINE';
+}
+
+interface LectureCell {
+  lectureId: string;
+  joined: boolean;
+  joinedAt: string | null;
+}
+
+interface LectureStudentRow {
+  userId: string;
+  fullName: string;
+  instituteId: string;
+  email: string;
+  phone: string;
+  avatarUrl: string | null;
+  joinedCount: number;
+  cells: LectureCell[];
+}
+
+interface LectureGuestRow {
+  lectureId: string;
+  lectureTitle: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  note: string;
+  joinedAt: string;
 }
 
 /* ─── Formatters ─────────────────────────────────────── */
@@ -93,6 +129,117 @@ const PAYMENT_BADGE: Record<string, string> = {
 const PAYMENT_LABEL: Record<string, string> = {
   FREE: 'Free', VERIFIED: 'Paid', PENDING: 'Pending', REJECTED: 'Rejected', NOT_PAID: 'Unpaid',
 };
+
+type RecordingExportStatus = 'Completed' | 'Incomplete' | 'Viewed' | 'Not watched';
+type LectureExportStatus = 'Joined' | 'Not joined';
+
+const RECORDING_STATUS_XLSX_STYLE: Record<RecordingExportStatus, { fill: string; text: string }> = {
+  Completed: { fill: 'FFE8F7ED', text: 'FF166534' },
+  Incomplete: { fill: 'FFFFF4D6', text: 'FF92400E' },
+  Viewed: { fill: 'FFEFF6FF', text: 'FF1D4ED8' },
+  'Not watched': { fill: 'FFFDE8E8', text: 'FFB91C1C' },
+};
+
+const LECTURE_STATUS_XLSX_STYLE: Record<LectureExportStatus, { fill: string; text: string }> = {
+  Joined: { fill: 'FFE8F7ED', text: 'FF166534' },
+  'Not joined': { fill: 'FFFDE8E8', text: 'FFB91C1C' },
+};
+
+const PAYMENT_XLSX_STYLE: Record<string, { fill: string; text: string }> = {
+  VERIFIED: { fill: 'FFE8F7ED', text: 'FF166534' },
+  PENDING: { fill: 'FFFFF4D6', text: 'FF92400E' },
+  FREE: { fill: 'FFE7F0FF', text: 'FF1D4ED8' },
+  REJECTED: { fill: 'FFFDE8E8', text: 'FFB91C1C' },
+  NOT_PAID: { fill: 'FFFDE8E8', text: 'FFB91C1C' },
+};
+
+const XLSX_BORDER_STYLE = {
+  top: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+  left: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+  bottom: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+  right: { style: 'thin' as const, color: { argb: 'FFD1D5DB' } },
+};
+
+function applyHeaderStyle(row: any) {
+  row.height = 22;
+  row.eachCell((cell: any) => {
+    cell.font = { bold: true, color: { argb: 'FF1E293B' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = XLSX_BORDER_STYLE;
+  });
+}
+
+function applyRowBorderRange(worksheet: any, fromRow: number, toRow: number) {
+  for (let rowNo = fromRow; rowNo <= toRow; rowNo += 1) {
+    const row = worksheet.getRow(rowNo);
+    row.eachCell({ includeEmpty: true }, (cell: any) => {
+      cell.border = XLSX_BORDER_STYLE;
+      if (!cell.alignment) {
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+    });
+  }
+}
+
+function styleStatusCell(cell: any, fill: string, text: string) {
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+  cell.font = { bold: true, color: { argb: text } };
+}
+
+function autoFitColumns(worksheet: any, minWidth = 10, maxWidth = 60) {
+  if (!worksheet?.columns) return;
+
+  worksheet.columns.forEach((column: any) => {
+    let maxLen = 0;
+    column.eachCell({ includeEmpty: true }, (cell: any) => {
+      const value = cell.value;
+      let text = '';
+
+      if (value == null) {
+        text = '';
+      } else if (typeof value === 'object') {
+        if ('text' in value) text = String((value as { text?: unknown }).text ?? '');
+        else if ('richText' in value) text = String((value as { richText?: Array<{ text?: string }> }).richText?.map((item) => item.text || '').join('') || '');
+        else text = String(value);
+      } else {
+        text = String(value);
+      }
+
+      maxLen = Math.max(maxLen, text.length);
+    });
+
+    column.width = Math.max(minWidth, Math.min(maxLen + 2, maxWidth));
+  });
+}
+
+function slugifyFilePart(value: string) {
+  return (value || 'report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'report';
+}
+
+async function downloadWorkbook(workbook: any, filename: string) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function resolveRecordingStatusLabel(cell?: RecordingCell): string {
+  if (!cell) return 'Not watched';
+  if (cell.attendanceStatus === 'COMPLETED' || cell.attendanceStatus === 'MANUAL') return 'Completed';
+  if (cell.attendanceStatus === 'INCOMPLETE') return 'Incomplete';
+  if (cell.sessionCount > 0) return 'Viewed';
+  return 'Not watched';
+}
 
 /* ─── PaginationBar ──────────────────────────────────── */
 
@@ -159,6 +306,16 @@ const emptyRecForm = {
 
 export default function AdminMonthManage() {
   const { classId, monthId, instituteId } = useParams<{ classId: string; monthId: string; instituteId: string }>();
+  const [searchParams] = useSearchParams();
+
+  const requestedTab = (searchParams.get('tab') || '').trim();
+  const requestedAttendanceType = (searchParams.get('attendanceType') || '').trim();
+  const initialTab: 'recordings' | 'liveLessons' | 'attendance' =
+    requestedTab === 'liveLessons' || requestedTab === 'attendance' || requestedTab === 'recordings'
+      ? requestedTab
+      : 'recordings';
+  const initialAttendanceType: 'recordings' | 'lectures' =
+    requestedAttendanceType === 'lectures' ? 'lectures' : 'recordings';
 
   /* ─── Core data ─────────────────────────────────────── */
   const [classData, setClassData] = useState<any>(null);
@@ -167,7 +324,7 @@ export default function AdminMonthManage() {
   const [loading, setLoading] = useState(true);
 
   /* ─── Tab ───────────────────────────────────────────── */
-  const [tab, setTab] = useState<'recordings' | 'liveLessons' | 'attendance'>('recordings');
+  const [tab, setTab] = useState<'recordings' | 'liveLessons' | 'attendance'>(initialTab);
 
   /* ─── Recording form ─────────────────────────────────── */
   const [showRecForm, setShowRecForm] = useState(false);
@@ -181,10 +338,23 @@ export default function AdminMonthManage() {
   const [gridData, setGridData] = useState<GridData | null>(null);
   const [loadingGrid, setLoadingGrid] = useState(false);
   const [attTab, setAttTab] = useState<'monitor' | 'grid'>('monitor');
+  const [attendanceType, setAttendanceType] = useState<'recordings' | 'lectures'>(initialAttendanceType);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [popup, setPopup] = useState<{ recordingId: string; userId: string } | null>(null);
+
+  /* ─── Live lecture attendance ───────────────────────── */
+  const [liveAttTab, setLiveAttTab] = useState<'monitor' | 'grid'>('monitor');
+  const [liveLectures, setLiveLectures] = useState<LiveLectureMeta[]>([]);
+  const [selectedLectureIds, setSelectedLectureIds] = useState<string[]>([]);
+  const [lectureEnrollments, setLectureEnrollments] = useState<any[]>([]);
+  const [lectureStatsById, setLectureStatsById] = useState<Record<string, any>>({});
+  const [loadingLectures, setLoadingLectures] = useState(false);
+  const [lectureSearch, setLectureSearch] = useState('');
+  const [lecturePage, setLecturePage] = useState(0);
+  const [lectureRowsPerPage, setLectureRowsPerPage] = useState(25);
+  const [exportingAttendance, setExportingAttendance] = useState(false);
 
   /* ─── Load class + month ─────────────────────────────── */
   useEffect(() => {
@@ -210,12 +380,6 @@ export default function AdminMonthManage() {
     } catch {}
   };
 
-  /* ─── Auto-load attendance when tab opens ────────────── */
-  useEffect(() => {
-    if (tab !== 'attendance' || recordings.length === 0) return;
-    loadAttendance();
-  }, [tab]);
-
   const loadAttendance = () => {
     if (recordings.length === 0) return;
     setLoadingGrid(true);
@@ -226,6 +390,94 @@ export default function AdminMonthManage() {
       .catch(() => setGridData(null))
       .finally(() => setLoadingGrid(false));
   };
+
+  const loadMonthLectures = async () => {
+    if (!monthId) return;
+    setLoadingLectures(true);
+    try {
+      const res = await api.get(`/lectures/month/${monthId}`);
+      const payload = res.data;
+      const list: LiveLectureMeta[] = Array.isArray(payload)
+        ? payload
+        : (payload?.lectures ?? payload?.data ?? []);
+      setLiveLectures(list);
+      setSelectedLectureIds(prev => {
+        const valid = prev.filter(id => list.some(lec => lec.id === id));
+        if (valid.length > 0) return valid;
+        return list.map(lec => lec.id);
+      });
+    } catch {
+      setLiveLectures([]);
+      setSelectedLectureIds([]);
+    } finally {
+      setLoadingLectures(false);
+    }
+  };
+
+  const loadLectureAttendance = async () => {
+    if (!classId || selectedLectureIds.length === 0) {
+      setLectureStatsById({});
+      return;
+    }
+
+    const selected = [...selectedLectureIds];
+    setLoadingLectures(true);
+    setLectureSearch('');
+    setLecturePage(0);
+    try {
+      const [enrollResult, statsResult] = await Promise.allSettled([
+        api.get(`/enrollments/class/${classId}`),
+        Promise.all(
+          selected.map(async (lectureId) => {
+            try {
+              const res = await api.get(`/lectures/${lectureId}/stats`);
+              return [lectureId, res.data] as const;
+            } catch {
+              return [lectureId, null] as const;
+            }
+          })
+        ),
+      ]);
+
+      const statsMap: Record<string, any> = {};
+      if (statsResult.status === 'fulfilled') {
+        statsResult.value.forEach(([lectureId, stats]) => {
+          if (stats) statsMap[lectureId] = stats;
+        });
+      }
+
+      if (enrollResult.status === 'fulfilled') {
+        setLectureEnrollments(Array.isArray(enrollResult.value?.data) ? enrollResult.value.data : []);
+      } else {
+        setLectureEnrollments([]);
+      }
+      setLectureStatsById(statsMap);
+    } catch {
+      setLectureEnrollments([]);
+      setLectureStatsById({});
+    } finally {
+      setLoadingLectures(false);
+    }
+  };
+
+  /* ─── Auto-load attendance when tab opens ────────────── */
+  useEffect(() => {
+    if (tab !== 'attendance') return;
+    if (attendanceType === 'recordings') {
+      if (recordings.length > 0) loadAttendance();
+      return;
+    }
+    void loadMonthLectures();
+  }, [attendanceType, recordings, tab, monthId]);
+
+  useEffect(() => {
+    if (tab !== 'attendance' || attendanceType !== 'lectures') return;
+    if (selectedLectureIds.length === 0) {
+      setLectureStatsById({});
+      return;
+    }
+    void loadLectureAttendance();
+  }, [attendanceType, classId, selectedLectureIds, tab]);
 
   /* ─── Recording CRUD ─────────────────────────────────── */
   const openNewRec = () => {
@@ -323,6 +575,878 @@ export default function AdminMonthManage() {
   useEffect(() => { setPage(0); }, [filteredStudents, attTab]);
 
   const pagedStudents = filteredStudents.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  const toggleLectureSelection = (lectureId: string) => {
+    setSelectedLectureIds(prev =>
+      prev.includes(lectureId)
+        ? prev.filter(id => id !== lectureId)
+        : [...prev, lectureId]
+    );
+  };
+
+  const selectAllLectures = () => {
+    setSelectedLectureIds(liveLectures.map(lec => lec.id));
+  };
+
+  const selectedLectureColumns = useMemo<LiveLectureMeta[]>(() => {
+    if (selectedLectureIds.length === 0) return [];
+    const selected = new Set(selectedLectureIds);
+    return liveLectures.filter(lec => selected.has(lec.id));
+  }, [liveLectures, selectedLectureIds]);
+
+  const lectureStudents = useMemo<LectureStudentRow[]>(() => {
+    if (selectedLectureColumns.length === 0) return [];
+
+    const baseEnrollments = Array.isArray(lectureEnrollments) ? lectureEnrollments : [];
+    const effectiveEnrollments = baseEnrollments.length > 0
+      ? baseEnrollments
+      : (() => {
+          // Fallback to joined users from lecture stats when enrollment API returns empty/fails.
+          const byUserId = new Map<string, any>();
+          selectedLectureColumns.forEach((lec) => {
+            const stats = lectureStatsById[lec.id];
+            (stats?.registeredJoins || []).forEach((join: any) => {
+              const user = join?.user || {};
+              const userId = (user?.id || join?.userId || '') as string;
+              if (!userId || byUserId.has(userId)) return;
+              byUserId.set(userId, {
+                userId,
+                user,
+              });
+            });
+          });
+          return Array.from(byUserId.values());
+        })();
+
+    return effectiveEnrollments.map((enr: any) => {
+      const user = enr?.user || {};
+      const profile = user?.profile || {};
+      const userId = (enr?.userId || user?.id || '') as string;
+
+      const cells = selectedLectureColumns.map((lec) => {
+        const stats = lectureStatsById[lec.id];
+        const join = (stats?.registeredJoins || []).find((j: any) => {
+          const joinedUserId = j?.user?.id || j?.userId || '';
+          return joinedUserId === userId;
+        });
+
+        return {
+          lectureId: lec.id,
+          joined: Boolean(join),
+          joinedAt: join?.joinedAt || null,
+        };
+      });
+
+      return {
+        userId,
+        fullName: profile?.fullName || user?.email || 'Unknown',
+        instituteId: profile?.instituteId || '-',
+        email: user?.email || '',
+        phone: profile?.phone || '',
+        avatarUrl: profile?.avatarUrl || null,
+        joinedCount: cells.filter(cell => cell.joined).length,
+        cells,
+      };
+    });
+  }, [lectureEnrollments, lectureStatsById, selectedLectureColumns]);
+
+  const filteredLectureStudents = useMemo(() => {
+    if (!lectureSearch.trim()) return lectureStudents;
+    const q = lectureSearch.toLowerCase();
+    return lectureStudents.filter((s) =>
+      s.fullName.toLowerCase().includes(q)
+      || s.instituteId.toLowerCase().includes(q)
+      || s.email.toLowerCase().includes(q)
+      || s.phone.toLowerCase().includes(q)
+    );
+  }, [lectureSearch, lectureStudents]);
+
+  useEffect(() => { setLecturePage(0); }, [filteredLectureStudents, liveAttTab]);
+
+  const pagedLectureStudents = filteredLectureStudents.slice(
+    lecturePage * lectureRowsPerPage,
+    lecturePage * lectureRowsPerPage + lectureRowsPerPage
+  );
+
+  const lectureGuestRows = useMemo<LectureGuestRow[]>(() => {
+    return selectedLectureColumns.flatMap((lec) => {
+      const stats = lectureStatsById[lec.id];
+      return (stats?.guestJoins || []).map((g: any) => ({
+        lectureId: lec.id,
+        lectureTitle: lec.title,
+        fullName: g?.fullName || '-',
+        phone: g?.phone || '-',
+        email: g?.email || '-',
+        note: g?.note || '-',
+        joinedAt: g?.joinedAt ? new Date(g.joinedAt).toLocaleString() : '-',
+      }));
+    });
+  }, [selectedLectureColumns, lectureStatsById]);
+
+  const lectureJoinTotal = useMemo(
+    () => lectureStudents.reduce((sum, row) => sum + row.joinedCount, 0),
+    [lectureStudents]
+  );
+
+  const exportRecordingAttendance = async () => {
+    if (!gridData || gridColumns.length === 0 || exportingAttendance) return;
+
+    setExportingAttendance(true);
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const workbook = new ExcelJSImport.Workbook();
+      workbook.creator = 'Thilina Dhananjaya';
+      workbook.created = new Date();
+
+      const date = new Date().toISOString().split('T')[0];
+      const classSlug = slugifyFilePart(classData?.name || 'class');
+      const monthSlug = slugifyFilePart(monthData?.name || 'month');
+      const rows = filteredStudents;
+      const totalRecordings = gridColumns.length;
+
+      const getCompletionPct = (student: StudentRow) => {
+        const completedCount = student.recordings.filter(
+          (r: RecordingCell) => r?.attendanceStatus === 'COMPLETED' || r?.attendanceStatus === 'MANUAL',
+        ).length;
+        return totalRecordings > 0 ? Math.round((completedCount / totalRecordings) * 100) : 0;
+      };
+
+      const statusBuckets = rows.flatMap((student) =>
+        gridColumns.map((_col, ci) => resolveRecordingStatusLabel(student.recordings[ci]) as RecordingExportStatus),
+      );
+      const completedCells = statusBuckets.filter((s) => s === 'Completed').length;
+      const incompleteCells = statusBuckets.filter((s) => s === 'Incomplete').length;
+      const viewedCells = statusBuckets.filter((s) => s === 'Viewed').length;
+      const notWatchedCells = statusBuckets.filter((s) => s === 'Not watched').length;
+      const avgCompletionPct = rows.length > 0
+        ? Math.round(rows.reduce((sum, student) => sum + getCompletionPct(student), 0) / rows.length)
+        : 0;
+
+      const summarySheet = workbook.addWorksheet('Summary');
+      applyHeaderStyle(summarySheet.addRow(['Metric', 'Value']));
+      [
+        ['Class', classData?.name || '-'],
+        ['Month', monthData?.name || '-'],
+        ['Exported At', new Date().toLocaleString()],
+        ['Students (Filtered)', rows.length],
+        ['Students (Total)', gridData.students.length],
+        ['Recordings', totalRecordings],
+        ['Search Filter', search.trim() || '(none)'],
+        ['Completed Cells', completedCells],
+        ['Incomplete Cells', incompleteCells],
+        ['Viewed Cells', viewedCells],
+        ['Not Watched Cells', notWatchedCells],
+        ['Average Completion %', `${avgCompletionPct}%`],
+      ].forEach((entry) => summarySheet.addRow(entry));
+      applyRowBorderRange(summarySheet, 2, summarySheet.rowCount);
+      summarySheet.getColumn(1).width = 30;
+      summarySheet.getColumn(2).width = 42;
+      summarySheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const detailsSheet = workbook.addWorksheet('Recording Details');
+      applyHeaderStyle(detailsSheet.addRow([
+        'No',
+        'Recording',
+        'Topic',
+        'Duration',
+        'Visibility',
+        'Video Type',
+        'Live',
+        'Created At',
+      ]));
+      gridColumns.forEach((recording, index) => {
+        detailsSheet.addRow([
+          index + 1,
+          recording.title || '-',
+          recording.topic || '-',
+          fmtSec(recording.duration || 0),
+          (recording.status || 'PAID_ONLY').replace(/_/g, ' '),
+          recording.videoType || '-',
+          recording.isLive ? 'Yes' : 'No',
+          recording.createdAt ? new Date(recording.createdAt).toLocaleString() : '-',
+        ]);
+      });
+      applyRowBorderRange(detailsSheet, 2, detailsSheet.rowCount);
+      autoFitColumns(detailsSheet, 8, 42);
+      detailsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const statusHeaders = [
+        'Student Name',
+        'Student ID',
+        'Email',
+        'Phone',
+        ...gridColumns.map((col) => col.title || '-'),
+        'Completed Count',
+        'Completion %',
+      ];
+      const statusStartCol = 5;
+      const statusSheet = workbook.addWorksheet('Student Status');
+      applyHeaderStyle(statusSheet.addRow(statusHeaders));
+
+      rows.forEach((student) => {
+        const statuses = gridColumns.map(
+          (_col, ci) => resolveRecordingStatusLabel(student.recordings[ci]) as RecordingExportStatus,
+        );
+        const completedCount = statuses.filter((status) => status === 'Completed').length;
+        const completionPct = getCompletionPct(student);
+        const row = statusSheet.addRow([
+          student.user?.profile?.fullName || '-',
+          student.user?.profile?.instituteId || '-',
+          student.user?.email || '-',
+          student.user?.profile?.phone || '-',
+          ...statuses,
+          completedCount,
+          `${completionPct}%`,
+        ]);
+
+        row.height = 20;
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+
+        statuses.forEach((status, index) => {
+          const cell = row.getCell(statusStartCol + index);
+          const style = RECORDING_STATUS_XLSX_STYLE[status];
+          styleStatusCell(cell, style.fill, style.text);
+        });
+
+        const pctCell = row.getCell(statusHeaders.length);
+        pctCell.font = {
+          bold: true,
+          color: { argb: completionPct >= 80 ? 'FF166534' : completionPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      const statusLegendStart = statusSheet.rowCount + 2;
+      statusSheet.getCell(`A${statusLegendStart}`).value = 'Status Legend';
+      statusSheet.getCell(`A${statusLegendStart}`).font = { bold: true, color: { argb: 'FF1E293B' } };
+      (Object.keys(RECORDING_STATUS_XLSX_STYLE) as RecordingExportStatus[]).forEach((status, index) => {
+        const rowNo = statusLegendStart + index + 1;
+        const labelCell = statusSheet.getCell(`A${rowNo}`);
+        const styleCell = statusSheet.getCell(`B${rowNo}`);
+        const style = RECORDING_STATUS_XLSX_STYLE[status];
+        labelCell.value = status;
+        labelCell.border = XLSX_BORDER_STYLE;
+        styleCell.value = status;
+        styleStatusCell(styleCell, style.fill, style.text);
+        styleCell.border = XLSX_BORDER_STYLE;
+      });
+
+      autoFitColumns(statusSheet, 10, 36);
+      statusSheet.getColumn(1).width = Math.max(statusSheet.getColumn(1).width || 22, 22);
+      statusSheet.getColumn(2).width = Math.max(statusSheet.getColumn(2).width || 16, 16);
+      statusSheet.getColumn(3).width = Math.max(statusSheet.getColumn(3).width || 26, 26);
+      statusSheet.getColumn(4).width = Math.max(statusSheet.getColumn(4).width || 16, 16);
+      statusSheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }];
+      statusSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: statusHeaders.length },
+      };
+
+      const gridHeaders = [
+        'Student Name',
+        'Student ID',
+        'Email',
+        'Phone',
+        ...gridColumns.flatMap((col) => [`${col.title} - Status`, `${col.title} - Watch Time`, `${col.title} - Payment`]),
+        'Completion %',
+      ];
+      const gridStatusStartCol = 5;
+      const gridSheet = workbook.addWorksheet('Student Grid');
+      applyHeaderStyle(gridSheet.addRow(gridHeaders));
+
+      rows.forEach((student) => {
+        const completionPct = getCompletionPct(student);
+        const rowValues: Array<string | number> = [
+          student.user?.profile?.fullName || '-',
+          student.user?.profile?.instituteId || '-',
+          student.user?.email || '-',
+          student.user?.profile?.phone || '-',
+          ...gridColumns.flatMap((_col, ci) => {
+            const cell: RecordingCell | undefined = student.recordings[ci];
+            const statusLabel = resolveRecordingStatusLabel(cell) as RecordingExportStatus;
+            const watchTime = fmtSec(cell?.totalWatchedSec || 0);
+            const paymentStatus = PAYMENT_LABEL[cell?.paymentStatus || 'NOT_PAID'] || '-';
+            return [statusLabel, watchTime, paymentStatus];
+          }),
+          `${completionPct}%`,
+        ];
+        const row = gridSheet.addRow(rowValues);
+
+        row.height = 20;
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+
+        gridColumns.forEach((_col, index) => {
+          const dataCell = student.recordings[index];
+          const statusCol = gridStatusStartCol + (index * 3);
+          const paymentCol = statusCol + 2;
+          const statusLabel = resolveRecordingStatusLabel(dataCell) as RecordingExportStatus;
+          const statusStyle = RECORDING_STATUS_XLSX_STYLE[statusLabel];
+          styleStatusCell(row.getCell(statusCol), statusStyle.fill, statusStyle.text);
+
+          const paymentKey = dataCell?.paymentStatus || 'NOT_PAID';
+          const paymentStyle = PAYMENT_XLSX_STYLE[paymentKey] || PAYMENT_XLSX_STYLE.NOT_PAID;
+          styleStatusCell(row.getCell(paymentCol), paymentStyle.fill, paymentStyle.text);
+        });
+
+        const pctCell = row.getCell(gridHeaders.length);
+        pctCell.font = {
+          bold: true,
+          color: { argb: completionPct >= 80 ? 'FF166534' : completionPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      autoFitColumns(gridSheet, 10, 38);
+      gridSheet.getColumn(1).width = Math.max(gridSheet.getColumn(1).width || 22, 22);
+      gridSheet.getColumn(2).width = Math.max(gridSheet.getColumn(2).width || 16, 16);
+      gridSheet.getColumn(3).width = Math.max(gridSheet.getColumn(3).width || 26, 26);
+      gridSheet.getColumn(4).width = Math.max(gridSheet.getColumn(4).width || 16, 16);
+      gridSheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }];
+      gridSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: gridHeaders.length },
+      };
+
+      const recordingSummarySheet = workbook.addWorksheet('Recording Summary');
+      const recordingSummaryHeaders = [
+        'Recording',
+        'Completed',
+        'Incomplete',
+        'Viewed',
+        'Not Watched',
+        'Avg Watch Time',
+        'Paid',
+        'Pending',
+        'Unpaid/Rejected',
+        'Free',
+      ];
+      applyHeaderStyle(recordingSummarySheet.addRow(recordingSummaryHeaders));
+
+      gridColumns.forEach((recording, ci) => {
+        const cells = rows.map((student) => student.recordings[ci]);
+        const statuses = cells.map((cell) => resolveRecordingStatusLabel(cell) as RecordingExportStatus);
+        const completed = statuses.filter((s) => s === 'Completed').length;
+        const incomplete = statuses.filter((s) => s === 'Incomplete').length;
+        const viewed = statuses.filter((s) => s === 'Viewed').length;
+        const notWatched = statuses.filter((s) => s === 'Not watched').length;
+        const avgWatchSec = cells.length > 0
+          ? Math.round(cells.reduce((sum, cell) => sum + (cell?.totalWatchedSec || 0), 0) / cells.length)
+          : 0;
+        const paid = cells.filter((cell) => cell?.paymentStatus === 'VERIFIED').length;
+        const pending = cells.filter((cell) => cell?.paymentStatus === 'PENDING').length;
+        const free = cells.filter((cell) => cell?.paymentStatus === 'FREE').length;
+        const unpaidOrRejected = cells.filter(
+          (cell) => cell?.paymentStatus === 'NOT_PAID' || cell?.paymentStatus === 'REJECTED',
+        ).length;
+
+        recordingSummarySheet.addRow([
+          recording.title,
+          completed,
+          incomplete,
+          viewed,
+          notWatched,
+          fmtSec(avgWatchSec),
+          paid,
+          pending,
+          unpaidOrRejected,
+          free,
+        ]);
+      });
+
+      applyRowBorderRange(recordingSummarySheet, 2, recordingSummarySheet.rowCount);
+      autoFitColumns(recordingSummarySheet, 10, 34);
+      recordingSummarySheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      await downloadWorkbook(workbook, `${classSlug}_${monthSlug}_recording_attendance_report_${date}.xlsx`);
+    } catch (error) {
+      console.error('Failed to export recording attendance report', error);
+    } finally {
+      setExportingAttendance(false);
+    }
+  };
+
+  const exportLectureAttendance = async () => {
+    if (selectedLectureColumns.length === 0 || exportingAttendance) return;
+
+    setExportingAttendance(true);
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const workbook = new ExcelJSImport.Workbook();
+      workbook.creator = 'Thilina Dhananjaya';
+      workbook.created = new Date();
+
+      const date = new Date().toISOString().split('T')[0];
+      const classSlug = slugifyFilePart(classData?.name || 'class');
+      const monthSlug = slugifyFilePart(monthData?.name || 'month');
+      const filteredRows = filteredLectureStudents;
+      const rows = lectureStudents;
+      const totalLectures = selectedLectureColumns.length;
+      const totalPossibleCells = rows.length * totalLectures;
+      const totalJoinedCells = rows.reduce((sum, row) => sum + row.joinedCount, 0);
+      const overallJoinPct = totalPossibleCells > 0
+        ? Math.round((totalJoinedCells / totalPossibleCells) * 100)
+        : 0;
+      const lectureTitleById = new Map(selectedLectureColumns.map((lecture) => [lecture.id, lecture.title || '-'] as const));
+      const joinedDetailRows = rows.flatMap((student) => (
+        student.cells
+          .filter((cell) => cell.joined)
+          .map((cell) => ({
+            lectureTitle: lectureTitleById.get(cell.lectureId) || '-',
+            studentName: student.fullName,
+            instituteId: student.instituteId,
+            email: student.email || '-',
+            phone: student.phone || '-',
+            joinedAt: cell.joinedAt ? new Date(cell.joinedAt).toLocaleString() : '-',
+          }))
+      ));
+      const notJoinedDetailRows = rows.flatMap((student) => (
+        student.cells
+          .filter((cell) => !cell.joined)
+          .map((cell) => ({
+            lectureTitle: lectureTitleById.get(cell.lectureId) || '-',
+            studentName: student.fullName,
+            instituteId: student.instituteId,
+            email: student.email || '-',
+            phone: student.phone || '-',
+            status: 'Not joined',
+          }))
+      ));
+
+      const summarySheet = workbook.addWorksheet('Summary');
+      applyHeaderStyle(summarySheet.addRow(['Metric', 'Value']));
+      [
+        ['Class', classData?.name || '-'],
+        ['Month', monthData?.name || '-'],
+        ['Exported At', new Date().toLocaleString()],
+        ['Selected Lectures', totalLectures],
+        ['Students (Exported)', rows.length],
+        ['Students (Filtered Preview)', filteredRows.length],
+        ['Students (Total)', lectureStudents.length],
+        ['Total Student Joins', totalJoinedCells],
+        ['Overall Join %', `${overallJoinPct}%`],
+        ['Joined Detail Rows', joinedDetailRows.length],
+        ['Not Joined Detail Rows', notJoinedDetailRows.length],
+        ['Public Guest Joins', lectureGuestRows.length],
+        ['Search Filter (Preview Only)', lectureSearch.trim() || '(none)'],
+      ].forEach((entry) => summarySheet.addRow(entry));
+
+      summarySheet.addRow([]);
+      const summaryLectureHeaders = [
+        'Student Name',
+        'Student ID',
+        'Email',
+        'Phone',
+        ...selectedLectureColumns.map((lecture, index) => `${String(index + 1).padStart(2, '0')} ${lecture.title || '-'}`),
+        'Joined Count',
+        'Join %',
+      ];
+      const summaryLectureStartCol = 5;
+      const summaryJoinedCountCol = summaryLectureStartCol + selectedLectureColumns.length;
+      const summaryJoinPctCol = summaryJoinedCountCol + 1;
+
+      const summaryTitleRow = summarySheet.addRow(['Student Attendance Overview']);
+      summarySheet.mergeCells(summaryTitleRow.number, 1, summaryTitleRow.number, summaryLectureHeaders.length);
+      const summaryTitleCell = summarySheet.getCell(summaryTitleRow.number, 1);
+      summaryTitleCell.font = { bold: true, color: { argb: 'FF1E293B' } };
+      summaryTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      summaryTitleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      summaryTitleCell.border = XLSX_BORDER_STYLE;
+
+      applyHeaderStyle(summarySheet.addRow(summaryLectureHeaders));
+
+      rows.forEach((student) => {
+        const joinPct = totalLectures > 0 ? Math.round((student.joinedCount / totalLectures) * 100) : 0;
+        const row = summarySheet.addRow([
+          student.fullName,
+          student.instituteId,
+          student.email || '-',
+          student.phone || '-',
+          ...student.cells.map((cell) => (
+            cell.joined
+              ? `Joined\n${cell.joinedAt ? new Date(cell.joinedAt).toLocaleString() : '-'}`
+              : 'Not joined'
+          )),
+          student.joinedCount,
+          `${joinPct}%`,
+        ]);
+
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+        student.cells.forEach((cell, index) => {
+          const lectureCol = summaryLectureStartCol + index;
+          const status = (cell.joined ? 'Joined' : 'Not joined') as LectureExportStatus;
+          const style = LECTURE_STATUS_XLSX_STYLE[status];
+          styleStatusCell(row.getCell(lectureCol), style.fill, style.text);
+          row.getCell(lectureCol).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        });
+
+        const pctCell = row.getCell(summaryJoinPctCol);
+        pctCell.font = {
+          bold: true,
+          color: { argb: joinPct >= 80 ? 'FF166534' : joinPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      applyRowBorderRange(summarySheet, 2, summarySheet.rowCount);
+      summarySheet.getColumn(1).width = 30;
+      summarySheet.getColumn(2).width = 20;
+      summarySheet.getColumn(3).width = Math.max(summarySheet.getColumn(3).width || 24, 24);
+      summarySheet.getColumn(4).width = Math.max(summarySheet.getColumn(4).width || 16, 16);
+      selectedLectureColumns.forEach((_lecture, index) => {
+        const colNo = summaryLectureStartCol + index;
+        summarySheet.getColumn(colNo).width = Math.max(summarySheet.getColumn(colNo).width || 26, 26);
+      });
+      summarySheet.getColumn(summaryJoinedCountCol).width = Math.max(summarySheet.getColumn(summaryJoinedCountCol).width || 14, 14);
+      summarySheet.getColumn(summaryJoinPctCol).width = Math.max(summarySheet.getColumn(summaryJoinPctCol).width || 12, 12);
+      summarySheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const detailsSheet = workbook.addWorksheet('Lecture Details');
+      applyHeaderStyle(detailsSheet.addRow([
+        'No',
+        'Lecture',
+        'Mode',
+        'Start',
+        'End',
+        'Visibility',
+        'Registered Joins',
+        'Guest Joins',
+        'Total Joins',
+        'Student Join %',
+      ]));
+
+      selectedLectureColumns.forEach((lecture, index) => {
+        const stats = lectureStatsById[lecture.id];
+        const registered = stats?.registeredCount ?? 0;
+        const guests = stats?.guestCount ?? 0;
+        const total = stats?.totalCount ?? (registered + guests);
+        const studentJoinPct = lectureStudents.length > 0
+          ? Math.round((registered / lectureStudents.length) * 100)
+          : 0;
+        detailsSheet.addRow([
+          index + 1,
+          lecture.title || '-',
+          lecture.mode || '-',
+          lecture.startTime ? new Date(lecture.startTime).toLocaleString() : '-',
+          lecture.endTime ? new Date(lecture.endTime).toLocaleString() : '-',
+          (lecture.status || 'STUDENTS_ONLY').replace(/_/g, ' '),
+          registered,
+          guests,
+          total,
+          `${studentJoinPct}%`,
+        ]);
+      });
+
+      applyRowBorderRange(detailsSheet, 2, detailsSheet.rowCount);
+      autoFitColumns(detailsSheet, 10, 42);
+      detailsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const statusHeaders = [
+        'Student Name',
+        'Student ID',
+        'Email',
+        'Phone',
+        ...selectedLectureColumns.map((lecture) => lecture.title || '-'),
+        'Joined Count',
+        'Join %',
+      ];
+      const statusStartCol = 5;
+      const statusSheet = workbook.addWorksheet('Student Status');
+      applyHeaderStyle(statusSheet.addRow(statusHeaders));
+
+      rows.forEach((student) => {
+        const statuses = student.cells.map((cell) => (cell.joined ? 'Joined' : 'Not joined') as LectureExportStatus);
+        const joinPct = totalLectures > 0 ? Math.round((student.joinedCount / totalLectures) * 100) : 0;
+        const row = statusSheet.addRow([
+          student.fullName,
+          student.instituteId,
+          student.email || '-',
+          student.phone || '-',
+          ...statuses,
+          student.joinedCount,
+          `${joinPct}%`,
+        ]);
+
+        row.height = 20;
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+
+        statuses.forEach((status, index) => {
+          const cell = row.getCell(statusStartCol + index);
+          const style = LECTURE_STATUS_XLSX_STYLE[status];
+          styleStatusCell(cell, style.fill, style.text);
+        });
+
+        const pctCell = row.getCell(statusHeaders.length);
+        pctCell.font = {
+          bold: true,
+          color: { argb: joinPct >= 80 ? 'FF166534' : joinPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      const lectureLegendStart = statusSheet.rowCount + 2;
+      statusSheet.getCell(`A${lectureLegendStart}`).value = 'Status Legend';
+      statusSheet.getCell(`A${lectureLegendStart}`).font = { bold: true, color: { argb: 'FF1E293B' } };
+      (Object.keys(LECTURE_STATUS_XLSX_STYLE) as LectureExportStatus[]).forEach((status, index) => {
+        const rowNo = lectureLegendStart + index + 1;
+        const labelCell = statusSheet.getCell(`A${rowNo}`);
+        const styleCell = statusSheet.getCell(`B${rowNo}`);
+        const style = LECTURE_STATUS_XLSX_STYLE[status];
+        labelCell.value = status;
+        labelCell.border = XLSX_BORDER_STYLE;
+        styleCell.value = status;
+        styleStatusCell(styleCell, style.fill, style.text);
+        styleCell.border = XLSX_BORDER_STYLE;
+      });
+
+      autoFitColumns(statusSheet, 10, 36);
+      statusSheet.getColumn(1).width = Math.max(statusSheet.getColumn(1).width || 22, 22);
+      statusSheet.getColumn(2).width = Math.max(statusSheet.getColumn(2).width || 16, 16);
+      statusSheet.getColumn(3).width = Math.max(statusSheet.getColumn(3).width || 26, 26);
+      statusSheet.getColumn(4).width = Math.max(statusSheet.getColumn(4).width || 16, 16);
+      statusSheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }];
+      statusSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: statusHeaders.length },
+      };
+
+      const monitorSheet = workbook.addWorksheet('Lecture Attendance Monitor');
+      const monitorTopHeaders = [
+        'Student',
+        ...selectedLectureColumns.map((_lecture, index) => String(index + 1).padStart(2, '0')),
+        '%',
+      ];
+      const monitorTitleHeaders = [
+        'Student Details',
+        ...selectedLectureColumns.map((lecture) => lecture.title || '-'),
+        'Join %',
+      ];
+      const monitorLectureStartCol = 2;
+      const monitorLastCol = monitorTopHeaders.length;
+
+      const monitorTopRow = monitorSheet.addRow(monitorTopHeaders);
+      applyHeaderStyle(monitorTopRow);
+      const monitorTitleRow = monitorSheet.addRow(monitorTitleHeaders);
+      applyHeaderStyle(monitorTitleRow);
+      monitorTitleRow.height = 34;
+
+      rows.forEach((student) => {
+        const joinPct = totalLectures > 0 ? Math.round((student.joinedCount / totalLectures) * 100) : 0;
+        const rowValues: Array<string | number> = [
+          `${student.fullName}\n${student.instituteId}\n${student.email || '-'}\n${student.phone || '-'}`,
+          ...student.cells.map((cell) => (
+            cell.joined
+              ? `Joined\n${cell.joinedAt ? new Date(cell.joinedAt).toLocaleString() : '-'}`
+              : 'Not joined'
+          )),
+          `${joinPct}%`,
+        ];
+
+        const row = monitorSheet.addRow(rowValues);
+        row.height = 48;
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+        student.cells.forEach((cell, index) => {
+          const lectureCol = monitorLectureStartCol + index;
+          const status = (cell.joined ? 'Joined' : 'Not joined') as LectureExportStatus;
+          const style = LECTURE_STATUS_XLSX_STYLE[status];
+          styleStatusCell(row.getCell(lectureCol), style.fill, style.text);
+          row.getCell(lectureCol).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        });
+
+        const pctCell = row.getCell(monitorLastCol);
+        pctCell.font = {
+          bold: true,
+          color: { argb: joinPct >= 80 ? 'FF166534' : joinPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      monitorSheet.getColumn(1).width = 34;
+      selectedLectureColumns.forEach((_lecture, index) => {
+        const colNo = monitorLectureStartCol + index;
+        monitorSheet.getColumn(colNo).width = 26;
+      });
+      monitorSheet.getColumn(monitorLastCol).width = 10;
+      monitorSheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 2 }];
+      monitorSheet.autoFilter = {
+        from: { row: 2, column: 1 },
+        to: { row: 2, column: monitorLastCol },
+      };
+
+      const gridHeaders = [
+        'Student Name',
+        'Student ID',
+        'Email',
+        'Phone',
+        ...selectedLectureColumns.flatMap((lecture) => [`${lecture.title} - Status`, `${lecture.title} - Joined At`]),
+        'Joined Count',
+        'Join %',
+      ];
+      const gridStatusStartCol = 5;
+      const gridSheet = workbook.addWorksheet('Student Grid');
+      applyHeaderStyle(gridSheet.addRow(gridHeaders));
+
+      rows.forEach((student) => {
+        const joinPct = totalLectures > 0 ? Math.round((student.joinedCount / totalLectures) * 100) : 0;
+        const rowValues: Array<string | number> = [
+          student.fullName,
+          student.instituteId,
+          student.email || '-',
+          student.phone || '-',
+          ...student.cells.flatMap((cell) => [
+            cell.joined ? 'Joined' : 'Not joined',
+            cell.joinedAt ? new Date(cell.joinedAt).toLocaleString() : '-',
+          ]),
+          student.joinedCount,
+          `${joinPct}%`,
+        ];
+
+        const row = gridSheet.addRow(rowValues);
+        row.height = 20;
+        row.eachCell((cell: any) => {
+          cell.border = XLSX_BORDER_STYLE;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+
+        student.cells.forEach((cell, index) => {
+          const statusCol = gridStatusStartCol + (index * 2);
+          const status = (cell.joined ? 'Joined' : 'Not joined') as LectureExportStatus;
+          const style = LECTURE_STATUS_XLSX_STYLE[status];
+          styleStatusCell(row.getCell(statusCol), style.fill, style.text);
+        });
+
+        const pctCell = row.getCell(gridHeaders.length);
+        pctCell.font = {
+          bold: true,
+          color: { argb: joinPct >= 80 ? 'FF166534' : joinPct > 0 ? 'FF92400E' : 'FFB91C1C' },
+        };
+      });
+
+      autoFitColumns(gridSheet, 10, 40);
+      gridSheet.getColumn(1).width = Math.max(gridSheet.getColumn(1).width || 22, 22);
+      gridSheet.getColumn(2).width = Math.max(gridSheet.getColumn(2).width || 16, 16);
+      gridSheet.getColumn(3).width = Math.max(gridSheet.getColumn(3).width || 26, 26);
+      gridSheet.getColumn(4).width = Math.max(gridSheet.getColumn(4).width || 16, 16);
+      gridSheet.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }];
+      gridSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: gridHeaders.length },
+      };
+
+      const joinedSheet = workbook.addWorksheet('Joined Students');
+      applyHeaderStyle(joinedSheet.addRow(['Lecture', 'Student Name', 'Student ID', 'Email', 'Phone', 'Status', 'Joined At']));
+      if (joinedDetailRows.length > 0) {
+        joinedDetailRows.forEach((row) => {
+          const joinedRow = joinedSheet.addRow([
+            row.lectureTitle,
+            row.studentName,
+            row.instituteId,
+            row.email,
+            row.phone,
+            'Joined',
+            row.joinedAt,
+          ]);
+
+          joinedRow.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          const statusStyle = LECTURE_STATUS_XLSX_STYLE.Joined;
+          styleStatusCell(joinedRow.getCell(6), statusStyle.fill, statusStyle.text);
+          joinedRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        joinedSheet.addRow(['-', 'No students joined for selected lectures.', '-', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(joinedSheet, 2, joinedSheet.rowCount);
+      autoFitColumns(joinedSheet, 10, 42);
+      joinedSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const notJoinedSheet = workbook.addWorksheet('Not Joined Students');
+      applyHeaderStyle(notJoinedSheet.addRow(['Lecture', 'Student Name', 'Student ID', 'Email', 'Phone', 'Status']));
+      if (notJoinedDetailRows.length > 0) {
+        notJoinedDetailRows.forEach((row) => {
+          const notJoinedRow = notJoinedSheet.addRow([
+            row.lectureTitle,
+            row.studentName,
+            row.instituteId,
+            row.email,
+            row.phone,
+            row.status,
+          ]);
+
+          notJoinedRow.eachCell((cell: any) => {
+            cell.border = XLSX_BORDER_STYLE;
+            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          });
+          const statusStyle = LECTURE_STATUS_XLSX_STYLE['Not joined'];
+          styleStatusCell(notJoinedRow.getCell(6), statusStyle.fill, statusStyle.text);
+          notJoinedRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+      } else {
+        notJoinedSheet.addRow(['-', 'All selected students joined selected lectures.', '-', '-', '-', '-']);
+      }
+      applyRowBorderRange(notJoinedSheet, 2, notJoinedSheet.rowCount);
+      autoFitColumns(notJoinedSheet, 10, 42);
+      notJoinedSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      if (lectureGuestRows.length > 0) {
+        const guestSheet = workbook.addWorksheet('Public Guests');
+        applyHeaderStyle(guestSheet.addRow(['Lecture', 'Name', 'Phone', 'Email', 'Note', 'Joined At']));
+        lectureGuestRows.forEach((guest) => {
+          guestSheet.addRow([
+            guest.lectureTitle,
+            guest.fullName,
+            guest.phone,
+            guest.email,
+            guest.note,
+            guest.joinedAt,
+          ]);
+        });
+        applyRowBorderRange(guestSheet, 2, guestSheet.rowCount);
+        autoFitColumns(guestSheet, 10, 42);
+        guestSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      }
+
+      await downloadWorkbook(workbook, `${classSlug}_${monthSlug}_live_lecture_attendance_report_${date}.xlsx`);
+    } catch (error) {
+      console.error('Failed to export lecture attendance report', error);
+    } finally {
+      setExportingAttendance(false);
+    }
+  };
 
   /* ─── Form input shorthand ────────────────────────────── */
   const inp = 'w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30';
@@ -681,14 +1805,33 @@ export default function AdminMonthManage() {
 
           {/* Toolbar */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Inner tabs — full row */}
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] flex-1">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))]">
+              {([
+                { key: 'recordings', label: 'Recordings' },
+                { key: 'lectures', label: 'Live Lectures' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setAttendanceType(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    attendanceType === key
+                      ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm'
+                      : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Inner view tabs */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] flex-1 min-w-[220px]">
               {(['monitor', 'grid'] as const).map(t => (
                 <button
                   key={t}
-                  onClick={() => setAttTab(t)}
+                  onClick={() => attendanceType === 'recordings' ? setAttTab(t) : setLiveAttTab(t)}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition capitalize ${
-                    attTab === t
+                    (attendanceType === 'recordings' ? attTab : liveAttTab) === t
                       ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm'
                       : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
                   }`}
@@ -697,28 +1840,54 @@ export default function AdminMonthManage() {
                 </button>
               ))}
             </div>
+
             {/* Refresh */}
             <button
-              onClick={loadAttendance}
-              disabled={loadingGrid || recordings.length === 0}
+              onClick={() => attendanceType === 'recordings' ? loadAttendance() : loadLectureAttendance()}
+              disabled={
+                attendanceType === 'recordings'
+                  ? loadingGrid || recordings.length === 0
+                  : loadingLectures || selectedLectureIds.length === 0
+              }
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.4)] transition disabled:opacity-40"
             >
-              <svg className={`w-3.5 h-3.5 ${loadingGrid ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <svg className={`w-3.5 h-3.5 ${(attendanceType === 'recordings' ? loadingGrid : loadingLectures) ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Refresh
             </button>
+
+            <button
+              onClick={() => {
+                if (attendanceType === 'recordings') {
+                  void exportRecordingAttendance();
+                } else {
+                  void exportLectureAttendance();
+                }
+              }}
+              disabled={
+                attendanceType === 'recordings'
+                  ? !gridData || gridColumns.length === 0 || exportingAttendance
+                  : selectedLectureColumns.length === 0 || exportingAttendance
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-40"
+            >
+              <svg className={`w-3.5 h-3.5 ${exportingAttendance ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {exportingAttendance ? 'Exporting...' : 'Export'}
+            </button>
           </div>
 
           {/* No recordings */}
-          {recordings.length === 0 && (
+          {attendanceType === 'recordings' && recordings.length === 0 && (
             <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-12 text-center">
               <p className="text-sm text-[hsl(var(--muted-foreground))]">No recordings in this month. Add recordings first.</p>
             </div>
           )}
 
           {/* Loading skeleton */}
-          {loadingGrid && (
+          {attendanceType === 'recordings' && loadingGrid && (
             <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-6 space-y-3">
               {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="h-12 rounded-xl bg-[hsl(var(--muted))] animate-pulse" />
@@ -727,14 +1896,14 @@ export default function AdminMonthManage() {
           )}
 
           {/* Empty state when not loaded yet */}
-          {!loadingGrid && !gridData && recordings.length > 0 && (
+          {attendanceType === 'recordings' && !loadingGrid && !gridData && recordings.length > 0 && (
             <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-12 text-center">
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading attendance data…</p>
             </div>
           )}
 
           {/* ── MONITOR VIEW ── */}
-          {!loadingGrid && gridData && attTab === 'monitor' && (() => {
+          {attendanceType === 'recordings' && !loadingGrid && gridData && attTab === 'monitor' && (() => {
             const total = gridColumns.length;
             return (
               <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
@@ -902,7 +2071,7 @@ export default function AdminMonthManage() {
           })()}
 
           {/* ── GRID VIEW ── */}
-          {!loadingGrid && gridData && attTab === 'grid' && (
+          {attendanceType === 'recordings' && !loadingGrid && gridData && attTab === 'grid' && (
             <>
               {/* Summary cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1084,6 +2253,338 @@ export default function AdminMonthManage() {
                   onRowsPerPageChange={v => { setRowsPerPage(v); setPage(0); }}
                 />
               </div>
+            </>
+          )}
+
+          {attendanceType === 'lectures' && (
+            <>
+              <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-4">
+                <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                  <label className="text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+                    Select Live Lectures
+                    <span className="ml-2 normal-case font-normal text-[hsl(var(--muted-foreground))]">— choose one or more lectures to track attendance</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {selectedLectureIds.length < liveLectures.length && liveLectures.length > 0 && (
+                      <button
+                        onClick={selectAllLectures}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition"
+                      >
+                        Select all
+                      </button>
+                    )}
+                    {selectedLectureIds.length > 0 && (
+                      <button
+                        onClick={() => setSelectedLectureIds([])}
+                        className="text-xs text-[hsl(var(--muted-foreground))] hover:text-red-500 transition"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {liveLectures.length === 0 ? (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] italic py-2">No live lectures in this month</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {liveLectures.map((lec) => {
+                      const selected = selectedLectureIds.includes(lec.id);
+                      const stats = lectureStatsById[lec.id];
+                      return (
+                        <button
+                          key={lec.id}
+                          onClick={() => toggleLectureSelection(lec.id)}
+                          className={`text-left rounded-xl border px-3 py-2.5 transition ${
+                            selected
+                              ? 'border-violet-300 bg-violet-50'
+                              : 'border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-violet-200 hover:bg-violet-50/40'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-semibold text-[hsl(var(--foreground))] line-clamp-2">{lec.title}</p>
+                            {selected && (
+                              <svg className="w-4 h-4 text-violet-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">
+                            {new Date(lec.startTime).toLocaleString()}
+                          </p>
+                          <div className="mt-1.5 flex items-center gap-2 text-[10px] text-[hsl(var(--muted-foreground))]">
+                            <span>{stats?.registeredCount ?? 0} students</span>
+                            <span>•</span>
+                            <span>{stats?.guestCount ?? 0} guests</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {loadingLectures && (
+                <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-6 space-y-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="h-12 rounded-xl bg-[hsl(var(--muted))] animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              {!loadingLectures && liveLectures.length > 0 && selectedLectureColumns.length === 0 && (
+                <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm p-12 text-center">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Select at least one live lecture to view attendance.</p>
+                </div>
+              )}
+
+              {!loadingLectures && selectedLectureColumns.length > 0 && liveAttTab === 'monitor' && (
+                <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-bold text-[hsl(var(--foreground))]">Live Lecture Attendance Monitor</p>
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                        {selectedLectureColumns.length} lecture{selectedLectureColumns.length !== 1 ? 's' : ''} · {lectureStudents.length} student{lectureStudents.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--muted-foreground))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={lectureSearch}
+                        onChange={e => setLectureSearch(e.target.value)}
+                        placeholder="Search student..."
+                        className="pl-9 pr-4 py-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-xs text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-violet-500/30 w-52"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)]">
+                          <th className="sticky left-0 z-20 bg-[hsl(var(--muted)/0.4)] px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[220px]">Student</th>
+                          {selectedLectureColumns.map((lec, ci) => (
+                            <th key={lec.id} className="px-3 py-3 text-center min-w-[96px] border-l border-[hsl(var(--border))]">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="text-[11px] font-bold text-[hsl(var(--muted-foreground))] tabular-nums">{String(ci + 1).padStart(2, '0')}</span>
+                                <span className="text-[10px] font-normal text-[hsl(var(--muted-foreground)/0.7)] max-w-[90px] truncate normal-case" title={lec.title}>{lec.title}</span>
+                              </div>
+                            </th>
+                          ))}
+                          <th className="px-3 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[60px] border-l border-[hsl(var(--border))]">%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedLectureStudents.map((student, ri) => {
+                          const pct = selectedLectureColumns.length > 0
+                            ? Math.round((student.joinedCount / selectedLectureColumns.length) * 100)
+                            : 0;
+                          const rowBg =
+                            pct >= 80 ? (ri % 2 === 0 ? 'bg-green-50/50' : 'bg-green-50/70')
+                            : pct > 0 ? (ri % 2 === 0 ? 'bg-amber-50/40' : 'bg-amber-50/60')
+                            : ri % 2 === 0 ? '' : 'bg-[hsl(var(--muted)/0.07)]';
+
+                          return (
+                            <tr key={student.userId} className={`border-b border-[hsl(var(--border))/0.5] hover:bg-[hsl(var(--muted)/0.25)] transition-colors ${rowBg}`}>
+                              <td className="sticky left-0 z-10 bg-inherit px-4 py-3">
+                                <div className="flex items-center gap-2.5">
+                                  {student.avatarUrl ? (
+                                    <img src={student.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-white font-bold text-[11px]">{getInitials(student.fullName, student.email)}</span>
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-[hsl(var(--foreground))] text-sm truncate max-w-[150px]">{student.fullName}</p>
+                                    <p className="text-[11px] text-[hsl(var(--muted-foreground))] font-mono">{student.instituteId}</p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {student.cells.map((cell) => (
+                                <td key={cell.lectureId} className={`px-2 py-3 text-center border-l border-[hsl(var(--border))/0.5] ${cell.joined ? 'bg-green-50/50' : ''}`}>
+                                  {cell.joined ? (
+                                    <svg className="w-5 h-5 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  )}
+                                </td>
+                              ))}
+
+                              <td className="px-3 py-3 text-center border-l border-[hsl(var(--border))]">
+                                <span className={`text-sm font-bold ${pct >= 80 ? 'text-green-600' : pct > 0 ? 'text-amber-500' : 'text-red-500'}`}>{pct}%</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <PaginationBar
+                    total={filteredLectureStudents.length}
+                    page={lecturePage}
+                    rowsPerPage={lectureRowsPerPage}
+                    onPageChange={setLecturePage}
+                    onRowsPerPageChange={v => { setLectureRowsPerPage(v); setLecturePage(0); }}
+                  />
+                </div>
+              )}
+
+              {!loadingLectures && selectedLectureColumns.length > 0 && liveAttTab === 'grid' && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] shadow-sm p-3 text-center">
+                      <p className="text-2xl font-bold text-[hsl(var(--foreground))]">{lectureStudents.length}</p>
+                      <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mt-0.5">Students</p>
+                    </div>
+                    <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] shadow-sm p-3 text-center">
+                      <p className="text-2xl font-bold text-[hsl(var(--foreground))]">{selectedLectureColumns.length}</p>
+                      <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mt-0.5">Lectures</p>
+                    </div>
+                    <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] shadow-sm p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-600">{lectureJoinTotal}</p>
+                      <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mt-0.5">Student Joins</p>
+                    </div>
+                    <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] shadow-sm p-3 text-center">
+                      <p className="text-2xl font-bold text-violet-600">{lectureGuestRows.length}</p>
+                      <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mt-0.5">Guest Joins</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={lectureSearch}
+                        onChange={e => setLectureSearch(e.target.value)}
+                        placeholder="Search by name, ID, email, or phone"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                      />
+                    </div>
+                    <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                      {filteredLectureStudents.length} student{filteredLectureStudents.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.5)]">
+                            <th className="sticky left-0 z-20 bg-[hsl(var(--muted)/0.5)] px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[200px]">Student</th>
+                            <th className="sticky left-[200px] z-20 bg-[hsl(var(--muted)/0.5)] px-3 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[110px] border-r border-[hsl(var(--border))]">ID</th>
+                            {selectedLectureColumns.map((lec, ci) => (
+                              <th key={lec.id} className={`px-3 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[180px] ${ci > 0 ? 'border-l border-[hsl(var(--border))]' : ''}`}>
+                                <span className="truncate max-w-[160px] normal-case font-semibold text-[12px] text-[hsl(var(--foreground))] inline-block">{lec.title}</span>
+                              </th>
+                            ))}
+                            <th className="px-3 py-3 text-center text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider min-w-[72px] border-l border-[hsl(var(--border))]">%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pagedLectureStudents.map((student, ri) => {
+                            const pct = selectedLectureColumns.length > 0
+                              ? Math.round((student.joinedCount / selectedLectureColumns.length) * 100)
+                              : 0;
+                            return (
+                              <tr key={student.userId} className={`border-b border-[hsl(var(--border))/0.5] hover:bg-[hsl(var(--muted)/0.3)] transition-colors ${ri % 2 === 0 ? '' : 'bg-[hsl(var(--muted)/0.1)]'}`}>
+                                <td className="sticky left-0 z-10 bg-[hsl(var(--card))] px-4 py-3">
+                                  <div className="flex items-center gap-2.5">
+                                    {student.avatarUrl ? (
+                                      <img src={student.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-white font-bold text-[11px]">{getInitials(student.fullName, student.email)}</span>
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="font-semibold text-[hsl(var(--foreground))] text-sm truncate max-w-[140px]">{student.fullName}</p>
+                                      <p className="text-[11px] text-[hsl(var(--muted-foreground))] truncate max-w-[140px]">{student.email || '-'}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="sticky left-[200px] z-10 bg-[hsl(var(--card))] px-3 py-3 border-r border-[hsl(var(--border))]">
+                                  <span className="text-xs font-mono text-[hsl(var(--muted-foreground))]">{student.instituteId}</span>
+                                </td>
+                                {student.cells.map((cell, ci) => (
+                                  <td key={cell.lectureId} className={`px-3 py-3 ${ci > 0 ? 'border-l border-[hsl(var(--border))/0.4]' : ''}`}>
+                                    <div className={`rounded-lg border px-2.5 py-2 ${cell.joined ? 'bg-green-50 border-green-200' : 'bg-white border-[hsl(var(--border))]'}`}>
+                                      <span className={`text-xs font-semibold ${cell.joined ? 'text-green-700' : 'text-slate-500'}`}>
+                                        {cell.joined ? 'Joined' : 'Not joined'}
+                                      </span>
+                                      <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">
+                                        {cell.joinedAt ? new Date(cell.joinedAt).toLocaleString() : '-'}
+                                      </p>
+                                    </div>
+                                  </td>
+                                ))}
+                                <td className="px-3 py-3 text-center border-l border-[hsl(var(--border))]">
+                                  <span className={`text-sm font-bold ${pct >= 80 ? 'text-green-600' : pct > 0 ? 'text-amber-500' : 'text-red-500'}`}>{pct}%</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <PaginationBar
+                      total={filteredLectureStudents.length}
+                      page={lecturePage}
+                      rowsPerPage={lectureRowsPerPage}
+                      onPageChange={setLecturePage}
+                      onRowsPerPageChange={v => { setLectureRowsPerPage(v); setLecturePage(0); }}
+                    />
+                  </div>
+
+                  {lectureGuestRows.length > 0 && (
+                    <div className="bg-[hsl(var(--card))] rounded-2xl border border-[hsl(var(--border))] shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
+                        <p className="text-sm font-bold text-[hsl(var(--foreground))]">Public Guest Joins</p>
+                        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Guests joined from public lecture links</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.5)]">
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Lecture</th>
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Name</th>
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Phone</th>
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Email</th>
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Note</th>
+                              <th className="px-4 py-3 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Joined At</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lectureGuestRows.map((g, idx) => (
+                              <tr key={`${g.lectureId}-${idx}`} className="border-b border-[hsl(var(--border))/0.5] hover:bg-[hsl(var(--muted)/0.2)]">
+                                <td className="px-4 py-2.5 text-[hsl(var(--foreground))] font-medium">{g.lectureTitle}</td>
+                                <td className="px-4 py-2.5 text-[hsl(var(--foreground))]">{g.fullName}</td>
+                                <td className="px-4 py-2.5 text-[hsl(var(--muted-foreground))]">{g.phone}</td>
+                                <td className="px-4 py-2.5 text-[hsl(var(--muted-foreground))]">{g.email}</td>
+                                <td className="px-4 py-2.5 text-[hsl(var(--muted-foreground))]">{g.note}</td>
+                                <td className="px-4 py-2.5 text-[hsl(var(--muted-foreground))]">{g.joinedAt}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>

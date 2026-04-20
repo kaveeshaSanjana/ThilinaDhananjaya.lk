@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+const SESSION_HINT_KEY = 'authSessionHint';
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
   withCredentials: true, // Send cookies (refresh token) with every request
@@ -52,6 +54,7 @@ api.interceptors.response.use(
       if (originalRequest.url?.includes('/auth/refresh') || originalRequest.url?.includes('/auth/login')) {
         sessionStorage.removeItem('accessToken');
         sessionStorage.removeItem('user');
+        localStorage.removeItem(SESSION_HINT_KEY);
         return Promise.reject(error);
       }
 
@@ -82,6 +85,7 @@ api.interceptors.response.use(
         processQueue(refreshError, null);
         sessionStorage.removeItem('accessToken');
         sessionStorage.removeItem('user');
+        localStorage.removeItem(SESSION_HINT_KEY);
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
