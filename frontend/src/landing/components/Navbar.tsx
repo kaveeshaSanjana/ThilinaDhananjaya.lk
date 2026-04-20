@@ -55,7 +55,7 @@ const Navbar = () => {
               <div className="relative">
                 <img
                   src={logoImg}
-                  alt="Easy English Logo"
+                  alt="Thilina Dhananjaya Logo"
                   className={`object-contain transition-all duration-300 ${
                     scrolled ? "w-10 h-10" : "w-12 h-12"
                   }`}
@@ -66,7 +66,7 @@ const Navbar = () => {
                   className="text-sm font-bold text-foreground leading-tight"
                   style={{ fontFamily: "var(--font-body)" }}
                 >
-                  Easy English
+                  Thilina Dhananjaya
                 </h2>
                 <p className="text-xs text-muted-foreground">with Thilina Dhananjaya</p>
               </div>

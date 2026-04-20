@@ -52,7 +52,7 @@ const LoadingPage = ({ onLoadComplete }: LoadingPageProps) => {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="flex justify-center mb-8"
         >
-          <img src={logoImg} alt="Easy English" className="w-20 h-20 object-contain" />
+          <img src={logoImg} alt="Thilina Dhananjaya" className="w-20 h-20 object-contain" />
         </motion.div>
 
         <motion.h1
@@ -62,7 +62,7 @@ const LoadingPage = ({ onLoadComplete }: LoadingPageProps) => {
           className="text-4xl font-extrabold text-foreground mb-2"
           style={{ fontFamily: "var(--font-heading)" }}
         >
-          Easy English
+          Thilina Dhananjaya
         </motion.h1>
 
         <motion.p

@@ -1973,7 +1973,7 @@ export default function AdminClassDetail() {
     try {
       const ExcelJSImport = await import('exceljs');
       const workbook = new ExcelJSImport.Workbook();
-      workbook.creator = 'Suraksha LMS';
+      workbook.creator = 'Thilina Dhananjaya';
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet('Week Attendance');
@@ -2221,7 +2221,7 @@ export default function AdminClassDetail() {
     try {
       const ExcelJSImport = await import('exceljs');
       const workbook = new ExcelJSImport.Workbook();
-      workbook.creator = 'Suraksha LMS';
+      workbook.creator = 'Thilina Dhananjaya';
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet('Class Payments');

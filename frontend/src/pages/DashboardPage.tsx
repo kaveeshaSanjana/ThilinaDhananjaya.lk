@@ -68,7 +68,7 @@ export default function DashboardPage() {
               <span className="text-lg">👋</span> {greeting},
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-white mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{name}!</h1>
-            <p className="text-white/50 text-sm mt-2 max-w-md">Welcome back to Easy English. Continue where you left off.</p>
+            <p className="text-white/50 text-sm mt-2 max-w-md">Welcome back to Thilina Dhananjaya. Continue where you left off.</p>
             {user?.profile?.instituteId && (
               <div className="inline-flex mt-3 px-3 py-1.5 rounded-lg bg-white/8 border border-white/10">
                 <span className="text-xs text-[hsl(var(--primary))] font-mono tracking-wide">ID: {user.profile.instituteId}</span>

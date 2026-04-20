@@ -166,8 +166,8 @@ export default function Layout() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
             {/* Brand */}
             <Link to="/" className="flex items-center gap-2.5">
-              <img src={logoImg} alt="Easy English" className="h-10 w-10 object-contain" />
-              <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Easy English</span>
+              <img src={logoImg} alt="Thilina Dhananjaya" className="h-10 w-10 object-contain" />
+              <span className="text-base font-bold text-[hsl(var(--foreground))]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Thilina Dhananjaya</span>
             </Link>
 
             {/* Right actions */}
@@ -214,8 +214,8 @@ export default function Layout() {
       {/* Sidebar Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[hsl(var(--border))]">
         <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} className="flex items-center gap-2.5">
-          <img src={logoImg} alt="Easy English" className="h-8 w-8 object-contain" />
-          <span className="text-[13px] font-bold text-[hsl(var(--foreground))] leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Easy English</span>
+          <img src={logoImg} alt="Thilina Dhananjaya" className="h-8 w-8 object-contain" />
+          <span className="text-[13px] font-bold text-[hsl(var(--foreground))] leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Thilina Dhananjaya</span>
         </Link>
         <div className="flex items-center gap-0.5">
           <button onClick={toggleTheme} className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition" title="Toggle theme">

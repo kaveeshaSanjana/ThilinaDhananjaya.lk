@@ -36,7 +36,7 @@ const PostSection = () => {
       >
         <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-primary/30 bg-primary/5 text-primary text-[11px] md:text-xs font-bold uppercase tracking-[0.2em]">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          Easy English
+          Thilina Dhananjaya
         </span>
       </motion.div>
 
