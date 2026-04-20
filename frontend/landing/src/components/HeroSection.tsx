@@ -63,7 +63,7 @@ const HeroSection = () => {
             transition={{ delay: 0.5, duration: 0.6, ease: "easeOut" }}
             className="text-3xl md:text-5xl lg:text-6xl font-extrabold text-foreground leading-tight mb-2 md:mb-4"
           >
-            Thilina Dhananjaya
+            Easy English
           </motion.h1>
 
           <motion.div

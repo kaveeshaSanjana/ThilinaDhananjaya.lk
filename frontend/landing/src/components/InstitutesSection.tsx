@@ -1,16 +1,25 @@
 import { motion } from "framer-motion";
 import { MapPin, Wifi, Users, Monitor } from "lucide-react";
-import sriLankaMap from "@/assets/sri-lanka-map.png";
+import worldMap from "@/assets/world-map-sketch.png";
 import winsLogo from "@/assets/wins-logo.png";
-// Save sihasma-logo.png to src/assets/ to enable the logo below
+
 const sihasmaLogo: string | null = null;
 
+// Pin positions across all continents - global distribution
 const locations = [
-  { top: "58%", left: "38%" },
-  { top: "48%", left: "52%" },
-  { top: "78%", left: "42%" },
-  { top: "8%",  left: "48%" },
-  { top: "40%", left: "44%" },
+  { top: "35%", left: "15%" }, // North America - West Coast
+  { top: "40%", left: "25%" }, // North America - East Coast
+  { top: "70%", left: "28%" }, // South America - Brazil
+  { top: "80%", left: "32%" }, // South America - Argentina
+  { top: "32%", left: "48%" }, // Europe - UK/Western
+  { top: "38%", left: "53%" }, // Europe - Central
+  { top: "55%", left: "50%" }, // Africa - Central
+  { top: "62%", left: "58%" }, // Africa - East
+  { top: "48%", left: "75%" }, // Asia - India
+  { top: "42%", left: "82%" }, // Asia - China
+  { top: "50%", left: "85%" }, // Southeast Asia
+  { top: "72%", left: "88%" }, // Australia
+  { top: "45%", left: "65%" }, // Middle East
 ];
 
 const institutes = [
@@ -49,30 +58,30 @@ const YouTubeLogo = () => (
 const stats = [
   { icon: <Users className="w-5 h-5" />, value: "2000+", label: "Students" },
   { icon: <Monitor className="w-5 h-5" />, value: "Live", label: "Classes" },
-  { icon: <Wifi className="w-5 h-5" />, value: "මුලු ලන්කාවටම", label: "Reach" },
+  { icon: <Wifi className="w-5 h-5" />, value: "මුලු ලෝකෙටම", label: "Reach" },
 ];
 
 const InstitutesSection = () => (
   <section id="institutes" className="py-24 overflow-hidden bg-background">
     <div className="container mx-auto px-4 max-w-7xl">
 
-      {/* ── Shared heading ── */}
+      {/* ── Heading ── */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.6 }}
-        className="text-center mb-16"
+        className="text-center mb-12"
       >
         <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-bold uppercase tracking-[0.2em] mb-5">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          Online & Island-wide
+          Online & world-wide
         </span>
         <h2
           className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground leading-tight"
           style={{ fontFamily: "var(--font-heading)" }}
         >
-          ලන්කාවේ ඔනේම තැනක ඉදන්
+          ලෝකේ ඔනේම තැනක ඉදන්
           <span className="text-primary"> ආසාවෙන් ඉගෙනගන්න</span>
         </h2>
         <p
@@ -83,150 +92,155 @@ const InstitutesSection = () => (
         </p>
       </motion.div>
 
-      {/* ── Two-column layout: Big Map | Online + Institutes ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+      {/* ── TOP — Long World Map with pins ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="relative mx-auto mb-20 max-w-5xl"
+      >
+        <div className="absolute inset-0 bg-primary/10 blur-[80px] rounded-full scale-90" />
+        <div className="relative aspect-[2.5/1] w-full">
+          <img
+            src={worldMap}
+            alt="World map showing global student reach"
+            className="w-full h-full object-contain dark:invert opacity-90"
+            style={{ filter: "drop-shadow(0 10px 30px hsl(var(--primary)/0.2))" }}
+          />
+          {locations.map((loc, i) => (
+            <motion.div
+              key={i}
+              className="absolute -translate-x-1/2 -translate-y-full"
+              style={{ top: loc.top, left: loc.left }}
+              initial={{ opacity: 0, scale: 0, y: -10 }}
+              whileInView={{ opacity: 1, scale: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: 0.4 + i * 0.1, type: "spring", stiffness: 280 }}
+            >
+              <motion.div
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: i * 0.3 }}
+                className="relative"
+              >
+                <MapPin className="w-7 h-7 text-primary fill-primary/30 drop-shadow-[0_0_8px_hsl(var(--primary)/0.7)]" />
+                <motion.span
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-primary/50"
+                  animate={{ scale: [1, 3], opacity: [0.6, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i * 0.3 }}
+                />
+              </motion.div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
 
-        {/* LEFT — Big Sri Lanka Map */}
+      {/* ── BOTTOM — Two columns ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16">
+
+        {/* LEFT — Online platforms */}
         <motion.div
-          initial={{ opacity: 0, x: -50 }}
+          initial={{ opacity: 0, x: -30 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="flex justify-center"
+          transition={{ duration: 0.6 }}
+          className="flex flex-col gap-4"
         >
-          <div className="relative w-[280px] sm:w-[340px] md:w-[400px] lg:w-full lg:max-w-[420px]">
-            <div className="absolute inset-0 bg-primary/15 blur-[80px] rounded-full scale-110" />
-            <img
-              src={sriLankaMap}
-              alt="Sri Lanka Map"
-              className="relative w-full drop-shadow-2xl"
-              style={{ filter: "drop-shadow(0 0 24px hsl(var(--primary)/0.35))" }}
-            />
-            {locations.map((loc, i) => (
-              <motion.div
-                key={i}
-                className="absolute"
-                style={{ top: loc.top, left: loc.left }}
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: 0.5 + i * 0.12, type: "spring", stiffness: 300 }}
-              >
-                <motion.div
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }}
-                  className="relative"
-                >
-                  <MapPin className="w-6 h-6 text-primary fill-primary/30 drop-shadow-[0_0_8px_rgba(59,130,246,0.7)]" />
-                  <motion.span
-                    className="absolute -inset-1 rounded-full border border-primary/40"
-                    animate={{ scale: [1, 3], opacity: [0.5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i * 0.3 }}
-                  />
-                </motion.div>
-              </motion.div>
+          <p
+            className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Online Platforms
+          </p>
+
+          {[
+            { logo: <ZoomLogo />, name: "Zoom", desc: "Interactive live sessions with real-time Q&A", badge: "bg-blue-500" },
+            { logo: <YouTubeLogo />, name: "YouTube", desc: "Watch recorded lessons anytime at your pace", badge: "bg-red-500" },
+          ].map((p) => (
+            <div
+              key={p.name}
+              className="flex items-center gap-4 p-4 rounded-2xl bg-muted/50 border border-border hover:shadow-md transition-shadow duration-300"
+            >
+              <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 shadow">{p.logo}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-bold text-foreground text-sm" style={{ fontFamily: "var(--font-body)" }}>{p.name}</span>
+                  <span className={`${p.badge} text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full`}>Live</span>
+                </div>
+                <p className="text-muted-foreground text-xs" style={{ fontFamily: "var(--font-body)" }}>{p.desc}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3 mt-2">
+            {stats.map((s) => (
+              <div key={s.label} className="flex flex-col items-center gap-1 py-4 rounded-xl bg-muted/50 border border-border text-center">
+                <div className="text-primary">{s.icon}</div>
+                <p className="font-bold text-foreground text-sm leading-none">{s.value}</p>
+                <p className="text-muted-foreground text-[10px] uppercase tracking-wider">{s.label}</p>
+              </div>
             ))}
           </div>
         </motion.div>
 
-        {/* RIGHT — Online platforms (top) + Physical Institutes (bottom) */}
+        {/* RIGHT — Physical Partner Institutes */}
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={{ opacity: 0, x: 30 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="flex flex-col gap-8"
+          transition={{ duration: 0.6 }}
+          className="flex flex-col gap-4"
         >
-          {/* Online platforms */}
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-1" style={{ fontFamily: "var(--font-body)" }}>
-              Online Platforms
-            </p>
-            {[
-              { logo: <ZoomLogo />, name: "Zoom", desc: "Interactive live sessions with real-time Q&A", badge: "bg-blue-500" },
-              { logo: <YouTubeLogo />, name: "YouTube", desc: "Watch recorded lessons anytime at your pace", badge: "bg-red-500" },
-            ].map((p) => (
-              <div
-                key={p.name}
-                className="flex items-center gap-4 p-4 rounded-2xl bg-muted/50 border border-border hover:shadow-md transition-shadow duration-300"
-              >
-                <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 shadow">{p.logo}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-bold text-foreground text-sm" style={{ fontFamily: "var(--font-body)" }}>{p.name}</span>
-                    <span className={`${p.badge} text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full`}>Live</span>
+          <p
+            className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Physical Partner Institutes
+          </p>
+
+          {institutes.map((inst, i) => (
+            <motion.div
+              key={inst.name}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: i * 0.1 }}
+              whileHover={{ y: -3, transition: { duration: 0.2 } }}
+              className="bg-card border border-border rounded-2xl shadow-sm hover:shadow-lg transition-shadow duration-300 p-5 flex gap-5 items-center"
+            >
+              {/* Logo */}
+              <div className="w-24 h-16 flex-shrink-0 rounded-xl overflow-hidden border border-border bg-white flex items-center justify-center p-2">
+                {inst.logo ? (
+                  <img src={inst.logo} alt={inst.name} className="w-full h-full object-contain" />
+                ) : (
+                  <div className="bg-red-600 text-white font-extrabold text-sm px-2 py-1 rounded text-center" style={{ fontFamily: "var(--font-heading)" }}>
+                    සිහස්මා
                   </div>
-                  <p className="text-muted-foreground text-xs" style={{ fontFamily: "var(--font-body)" }}>{p.desc}</p>
+                )}
+              </div>
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "var(--font-body)" }}>{inst.name}</p>
+                {inst.sublabel && <p className="text-muted-foreground text-xs mt-0.5">{inst.sublabel}</p>}
+                <div className="flex items-center gap-1 mt-1 text-muted-foreground text-xs">
+                  <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                  <span>{inst.location}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {inst.phone.map((p) => (
+                    <a key={p} href={`tel:${p.replace(/\s/g, "")}`} className="text-primary font-semibold text-xs hover:underline">
+                      {p}
+                    </a>
+                  ))}
                 </div>
               </div>
-            ))}
+            </motion.div>
+          ))}
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3 mt-1">
-              {stats.map((s) => (
-                <div key={s.label} className="flex flex-col items-center gap-1 py-4 rounded-xl bg-muted/50 border border-border text-center">
-                  <div className="text-primary">{s.icon}</div>
-                  <p className="font-bold text-foreground text-sm leading-none">{s.value}</p>
-                  <p className="text-muted-foreground text-[10px] uppercase tracking-wider">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap" style={{ fontFamily: "var(--font-body)" }}>
-              Physical Partner Institutes
-            </span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          {/* Institute cards */}
-          <div className="flex flex-col gap-4">
-            {institutes.map((inst, i) => (
-              <motion.div
-                key={inst.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                className="bg-card border border-border rounded-2xl shadow-sm hover:shadow-lg transition-shadow duration-300 p-5 flex gap-5 items-center"
-              >
-                {/* Logo */}
-                <div className="w-24 h-16 flex-shrink-0 rounded-xl overflow-hidden border border-border bg-white flex items-center justify-center p-2">
-                  {inst.logo ? (
-                    <img src={inst.logo} alt={inst.name} className="w-full h-full object-contain" />
-                  ) : (
-                    <div className="bg-red-600 text-white font-extrabold text-sm px-2 py-1 rounded text-center" style={{ fontFamily: "var(--font-heading)" }}>
-                      සිහස්මා
-                    </div>
-                  )}
-                </div>
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-foreground text-sm leading-snug" style={{ fontFamily: "var(--font-body)" }}>{inst.name}</p>
-                  {inst.sublabel && <p className="text-muted-foreground text-xs mt-0.5">{inst.sublabel}</p>}
-                  <div className="flex items-center gap-1 mt-1 text-muted-foreground text-xs">
-                    <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-                    <span>{inst.location}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {inst.phone.map((p) => (
-                      <a key={p} href={`tel:${p.replace(/\s/g, "")}`} className="text-primary font-semibold text-xs hover:underline">
-                        {p}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-
-            <p className="text-muted-foreground/50 text-xs text-center mt-1" style={{ fontFamily: "var(--font-body)" }}>
-              More partner institutes coming soon across Sri Lanka
-            </p>
-          </div>
+          <p className="text-muted-foreground/50 text-xs text-center mt-1" style={{ fontFamily: "var(--font-body)" }}>
+            More partner institutes coming soon across Sri Lanka
+          </p>
         </motion.div>
       </div>
     </div>

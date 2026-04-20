@@ -75,18 +75,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row overflow-x-hidden bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-100">
       {/* Top image on mobile. Hidden while keyboard is open. */}
-      <div className={`block md:hidden w-full relative h-[25vh] shrink-0 overflow-hidden border-b border-blue-200/60 transition-all duration-200${keyboardVisible ? ' hidden' : ''}`}>
+      <div className={`block md:hidden w-full relative h-[36vh] min-h-[230px] shrink-0 overflow-hidden border-b border-blue-200/60 transition-all duration-200${keyboardVisible ? ' hidden' : ''}`}>
         <img
           src={thilinaLoginIllustration}
           alt="Education illustration"
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover object-[center_0%]"
           loading="lazy"
         />
       </div>
 
       {/* Left column: login content */}
       <div
-        className="w-full md:w-3/5 lg:w-1/2 flex flex-col items-center justify-center px-5 py-7 sm:p-7 md:p-10 bg-white/95 backdrop-blur-sm -mt-8 md:mt-0 rounded-t-[3rem] md:rounded-none relative z-10 flex-1 md:min-h-screen overflow-y-auto"
+        className="w-full md:w-3/5 lg:w-1/2 flex flex-col items-center justify-center px-5 py-7 sm:p-7 md:p-10 bg-white/95 backdrop-blur-sm -mt-10 md:mt-0 rounded-t-[3.25rem] md:rounded-none relative z-10 flex-1 md:min-h-screen overflow-y-auto"
         onFocusCapture={scrollInputIntoView}
       >
         <div className="w-full max-w-md md:max-w-lg space-y-6 md:space-y-7">
@@ -102,7 +102,7 @@ export default function LoginPage() {
             <p className="text-sm md:text-sm text-slate-500">{BRAND_WELCOME_SUBTITLE}</p>
           </div>
 
-          <Card className="border-blue-100 bg-white shadow-[0_12px_35px_rgba(30,64,175,0.12)] lg:shadow-[0_20px_45px_rgba(30,64,175,0.14)]">
+          <Card className="rounded-2xl border-blue-100 bg-white shadow-[0_12px_35px_rgba(30,64,175,0.12)] lg:shadow-[0_20px_45px_rgba(30,64,175,0.14)]">
             <CardContent className="p-5 md:p-8 lg:p-10">
               <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                 <div className="space-y-1.5">

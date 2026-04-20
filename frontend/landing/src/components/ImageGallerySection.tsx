@@ -1,109 +1,57 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { ZoomIn, X, ChevronLeft, ChevronRight } from "lucide-react";
+import g01 from "@/assets/gallery/g01.jpeg";
+import g02 from "@/assets/gallery/g02.jpeg";
+import g03 from "@/assets/gallery/g03.jpeg";
+import g04 from "@/assets/gallery/g04.jpeg";
+import g05 from "@/assets/gallery/g05.jpeg";
+import g06 from "@/assets/gallery/g06.jpeg";
+import g07 from "@/assets/gallery/g07.jpeg";
+import g08 from "@/assets/gallery/g08.jpeg";
 
-// ─── CONFIG ──────────────────────────────────────────────────────────────────
-// SAME spreadsheet as videos, but a SEPARATE sheet tab for the image gallery.
-// Sheet tab columns: url | alt
-//
-// How to get the gid:
-//   1. Open the spreadsheet → click the "Gallery" tab at the bottom
-//   2. Look at the browser URL bar → copy the number after "gid="
-//   3. Replace the value below.
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-2yuQgo-0SSFVFrQWqKrxoyOWXEk4oTs4lS8R0ix8O_52Jxn3CqwreJuieKEE6K4HrDUHxNAWh2KD/pub?gid=321259135&single=true&output=csv";
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface GalleryImage {
-  url: string;
-  alt: string;
-}
-
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === "," && !inQuotes) {
-      result.push(current.trim()); current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
-
-function parseCsv(text: string): GalleryImage[] {
-  const lines = text.trim().split(/\r?\n/).filter((l) => l.trim() !== "");
-  if (lines.length < 2) return [];
-  const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
-  const urlIdx = headers.indexOf("url");
-  const altIdx = headers.indexOf("alt");
-  return lines
-    .slice(1)
-    .map((line) => {
-      const cols = parseCsvLine(line);
-      return {
-        url: urlIdx >= 0 ? cols[urlIdx] ?? "" : "",
-        alt: altIdx >= 0 ? cols[altIdx] ?? "Gallery image" : "Gallery image",
-      };
-    })
-    .filter((img) => img.url.startsWith("http"));
-}
+const images: { src: string; alt: string; title: string }[] = [
+  { src: g01, alt: "Phonetics class on the whiteboard", title: "Phonetics Class" },
+  { src: g02, alt: "Birthday celebration with students", title: "Birthday Celebration" },
+  { src: g03, alt: "Engaged students in classroom", title: "Engaged Students" },
+  { src: g04, alt: "One-on-one tutoring session", title: "One-on-One Tutoring" },
+  { src: g05, alt: "Media interview", title: "Media Interview" },
+  { src: g06, alt: "Lecture hall full of students", title: "Lecture Hall" },
+  { src: g07, alt: "Free O/L batch session", title: "Free O/L Batch" },
+  { src: g08, alt: "Vocabulary practice — kitchen items", title: "Vocabulary Practice" },
+];
 
 const ImageGallerySection = () => {
-  const [images, setImages] = useState<GalleryImage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const showPrev = useCallback(
+    () => setLightboxIndex((i) => (i === null ? i : (i - 1 + images.length) % images.length)),
+    []
+  );
+  const showNext = useCallback(
+    () => setLightboxIndex((i) => (i === null ? i : (i + 1) % images.length)),
+    []
+  );
 
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-
-    fetch(SHEET_CSV_URL, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error("fetch failed");
-        return res.text();
-      })
-      .then((text) => {
-        clearTimeout(timer);
-        setImages(parseCsv(text));
-        setLoading(false);
-      })
-      .catch(() => {
-        clearTimeout(timer);
-        setError(true);
-        setLoading(false);
-      });
-
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, []);
-
-  const closeLightbox = useCallback(() => setLightbox(null), []);
-  const prevImage = useCallback(() =>
-    setLightbox((i) => (i !== null ? (i - 1 + images.length) % images.length : null)), [images.length]);
-  const nextImage = useCallback(() =>
-    setLightbox((i) => (i !== null ? (i + 1) % images.length : null)), [images.length]);
-
-  useEffect(() => {
-    if (lightbox === null) return;
+    if (lightboxIndex === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeLightbox();
-      if (e.key === "ArrowLeft") prevImage();
-      if (e.key === "ArrowRight") nextImage();
+      if (e.key === "ArrowLeft") showPrev();
+      if (e.key === "ArrowRight") showNext();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox, closeLightbox, prevImage, nextImage]);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [lightboxIndex, closeLightbox, showPrev, showNext]);
 
   return (
-    <section className="py-20 bg-background" id="gallery">
-      <div className="container mx-auto px-4 max-w-7xl">
+    <section className="py-20 bg-secondary/30" id="gallery">
+      <div className="container mx-auto px-4 max-w-6xl">
         {/* Heading */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -132,129 +80,124 @@ const ImageGallerySection = () => {
           </p>
         </motion.div>
 
-        {/* States */}
-        {loading && (
-          <div className="flex justify-center py-16">
-            <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-          </div>
-        )}
-        {error && (
-          <p className="text-center text-muted-foreground py-16">
-            Could not load gallery. Please check back later.
-          </p>
-        )}
-        {!loading && !error && images.length === 0 && (
-          <p className="text-center text-muted-foreground py-16">
-            No images found. Add rows to your Google Sheet and refresh.
-          </p>
-        )}
-
-        {/* Dynamic grid */}
-        {!loading && !error && images.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 auto-rows-[180px] sm:auto-rows-[200px] md:auto-rows-[220px]"
-          >
-            {images.map((img, i) => {
-              // Create varying sizes: every 5th image is large (2x2), every 3rd is tall (1x2)
-              const isLarge = i % 7 === 0;
-              const isTall = i % 5 === 2;
-              const isWide = i % 6 === 3;
-
-              return (
-                <motion.div
-                  key={`${img.url}-${i}`}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true, margin: "-30px" }}
-                  transition={{ duration: 0.4, delay: Math.min(i * 0.03, 0.5) }}
-                  className={`cursor-pointer overflow-hidden rounded-lg group relative ${
-                    isLarge
-                      ? "col-span-2 row-span-2"
-                      : isTall
-                      ? "row-span-2"
-                      : isWide
-                      ? "col-span-2"
-                      : ""
-                  }`}
-                  onClick={() => setLightbox(i)}
-                >
-                  <img
-                    src={img.url}
-                    alt={img.alt}
-                    loading="lazy"
-                    className="w-full h-full object-cover block transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 rounded-lg" />
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
+        {/* Uniform responsive grid — clean rectangular block */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
+          {images.map((img, i) => {
+            return (
+              <motion.button
+                key={i}
+                type="button"
+                onClick={() => setLightboxIndex(i)}
+                initial={{ opacity: 0, scale: 0.96 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.4, delay: (i % 6) * 0.05 }}
+                aria-label={`Open ${img.title}`}
+                className="group relative overflow-hidden aspect-square rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <img
+                  src={img.src}
+                  alt={img.alt}
+                  loading="lazy"
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
+                {/* Blue brand overlay */}
+                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/70 transition-colors duration-300 flex flex-col items-center justify-center text-center p-3">
+                  <div className="opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 flex flex-col items-center gap-2">
+                    <span className="w-11 h-11 rounded-full bg-white/15 backdrop-blur-sm border border-white/40 flex items-center justify-center">
+                      <ZoomIn className="w-5 h-5 text-white" />
+                    </span>
+                    <span
+                      className="text-white font-bold text-sm md:text-base drop-shadow"
+                      style={{ fontFamily: "var(--font-heading)" }}
+                    >
+                      {img.title}
+                    </span>
+                  </div>
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Lightbox */}
       <AnimatePresence>
-        {lightbox !== null && images[lightbox] && (
+        {lightboxIndex !== null && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={closeLightbox}
           >
             {/* Close */}
             <button
-              className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors z-10"
-              onClick={closeLightbox}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeLightbox();
+              }}
               aria-label="Close"
+              className="absolute top-4 right-4 md:top-6 md:right-6 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-colors z-10"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Prev */}
-            {images.length > 1 && (
-              <button
-                className="absolute left-4 text-white/80 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors z-10"
-                onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                aria-label="Previous"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-            )}
-
-            {/* Image */}
-            <motion.img
-              key={lightbox}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.25 }}
-              src={images[lightbox].url}
-              alt={images[lightbox].alt}
-              className="max-w-[90vw] max-h-[88vh] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                showPrev();
+              }}
+              aria-label="Previous image"
+              className="absolute left-3 md:left-6 top-1/2 -translate-y-1/2 w-11 h-11 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-primary border border-white/20 flex items-center justify-center text-white transition-colors z-10"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
 
             {/* Next */}
-            {images.length > 1 && (
-              <button
-                className="absolute right-4 text-white/80 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors z-10"
-                onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                aria-label="Next"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                showNext();
+              }}
+              aria-label="Next image"
+              className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 w-11 h-11 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-primary border border-white/20 flex items-center justify-center text-white transition-colors z-10"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
 
-            {/* Counter */}
-            <p className="absolute bottom-4 text-white/60 text-sm">
-              {lightbox + 1} / {images.length}
-            </p>
+            {/* Image */}
+            <motion.div
+              key={lightboxIndex}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.25 }}
+              className="relative max-w-5xl w-full max-h-[85vh] flex flex-col items-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={images[lightboxIndex].src}
+                alt={images[lightboxIndex].alt}
+                className="max-h-[80vh] w-auto max-w-full object-contain rounded-lg shadow-2xl"
+              />
+              <div className="mt-4 text-center">
+                <p
+                  className="text-white text-lg font-bold"
+                  style={{ fontFamily: "var(--font-heading)" }}
+                >
+                  {images[lightboxIndex].title}
+                </p>
+                <p className="text-white/60 text-xs mt-1">
+                  {lightboxIndex + 1} / {images.length}
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

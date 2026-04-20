@@ -93,7 +93,7 @@ const SriLankaSection = () => {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 text-xs font-bold uppercase tracking-[0.2em] mb-6"
           >
             <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-            Online & Island-wide
+            Online & world-wide
           </motion.span>
 
           <motion.h2

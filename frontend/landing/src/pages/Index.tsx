@@ -5,12 +5,12 @@ import HeroSection from "@/components/HeroSection";
 import PostSection from "@/components/PostSection";
 import AboutSection from "@/components/AboutSection";
 import CourseTypesSection from "@/components/CourseTypesSection";
+import AboutTeacherSection from "@/components/AboutTeacherSection";
 import LoadingPage from "@/components/LoadingPage";
 
 // Lazy load non-critical components
-const VideoGallerySection = lazy(() => import("@/components/VideoGallerySection"));
 const ImageGallerySection = lazy(() => import("@/components/ImageGallerySection"));
-const ReviewSection = lazy(() => import("@/components/ReviewSection"));
+
 const InstitutesSection = lazy(() => import("@/components/InstitutesSection"));
 const Footer = lazy(() => import("@/components/Footer"));
 const WhatsAppButton = lazy(() => import("@/components/WhatsAppButton"));
@@ -59,16 +59,10 @@ const Index = () => {
           </Suspense>
 
           <Suspense fallback={<SectionFallback />}>
-            <VideoGallerySection />
-          </Suspense>
-
-          <Suspense fallback={<SectionFallback />}>
             <ImageGallerySection />
           </Suspense>
 
-          <Suspense fallback={<SectionFallback />}>
-            <ReviewSection />
-          </Suspense>
+          <AboutTeacherSection />
 
           <Suspense fallback={null}>
             <Footer />
