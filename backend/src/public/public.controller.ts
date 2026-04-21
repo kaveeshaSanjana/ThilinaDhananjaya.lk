@@ -48,7 +48,15 @@ class PublicRegisterDto {
 
   @IsOptional()
   @IsString()
-  whatsappPhone?: string;
+  guardianPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
 
   @IsOptional()
   @IsString()
@@ -65,10 +73,6 @@ class PublicRegisterDto {
   @IsOptional()
   @IsString()
   guardianName?: string;
-
-  @IsOptional()
-  @IsString()
-  guardianPhone?: string;
 
   @IsOptional()
   @IsString()
@@ -224,14 +228,15 @@ export class PublicController {
       fullName: user.profile?.fullName,
       avatarUrl: user.profile?.avatarUrl,
       phone: user.profile?.phone,
-      whatsappPhone: user.profile?.whatsappPhone,
+      guardianPhone: user.profile?.guardianPhone,
+      emergencyContactPhone: user.profile?.emergencyContactPhone,
+      emergencyContactName: user.profile?.emergencyContactName,
       school: user.profile?.school,
       address: user.profile?.address,
       occupation: user.profile?.occupation,
       gender: user.profile?.gender,
       dateOfBirth: user.profile?.dateOfBirth,
       guardianName: user.profile?.guardianName,
-      guardianPhone: user.profile?.guardianPhone,
       relationship: user.profile?.relationship,
       status: user.profile?.status,
       enrolledDate: user.profile?.enrolledDate,
@@ -304,12 +309,13 @@ export class PublicController {
       instituteUserId,
       barcodeId: body.barcodeId,
       phone: body.phone,
-      whatsappPhone: body.whatsappPhone,
+      guardianPhone: body.guardianPhone,
+      emergencyContactPhone: body.emergencyContactPhone,
+      emergencyContactName: body.emergencyContactName,
       address: body.address,
       school: body.school,
       dateOfBirth: body.dateOfBirth,
       guardianName: body.guardianName,
-      guardianPhone: body.guardianPhone,
       relationship: body.relationship,
       occupation: body.occupation,
       avatarUrl: body.avatarUrl,

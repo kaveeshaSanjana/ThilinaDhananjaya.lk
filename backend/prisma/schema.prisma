@@ -204,12 +204,15 @@ model Profile {
   fullName      String
   avatarUrl     String?       @db.Text // Profile picture URL (S3)
   address       String?
-  phone         String?
-  whatsappPhone String?
+  // ─── Contact Numbers ───
+  phone         String?       // Student mobile/telephone
+  guardianPhone String?       // Guardian/Parent mobile/telephone
+  emergencyContactPhone String? // Emergency contact number (secondary)
+  emergencyContactName  String? // Emergency contact person name
+  // ───────────────────────
   school        String?
   dateOfBirth   DateTime?
   guardianName  String?
-  guardianPhone String?
   relationship  String?
   occupation    String?
   gender        Gender?
@@ -221,6 +224,8 @@ model Profile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([phone])
+  @@index([guardianPhone])
+  @@index([emergencyContactPhone])
   @@index([status])
   @@index([fullName])
 }

@@ -11,12 +11,13 @@ interface CreateUserData {
   instituteUserId?: string;
   barcodeId?: string;
   phone?: string;
-  whatsappPhone?: string;
+  guardianPhone?: string;
+  emergencyContactPhone?: string;
+  emergencyContactName?: string;
   address?: string;
   school?: string;
   dateOfBirth?: string;
   guardianName?: string;
-  guardianPhone?: string;
   relationship?: string;
   occupation?: string;
   avatarUrl?: string;
@@ -79,14 +80,15 @@ export class UsersService {
               fullName: data.fullName,
               avatarUrl: data.avatarUrl,
               phone: data.phone,
-              whatsappPhone: data.whatsappPhone,
+              guardianPhone: data.guardianPhone,
+              emergencyContactPhone: data.emergencyContactPhone,
+              emergencyContactName: data.emergencyContactName,
               address: data.address,
               school: data.school,
               occupation: data.occupation,
               gender: data.gender as any,
               dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
               guardianName: data.guardianName,
-              guardianPhone: data.guardianPhone,
               relationship: data.relationship,
             },
           },

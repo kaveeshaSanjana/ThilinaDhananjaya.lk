@@ -4,12 +4,16 @@
 
 This endpoint creates a **new public student user** without authentication.
 
-- Route: `POST /api/public/register-student`
-- Bulk route: `POST /api/public/register-students/bulk`
-- Auth: `None` (public)
-- Controller: `backend/src/public/public.controller.ts`
-- Service flow: `backend/src/users/users.service.ts#create`
-- DB tables: `User` + `Profile` (+ optional `Enrollment` when `classId` is provided)
+### Endpoint Details
+
+- **Route**: `POST /api/public/register-student`
+- **Full URL**: `https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student`
+- **Bulk route**: `POST /api/public/register-students/bulk`
+- **Bulk Full URL**: `https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-students/bulk`
+- **Auth**: `None` (public)
+- **Controller**: `backend/src/public/public.controller.ts`
+- **Service flow**: `backend/src/users/users.service.ts#create`
+- **DB tables**: `User` + `Profile` (+ optional `Enrollment` when `classId` is provided)
 
 ## What It Does Internally
 
@@ -21,12 +25,26 @@ This endpoint creates a **new public student user** without authentication.
    - Checks unique institute user ID (`profile.instituteId`) if provided.
    - Checks unique barcode ID (`profile.barcodeId`) if provided.
    - Creates `User` row with role `STUDENT`.
-   - Creates linked `Profile` row with student details.
+   - Creates linked `Profile` row with student details including all 4 contact numbers.
 5. If `classId` is provided:
   - Verifies class exists.
   - Auto-enrolls the created student into that class.
   - If `paymentType` / `customMonthlyFee` are provided, those class fee settings are applied.
 6. Returns created student data (without password) and optional enrollment payload.
+
+---
+
+## Contact Numbers Explanation
+
+The API supports **3 contact phone numbers** for student communications:
+
+| Field | Purpose | Example |
+|-------|---------|----------|
+| `phone` | **Student Mobile/Telephone** - Primary contact for the student | `0771234567` |
+| `guardianPhone` | **Guardian/Parent Mobile/Telephone** - Primary emergency contact | `0719876543` |
+| `emergencyContactPhone` | **Emergency Contact** - Secondary emergency contact (relative/alternate) | `0712345678` |
+
+All 3 numbers are **optional** but recommended for complete contact information. Each number is indexed in the database for fast lookups.
 
 ## Headers
 
@@ -37,6 +55,60 @@ Optional header:
 If both are provided, `orgId` from body has higher priority than header:
 
 - `body.orgId || header.x-institute-id`
+
+## Quick Start - cURL Example
+
+```bash
+curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "student@example.com",
+    "password": "Pass@12345",
+    "fullName": "Student Name",
+    "barcodeId": "BC-2026-0001",
+    "instituteUserId": "PUB-2026-0001",
+    "phone": "0771234567",
+    "guardianPhone": "0719876543",
+    "emergencyContactPhone": "0712345678",
+    "emergencyContactName": "Emergency Contact",
+    "gender": "MALE",
+    "dateOfBirth": "2007-05-15"
+  }'
+```
+
+## Auto-Assign to Institute & Class
+
+You can **automatically assign students to an institute and class** by including `orgId` and `classId` in the request:
+
+```bash
+curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "student@example.com",
+    "password": "Pass@12345",
+    "fullName": "Student Name",
+    "barcodeId": "BC-2026-0001",
+    "instituteUserId": "PUB-2026-0001",
+    "phone": "0771234567",
+    "guardianPhone": "0719876543",
+    "emergencyContactPhone": "0712345678",
+    "emergencyContactName": "Emergency Contact",
+    "gender": "MALE",
+    "orgId": "institute-uuid-here",
+    "classId": "class-uuid-here",
+    "paymentType": "HALF",
+    "customMonthlyFee": 2750
+  }'
+```
+
+**What happens when you include these fields:**
+
+- **`orgId`** (Institute ID): Automatically assigns the student to this institute
+- **`classId`** (Class ID): Automatically enrolls the student in this class
+- **`paymentType`** (optional): Sets the payment type for class enrollment (`FULL`, `HALF`, `FREE`)
+- **`customMonthlyFee`** (optional): Overrides the default class monthly fee
+
+The response will include both the created student and enrollment details.
 
 ## Request Body (All Supported Fields)
 
@@ -49,12 +121,13 @@ If both are provided, `orgId` from body has higher priority than header:
   "instituteId": "PUB-2026-0001",
   "barcodeId": "BC-2026-0001",
   "phone": "0771234567",
-  "whatsappPhone": "0771234567",
+  "guardianPhone": "0719876543",
+  "emergencyContactPhone": "0712345678",
+  "emergencyContactName": "Emergency Contact Name",
   "address": "No. 123, Main Street",
   "school": "Royal College",
   "dateOfBirth": "2007-05-15",
   "guardianName": "Parent Name",
-  "guardianPhone": "0719876543",
   "relationship": "Parent",
   "occupation": "Student",
   "avatarUrl": "https://example.com/avatar.jpg",
@@ -79,9 +152,14 @@ Required:
 Optional:
 
 - `instituteId` (acts as alias/fallback for institute user ID)
-- `phone`, `whatsappPhone`, `address`, `school`
+- **Contact Numbers (3 options)**:
+  - `phone` (student mobile/telephone)
+  - `guardianPhone` (guardian/parent phone)
+  - `emergencyContactPhone` (emergency contact number)
+- `emergencyContactName` (emergency contact person name) — used with `emergencyContactPhone`
+- `address`, `school`
 - `dateOfBirth` (`YYYY-MM-DD` / ISO date string)
-- `guardianName`, `guardianPhone`, `relationship`, `occupation`
+- `guardianName`, `relationship`, `occupation`
 - `avatarUrl`
 - `gender` (`MALE`, `FEMALE`, `OTHER`)
 - `orgId`
@@ -103,14 +181,15 @@ Optional:
     "fullName": "Student Name",
     "avatarUrl": "https://example.com/avatar.jpg",
     "phone": "0771234567",
-    "whatsappPhone": "0771234567",
+    "guardianPhone": "0719876543",
+    "emergencyContactPhone": "0712345678",
+    "emergencyContactName": "Emergency Contact Name",
     "school": "Royal College",
     "address": "No. 123, Main Street",
     "occupation": "Student",
     "gender": "MALE",
     "dateOfBirth": "2007-05-15T00:00:00.000Z",
     "guardianName": "Parent Name",
-    "guardianPhone": "0719876543",
     "relationship": "Parent",
     "status": "PENDING",
     "enrolledDate": "2026-04-19T09:00:00.000Z",
@@ -285,20 +364,182 @@ $body = @{
   instituteUserId = "PUB-2026-0001"
   barcodeId = "BC-2026-0001"
   phone = "0771234567"
-  whatsappPhone = "0771234567"
+  guardianPhone = "0719876543"
+  emergencyContactPhone = "0712345678"
+  emergencyContactName = "Emergency Contact"
   address = "123 Test Street"
   school = "Test School"
   dateOfBirth = "2007-05-15"
   guardianName = "Guardian Name"
-  guardianPhone = "0719876543"
   relationship = "Parent"
   occupation = "Student"
   avatarUrl = "https://example.com/avatar.jpg"
   gender = "MALE"
+  orgId = "institute-uuid"
   classId = "class-uuid"
   paymentType = "HALF"
   customMonthlyFee = 2750
 } | ConvertTo-Json
 
-Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/public/register-student" -ContentType "application/json" -Body $body
+Invoke-RestMethod -Method Post -Uri "https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student" -ContentType "application/json" -Body $body
+```
+
+## Example JavaScript/Axios Call
+
+```javascript
+import axios from 'axios';
+
+const API_BASE_URL = 'https://thilinadhananjayalk-825437021775.us-central1.run.app/api';
+
+const registerStudent = async () => {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/public/register-student`,
+      {
+        email: 'student@example.com',
+        password: 'Pass@12345',
+        fullName: 'Student Name',
+        barcodeId: 'BC-2026-0001',
+        instituteUserId: 'PUB-2026-0001',
+        phone: '0771234567',
+        guardianPhone: '0719876543',
+        emergencyContactPhone: '0712345678',
+        emergencyContactName: 'Emergency Contact',
+        address: '123 Test Street',
+        school: 'Test School',
+        dateOfBirth: '2007-05-15',
+        guardianName: 'Guardian Name',
+        relationship: 'Parent',
+        occupation: 'Student',
+        gender: 'MALE',
+        avatarUrl: 'https://example.com/avatar.jpg',
+        orgId: 'institute-uuid',
+        classId: 'class-uuid',
+        paymentType: 'HALF',
+        customMonthlyFee: 2750
+      }
+    );
+    
+    console.log('Student registered:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Registration failed:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Call the function
+registerStudent();
+```
+
+## Example React Hook/Service
+
+```typescript
+import { useMutation } from '@tanstack/react-query';
+import axios from 'axios';
+
+interface StudentRegistrationData {
+  email: string;
+  password: string;
+  fullName: string;
+  barcodeId: string;
+  instituteUserId: string;
+  // ─── Contact Numbers ───
+  phone?: string;
+  guardianPhone?: string;
+  emergencyContactPhone?: string;
+  emergencyContactName?: string;
+  // ──────────────────────
+  address?: string;
+  school?: string;
+  dateOfBirth?: string;
+  guardianName?: string;
+  relationship?: string;
+  occupation?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  avatarUrl?: string;
+  classId?: string;
+  paymentType?: 'FULL' | 'HALF' | 'FREE';
+  customMonthlyFee?: number;
+  orgId?: string;
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  'https://thilinadhananjayalk-825437021775.us-central1.run.app/api';
+
+export const useRegisterStudent = () => {
+  return useMutation({
+    mutationFn: async (data: StudentRegistrationData) => {
+      const response = await axios.post(
+        `${API_BASE_URL}/public/register-student`,
+        data
+      );
+      return response.data;
+    },
+  });
+};
+
+// Usage in component
+const MyComponent = () => {
+  const { mutate: registerStudent, isPending } = useRegisterStudent();
+  
+  const handleSubmit = (formData: StudentRegistrationData) => {
+    registerStudent(formData, {
+      onSuccess: (data) => {
+        console.log('Success:', data);
+        // Handle success (redirect, show message, etc.)
+      },
+      onError: (error) => {
+        console.error('Error:', error);
+        // Handle error
+      }
+    });
+  };
+  
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      // collect form data and call handleSubmit
+    }}>
+      {/* Form fields */}
+      <button type="submit" disabled={isPending}>
+        {isPending ? 'Registering...' : 'Register'}
+      </button>
+    </form>
+  );
+};
+```
+
+## Auto-Assign to Institute & Class Example
+
+```typescript
+// Register student and auto-assign to institute and class with all 4 contact numbers
+const handleRegisterWithInstituteAndClass = () => {
+  const { mutate: registerStudent } = useRegisterStudent();
+  
+  registerStudent({
+    email: 'student@example.com',
+    password: 'Pass@12345',
+    fullName: 'Student Name',
+    barcodeId: 'BC-2026-0001',
+    instituteUserId: 'PUB-2026-0001',
+    phone: '0771234567',           // Student phone
+    guardianPhone: '0719876543',   // Guardian/Parent phone
+    emergencyContactPhone: '0712345678',  // Emergency contact phone
+    emergencyContactName: 'Emergency Contact Name', // Emergency contact person
+    gender: 'MALE',
+    orgId: '550e8400-e29b-41d4-a716-446655440000', // Institute UUID
+    classId: '660f9511-f40c-52e5-b827-557766551111', // Class UUID
+    paymentType: 'HALF',
+    customMonthlyFee: 2750
+  }, {
+    onSuccess: (data) => {
+      console.log('Student registered and assigned to institute and class:', data);
+      // Student now belongs to the institute and is enrolled in the class
+    },
+    onError: (error) => {
+      console.error('Registration failed:', error);
+    }
+  });
+};
 ```
