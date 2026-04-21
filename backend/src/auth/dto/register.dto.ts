@@ -1,8 +1,9 @@
 import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString } from 'class-validator';
 
 export class RegisterDto {
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsString()
   @MinLength(6)
@@ -30,6 +31,10 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  telephone?: string;
+
+  @IsOptional()
+  @IsString()
   whatsappPhone?: string;
 
   @IsOptional()
@@ -51,6 +56,18 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   guardianPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianTelephone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
 
   @IsOptional()
   @IsString()

@@ -21,11 +21,11 @@ This endpoint creates a **new public student user** without authentication.
 2. Hashes the incoming plaintext password using `bcrypt.hash(password, 12)`.
 3. Calls `UsersService.create(...)`.
 4. `UsersService.create(...)`:
-   - Checks unique email.
+   - Checks unique email (only if email is provided).
    - Checks unique institute user ID (`profile.instituteId`) if provided.
    - Checks unique barcode ID (`profile.barcodeId`) if provided.
-   - Creates `User` row with role `STUDENT`.
-   - Creates linked `Profile` row with student details including all 4 contact numbers.
+   - Creates `User` row with role `STUDENT` (email can be NULL).
+  - Creates linked `Profile` row with student/guardian contacts, WhatsApp, and emergency contact fields.
 5. If `classId` is provided:
   - Verifies class exists.
   - Auto-enrolls the created student into that class.
@@ -36,15 +36,19 @@ This endpoint creates a **new public student user** without authentication.
 
 ## Contact Numbers Explanation
 
-The API supports **3 contact phone numbers** for student communications:
+The API supports **6 contact numbers** plus emergency contact name:
 
 | Field | Purpose | Example |
 |-------|---------|----------|
-| `phone` | **Student Mobile/Telephone** - Primary contact for the student | `0771234567` |
-| `guardianPhone` | **Guardian/Parent Mobile/Telephone** - Primary emergency contact | `0719876543` |
-| `emergencyContactPhone` | **Emergency Contact** - Secondary emergency contact (relative/alternate) | `0712345678` |
+| `phone` | **Student Mobile/Phone** - Primary student contact | `0771234567` |
+| `telephone` | **Student Telephone** - Secondary student contact | `0112345678` |
+| `whatsappPhone` | **Student WhatsApp** - WhatsApp contact for student | `0771234567` |
+| `guardianPhone` | **Guardian Mobile/Phone** - Primary guardian contact | `0719876543` |
+| `guardianTelephone` | **Guardian Telephone** - Secondary guardian contact | `0119876543` |
+| `emergencyContactPhone` | **Emergency Contact Phone** - Backup emergency contact number | `0712345678` |
+| `emergencyContactName` | **Emergency Contact Name** - Name for emergency contact | `Emergency Contact` |
 
-All 3 numbers are **optional** but recommended for complete contact information. Each number is indexed in the database for fast lookups.
+All these fields are **optional**. This enhancement is additive and does not remove existing student data.
 
 ## Headers
 
@@ -56,7 +60,7 @@ If both are provided, `orgId` from body has higher priority than header:
 
 - `body.orgId || header.x-institute-id`
 
-## Quick Start - cURL Example
+## Quick Start - cURL Example (With Email)
 
 ```bash
 curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
@@ -68,7 +72,10 @@ curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/pu
     "barcodeId": "BC-2026-0001",
     "instituteUserId": "PUB-2026-0001",
     "phone": "0771234567",
+    "telephone": "0112345678",
+    "whatsappPhone": "0771234567",
     "guardianPhone": "0719876543",
+    "guardianTelephone": "0119876543",
     "emergencyContactPhone": "0712345678",
     "emergencyContactName": "Emergency Contact",
     "gender": "MALE",
@@ -76,9 +83,24 @@ curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/pu
   }'
 ```
 
+## Quick Start - Without Email (Using Institute ID & Barcode)
+
+```bash
+curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "Pass@12345",
+    "fullName": "Student Name",
+    "barcodeId": "BC-2026-0001",
+    "instituteUserId": "PUB-2026-0001",
+    "phone": "0771234567",
+    "gender": "MALE"
+  }'
+```
+
 ## Auto-Assign to Institute & Class
 
-You can **automatically assign students to an institute and class** by including `orgId` and `classId` in the request:
+You can **automatically assign students to an institute and class** by including `orgId` and `classId` in the request. Email is optional:
 
 ```bash
 curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
@@ -90,7 +112,10 @@ curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/pu
     "barcodeId": "BC-2026-0001",
     "instituteUserId": "PUB-2026-0001",
     "phone": "0771234567",
+    "telephone": "0112345678",
+    "whatsappPhone": "0771234567",
     "guardianPhone": "0719876543",
+    "guardianTelephone": "0119876543",
     "emergencyContactPhone": "0712345678",
     "emergencyContactName": "Emergency Contact",
     "gender": "MALE",
@@ -98,6 +123,23 @@ curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/pu
     "classId": "class-uuid-here",
     "paymentType": "HALF",
     "customMonthlyFee": 2750
+  }'
+```
+
+**OR without email:**
+
+```bash
+curl -X POST https://thilinadhananjayalk-825437021775.us-central1.run.app/api/public/register-student \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "Pass@12345",
+    "fullName": "Student Name",
+    "barcodeId": "BC-2026-0001",
+    "instituteUserId": "PUB-2026-0001",
+    "phone": "0771234567",
+    "gender": "MALE",
+    "orgId": "institute-uuid-here",
+    "classId": "class-uuid-here"
   }'
 ```
 
@@ -118,12 +160,14 @@ The response will include both the created student and enrollment details.
   "password": "Pass@12345",
   "fullName": "Student Name",
   "instituteUserId": "PUB-2026-0001",
-  "instituteId": "PUB-2026-0001",
   "barcodeId": "BC-2026-0001",
   "phone": "0771234567",
+  "telephone": "0112345678",
+  "whatsappPhone": "0771234567",
   "guardianPhone": "0719876543",
+  "guardianTelephone": "0119876543",
   "emergencyContactPhone": "0712345678",
-  "emergencyContactName": "Emergency Contact Name",
+  "emergencyContactName": "Emergency Contact",
   "address": "No. 123, Main Street",
   "school": "Royal College",
   "dateOfBirth": "2007-05-15",
@@ -139,11 +183,12 @@ The response will include both the created student and enrollment details.
 }
 ```
 
+**Note:** `email` is **optional**. Students can be registered using `instituteUserId` and `barcodeId` as unique identifiers without an email address.
+
 ## Validation Rules
 
 Required:
 
-- `email` (valid email)
 - `password` (string, min length 6)
 - `fullName` (non-empty string)
 - `barcodeId` (non-empty string)
@@ -151,12 +196,16 @@ Required:
 
 Optional:
 
+- `email` (valid email) — optional, can register without if using other identifiers
 - `instituteId` (acts as alias/fallback for institute user ID)
-- **Contact Numbers (3 options)**:
-  - `phone` (student mobile/telephone)
-  - `guardianPhone` (guardian/parent phone)
-  - `emergencyContactPhone` (emergency contact number)
-- `emergencyContactName` (emergency contact person name) — used with `emergencyContactPhone`
+- **Contact Numbers (6 options)**:
+  - `phone` (student mobile/phone)
+  - `telephone` (student secondary telephone)
+  - `whatsappPhone` (student WhatsApp)
+  - `guardianPhone` (guardian/parent mobile/phone)
+  - `guardianTelephone` (guardian/parent secondary telephone)
+  - `emergencyContactPhone` (emergency contact phone)
+- `emergencyContactName` (emergency contact name)
 - `address`, `school`
 - `dateOfBirth` (`YYYY-MM-DD` / ISO date string)
 - `guardianName`, `relationship`, `occupation`
@@ -181,9 +230,12 @@ Optional:
     "fullName": "Student Name",
     "avatarUrl": "https://example.com/avatar.jpg",
     "phone": "0771234567",
+    "telephone": "0112345678",
+    "whatsappPhone": "0771234567",
     "guardianPhone": "0719876543",
+    "guardianTelephone": "0119876543",
     "emergencyContactPhone": "0712345678",
-    "emergencyContactName": "Emergency Contact Name",
+    "emergencyContactName": "Emergency Contact",
     "school": "Royal College",
     "address": "No. 123, Main Street",
     "occupation": "Student",
@@ -364,7 +416,10 @@ $body = @{
   instituteUserId = "PUB-2026-0001"
   barcodeId = "BC-2026-0001"
   phone = "0771234567"
+  telephone = "0112345678"
+  whatsappPhone = "0771234567"
   guardianPhone = "0719876543"
+  guardianTelephone = "0119876543"
   emergencyContactPhone = "0712345678"
   emergencyContactName = "Emergency Contact"
   address = "123 Test Street"
@@ -402,7 +457,10 @@ const registerStudent = async () => {
         barcodeId: 'BC-2026-0001',
         instituteUserId: 'PUB-2026-0001',
         phone: '0771234567',
+        telephone: '0112345678',
+        whatsappPhone: '0771234567',
         guardianPhone: '0719876543',
+        guardianTelephone: '0119876543',
         emergencyContactPhone: '0712345678',
         emergencyContactName: 'Emergency Contact',
         address: '123 Test Street',
@@ -432,6 +490,44 @@ const registerStudent = async () => {
 registerStudent();
 ```
 
+## Example JavaScript/Axios Call - Without Email
+
+```javascript
+import axios from 'axios';
+
+const API_BASE_URL = 'https://thilinadhananjayalk-825437021775.us-central1.run.app/api';
+
+const registerStudentWithoutEmail = async () => {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/public/register-student`,
+      {
+        password: 'Pass@12345',
+        fullName: 'Student Name',
+        barcodeId: 'BC-2026-0001',
+        instituteUserId: 'PUB-2026-0001',
+        phone: '0771234567',
+        telephone: '0112345678',
+        whatsappPhone: '0771234567',
+        guardianPhone: '0719876543',
+        guardianTelephone: '0119876543',
+        emergencyContactPhone: '0712345678',
+        emergencyContactName: 'Emergency Contact',
+        gender: 'MALE'
+      }
+    );
+    
+    console.log('Student registered without email:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Registration failed:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+registerStudentWithoutEmail();
+```
+
 ## Example React Hook/Service
 
 ```typescript
@@ -439,14 +535,17 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 
 interface StudentRegistrationData {
-  email: string;
+  email?: string;
   password: string;
   fullName: string;
   barcodeId: string;
   instituteUserId: string;
   // ─── Contact Numbers ───
   phone?: string;
+  telephone?: string;
+  whatsappPhone?: string;
   guardianPhone?: string;
+  guardianTelephone?: string;
   emergencyContactPhone?: string;
   emergencyContactName?: string;
   // ──────────────────────
@@ -513,7 +612,7 @@ const MyComponent = () => {
 ## Auto-Assign to Institute & Class Example
 
 ```typescript
-// Register student and auto-assign to institute and class with all 4 contact numbers
+// Register student and auto-assign to institute and class with contact numbers
 const handleRegisterWithInstituteAndClass = () => {
   const { mutate: registerStudent } = useRegisterStudent();
   
@@ -524,9 +623,12 @@ const handleRegisterWithInstituteAndClass = () => {
     barcodeId: 'BC-2026-0001',
     instituteUserId: 'PUB-2026-0001',
     phone: '0771234567',           // Student phone
+    telephone: '0112345678',       // Student telephone
+    whatsappPhone: '0771234567',   // Student WhatsApp
     guardianPhone: '0719876543',   // Guardian/Parent phone
-    emergencyContactPhone: '0712345678',  // Emergency contact phone
-    emergencyContactName: 'Emergency Contact Name', // Emergency contact person
+    guardianTelephone: '0119876543', // Guardian/Parent telephone
+    emergencyContactPhone: '0712345678', // Emergency contact phone
+    emergencyContactName: 'Emergency Contact', // Emergency contact name
     gender: 'MALE',
     orgId: '550e8400-e29b-41d4-a716-446655440000', // Institute UUID
     classId: '660f9511-f40c-52e5-b827-557766551111', // Class UUID

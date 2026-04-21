@@ -17,8 +17,9 @@ enum Gender {
 }
 
 class PublicRegisterDto {
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string; // Optional - can register with instituteUserId/barcodeId alone
 
   @IsString()
   @IsNotEmpty()
@@ -48,7 +49,19 @@ class PublicRegisterDto {
 
   @IsOptional()
   @IsString()
+  telephone?: string;
+
+  @IsOptional()
+  @IsString()
+  whatsappPhone?: string;
+
+  @IsOptional()
+  @IsString()
   guardianPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianTelephone?: string;
 
   @IsOptional()
   @IsString()
@@ -228,7 +241,10 @@ export class PublicController {
       fullName: user.profile?.fullName,
       avatarUrl: user.profile?.avatarUrl,
       phone: user.profile?.phone,
+      telephone: user.profile?.telephone,
+      whatsappPhone: user.profile?.whatsappPhone,
       guardianPhone: user.profile?.guardianPhone,
+      guardianTelephone: user.profile?.guardianTelephone,
       emergencyContactPhone: user.profile?.emergencyContactPhone,
       emergencyContactName: user.profile?.emergencyContactName,
       school: user.profile?.school,
@@ -309,7 +325,10 @@ export class PublicController {
       instituteUserId,
       barcodeId: body.barcodeId,
       phone: body.phone,
+      telephone: body.telephone,
+      whatsappPhone: body.whatsappPhone,
       guardianPhone: body.guardianPhone,
+      guardianTelephone: body.guardianTelephone,
       emergencyContactPhone: body.emergencyContactPhone,
       emergencyContactName: body.emergencyContactName,
       address: body.address,
@@ -378,7 +397,7 @@ export class PublicController {
     const successful: Array<{
       index: number;
       status: 'SUCCESS';
-      email: string;
+      email: string | null;
       studentId: string;
       instituteUserId: string | null;
       classId: string | null;
@@ -390,7 +409,7 @@ export class PublicController {
     const failed: Array<{
       index: number;
       status: 'FAILED';
-      email: string;
+      email: string | null;
       instituteUserId: string | null;
       classId: string | null;
       reason: string;

@@ -158,7 +158,7 @@ model AdminInstitute {
 
 model User {
   id        String   @id @default(uuid())
-  email     String   @unique
+  email     String?  @unique // Optional - can register without email if using instituteUserId/barcodeId
   password  String
   role      Role     @default(STUDENT)
   orgId     String?  // FK to Institute (set for students; also set for admins as default institute)
@@ -206,9 +206,12 @@ model Profile {
   address       String?
   // ─── Contact Numbers ───
   phone         String?       // Student mobile/telephone
+  telephone     String?       // Student secondary telephone
+  whatsappPhone String?       // Student WhatsApp number
   guardianPhone String?       // Guardian/Parent mobile/telephone
-  emergencyContactPhone String? // Emergency contact number (secondary)
-  emergencyContactName  String? // Emergency contact person name
+  guardianTelephone String?   // Guardian/Parent secondary telephone
+  emergencyContactPhone String? // Emergency contact number
+  emergencyContactName  String? // Emergency contact name
   // ───────────────────────
   school        String?
   dateOfBirth   DateTime?
@@ -224,7 +227,10 @@ model Profile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([phone])
+  @@index([telephone])
+  @@index([whatsappPhone])
   @@index([guardianPhone])
+  @@index([guardianTelephone])
   @@index([emergencyContactPhone])
   @@index([status])
   @@index([fullName])

@@ -72,9 +72,16 @@ export class UsersController {
       email: body.email, password: hashed, fullName: body.fullName,
       instituteUserId,
       barcodeId: body.barcodeId,
-      phone: body.phone, whatsappPhone: body.whatsappPhone, address: body.address,
+      phone: body.phone,
+      telephone: body.telephone,
+      whatsappPhone: body.whatsappPhone,
+      guardianPhone: body.guardianPhone,
+      guardianTelephone: body.guardianTelephone,
+      emergencyContactPhone: body.emergencyContactPhone,
+      emergencyContactName: body.emergencyContactName,
+      address: body.address,
       school: body.school, dateOfBirth: body.dateOfBirth, guardianName: body.guardianName,
-      guardianPhone: body.guardianPhone, relationship: body.relationship,
+      relationship: body.relationship,
       occupation: body.occupation, avatarUrl: body.avatarUrl, gender: body.gender,
       orgId: orgId || undefined,
     });
@@ -119,9 +126,26 @@ export class UsersController {
   @Patch('students/:id/phone')
   updatePhone(
     @Param('id') id: string,
-    @Body() body: { phone: string; whatsappPhone?: string },
+    @Body() body: {
+      phone: string;
+      telephone?: string;
+      whatsappPhone?: string;
+      guardianPhone?: string;
+      guardianTelephone?: string;
+      emergencyContactPhone?: string;
+      emergencyContactName?: string;
+    },
   ) {
-    return this.usersService.updatePhone(id, body.phone, body.whatsappPhone);
+    return this.usersService.updatePhone(
+      id,
+      body.phone,
+      body.telephone,
+      body.whatsappPhone,
+      body.guardianPhone,
+      body.guardianTelephone,
+      body.emergencyContactPhone,
+      body.emergencyContactName,
+    );
   }
 
   /** Admin: get student avatar URL */

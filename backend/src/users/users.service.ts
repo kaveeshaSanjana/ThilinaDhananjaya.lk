@@ -5,13 +5,16 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 interface CreateUserData {
-  email: string;
+  email?: string; // Optional - students can register without email
   password: string;
   fullName: string;
   instituteUserId?: string;
   barcodeId?: string;
   phone?: string;
+  telephone?: string;
+  whatsappPhone?: string;
   guardianPhone?: string;
+  guardianTelephone?: string;
   emergencyContactPhone?: string;
   emergencyContactName?: string;
   address?: string;
@@ -33,11 +36,14 @@ export class UsersService {
   ) {}
 
   async create(data: CreateUserData) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
-    if (existing) {
-      throw new ConflictException('Email already registered');
+    // Email is optional, but check for conflicts if provided
+    if (data.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     const requestedInstituteUserId = (data.instituteUserId || '').trim();
@@ -69,7 +75,7 @@ export class UsersService {
     try {
       user = await this.prisma.user.create({
         data: {
-          email: data.email,
+          email: data.email || null, // Email is optional
           password: data.password,
           role: 'STUDENT',
           orgId: data.orgId || null,
@@ -80,7 +86,10 @@ export class UsersService {
               fullName: data.fullName,
               avatarUrl: data.avatarUrl,
               phone: data.phone,
+              telephone: data.telephone,
+              whatsappPhone: data.whatsappPhone,
               guardianPhone: data.guardianPhone,
+              guardianTelephone: data.guardianTelephone,
               emergencyContactPhone: data.emergencyContactPhone,
               emergencyContactName: data.emergencyContactName,
               address: data.address,
@@ -159,7 +168,11 @@ export class UsersService {
       where: {
         OR: [
           { profile: { phone: trimmed } },
+          { profile: { telephone: trimmed } },
           { profile: { whatsappPhone: trimmed } },
+          { profile: { guardianPhone: trimmed } },
+          { profile: { guardianTelephone: trimmed } },
+          { profile: { emergencyContactPhone: trimmed } },
         ],
       },
       include: { profile: true },
@@ -195,7 +208,11 @@ export class UsersService {
           { profile: { fullName: { contains: query } } },
           { profile: { school: { contains: query } } },
           { profile: { phone: { contains: query } } },
+          { profile: { telephone: { contains: query } } },
           { profile: { whatsappPhone: { contains: query } } },
+          { profile: { guardianPhone: { contains: query } } },
+          { profile: { guardianTelephone: { contains: query } } },
+          { profile: { emergencyContactPhone: { contains: query } } },
           { email: { contains: query } },
         ];
       }
@@ -238,12 +255,16 @@ export class UsersService {
     barcodeId: string | null;
     avatarUrl: string;
     phone: string;
+    telephone: string;
     whatsappPhone: string;
     address: string;
     school: string;
     dateOfBirth: string;
     guardianName: string;
     guardianPhone: string;
+    guardianTelephone: string;
+    emergencyContactPhone: string;
+    emergencyContactName: string;
     relationship: string;
     occupation: string;
     gender: 'MALE' | 'FEMALE' | 'OTHER';
@@ -279,12 +300,26 @@ export class UsersService {
     }
   }
 
-  async updatePhone(userId: string, phone: string, whatsappPhone?: string) {
+  async updatePhone(
+    userId: string,
+    phone: string,
+    telephone?: string,
+    whatsappPhone?: string,
+    guardianPhone?: string,
+    guardianTelephone?: string,
+    emergencyContactPhone?: string,
+    emergencyContactName?: string,
+  ) {
     return this.prisma.profile.update({
       where: { userId },
       data: {
         phone,
+        ...(telephone !== undefined && { telephone }),
         ...(whatsappPhone !== undefined && { whatsappPhone }),
+        ...(guardianPhone !== undefined && { guardianPhone }),
+        ...(guardianTelephone !== undefined && { guardianTelephone }),
+        ...(emergencyContactPhone !== undefined && { emergencyContactPhone }),
+        ...(emergencyContactName !== undefined && { emergencyContactName }),
       },
     });
   }

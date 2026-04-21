@@ -7,8 +7,9 @@ export enum StudentGender {
 }
 
 export class CreateStudentDto {
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsString()
   @MinLength(6)
@@ -37,7 +38,27 @@ export class CreateStudentDto {
 
   @IsOptional()
   @IsString()
+  telephone?: string;
+
+  @IsOptional()
+  @IsString()
   whatsappPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianTelephone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
 
   @IsOptional()
   @IsString()
@@ -54,10 +75,6 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   guardianName?: string;
-
-  @IsOptional()
-  @IsString()
-  guardianPhone?: string;
 
   @IsOptional()
   @IsString()
