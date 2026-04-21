@@ -56,6 +56,7 @@ const icons = {
   menu: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>,
   login: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>,
   lock: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7.5a4.5 4.5 0 10-9 0v3m-1.5 0h12a1.5 1.5 0 011.5 1.5v7.5A1.5 1.5 0 0118 21H6a1.5 1.5 0 01-1.5-1.5V12A1.5 1.5 0 016 10.5z" /></svg>,
+  profile: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.118a7.5 7.5 0 0115 0A17.933 17.933 0 0112 21.75a17.933 17.933 0 01-7.5-1.632z" /></svg>,
   sun: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   moon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
   materials: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>,
@@ -101,6 +102,7 @@ export default function Layout() {
   const initials = user?.profile?.fullName
     ? user.profile.fullName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
     : user?.email?.[0]?.toUpperCase() || '?';
+  const userAvatarUrl = user?.profile?.avatarUrl?.trim() || '';
 
   const hour = time.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
@@ -417,6 +419,9 @@ export default function Layout() {
             )}
 
             <SideSection label="Account">
+              {user.role === 'STUDENT' && (
+                <NavItem to={getInstitutePath(scopedInstituteId, '/profile')} icon={icons.profile} label="My Profile" />
+              )}
               <NavItem to={getInstitutePath(scopedInstituteId, '/change-password')} icon={icons.lock} label="Change Password" />
             </SideSection>
           </>
@@ -428,8 +433,12 @@ export default function Layout() {
       {/* Bottom: User profile + Logout */}
       <div className="px-4 py-4 border-t border-[hsl(var(--border))]">
         <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')} className="flex items-center gap-3 mb-3 rounded-xl px-2 py-2 -mx-2 hover:bg-[hsl(var(--muted))] transition-all duration-200 cursor-pointer group">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0 ring-2 ring-[hsl(var(--card))] shadow-md">
-            <span className="text-white text-xs font-bold">{initials}</span>
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0 ring-2 ring-[hsl(var(--card))] shadow-md overflow-hidden">
+            {userAvatarUrl ? (
+              <img src={userAvatarUrl} alt={user.profile?.fullName || user.email} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-white text-xs font-bold">{initials}</span>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-bold text-[hsl(var(--foreground))] truncate uppercase tracking-wide leading-tight group-hover:text-[hsl(var(--primary))] transition-colors">
@@ -491,8 +500,12 @@ export default function Layout() {
               <span className="w-5 h-5 block">{icons.bell}</span>
             </button>
             <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')}
-              className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow hover:ring-[hsl(var(--primary)/0.3)] transition-all cursor-pointer">
-              <span className="text-white text-xs font-bold">{initials}</span>
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow hover:ring-[hsl(var(--primary)/0.3)] transition-all cursor-pointer overflow-hidden">
+              {userAvatarUrl ? (
+                <img src={userAvatarUrl} alt={user.profile?.fullName || user.email} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white text-xs font-bold">{initials}</span>
+              )}
             </Link>
           </div>
         </header>

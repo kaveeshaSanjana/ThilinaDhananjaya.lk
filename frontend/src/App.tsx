@@ -39,6 +39,7 @@ import ClassMonthMediaPage from './pages/ClassMonthMediaPage';
 import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import StudentProfilePage from './pages/StudentProfilePage';
 
 import Layout from './components/Layout';
 import LandingStyleLoading from './components/LandingStyleLoading';
@@ -109,7 +110,7 @@ function MarkAttendanceExternalOnlyRedirect() {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) return <LandingStyleLoading />;
 
@@ -118,6 +119,8 @@ function AppRoutes() {
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/landing" element={<Navigate to="/" replace />} />
+      <Route path="/landing-site" element={<Navigate to="/" replace />} />
+      <Route path="/landing-site/*" element={<Navigate to="/" replace />} />
 
       {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
       <Route path="recording/:id" element={<RecordingPlayerPage />} />
@@ -159,6 +162,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/watch-history" element={<ProtectedRoute><WatchHistoryPage /></ProtectedRoute>} />
         <Route path="my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />
+        <Route path="profile" element={<ProtectedRoute role="STUDENT"><StudentProfilePage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/profile" element={<ProtectedRoute role="STUDENT"><StudentProfilePage /></ProtectedRoute>} />
         <Route path="change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
 

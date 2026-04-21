@@ -44,7 +44,12 @@ const Navbar = () => {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const links = ["Home", "Classes", "Results", "About", "Contact"];
+  const links = [
+    { label: "Home", href: "#home" },
+    { label: "Class Types", href: "#class-types" },
+    { label: "Gallery", href: "#gallery" },
+    { label: "About", href: "#about" },
+  ];
 
   return (
     <motion.nav
@@ -95,14 +100,14 @@ const Navbar = () => {
             <div className="flex items-center bg-muted/50 rounded-full px-2 py-1.5 gap-1">
               {links.map((item, i) => (
                 <motion.a
-                  key={item}
-                  href={`#${item.toLowerCase()}`}
+                  key={item.label}
+                  href={item.href}
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 + i * 0.08 }}
                   className="text-sm font-medium text-muted-foreground hover:text-primary hover:bg-card px-4 py-1.5 rounded-full transition-all duration-200"
                 >
-                  {item}
+                  {item.label}
                 </motion.a>
               ))}
             </div>
@@ -142,12 +147,12 @@ const Navbar = () => {
           <div className="flex flex-col p-4 gap-1">
             {links.map((item) => (
               <a
-                key={item}
-                href={`#${item.toLowerCase()}`}
+                key={item.label}
+                href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className="text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted px-4 py-3 rounded-xl transition-colors"
               >
-                {item}
+                {item.label}
               </a>
             ))}
             <div className="mt-3 pt-3 border-t border-border">

@@ -29,8 +29,8 @@ const ContactSection = () => (
             Have questions about our classes? Want to register? Reach out and we'll get back to you right away.
           </p>
           {[
-            { icon: Phone, label: "+94 77 123 4567" },
-            { icon: Mail, label: "info@easyenglish.lk" },
+            { icon: Phone, label: "+94 71 252 5472" },
+            { icon: Mail, label: "thilinadhananjaya.web@gmail.com" },
             { icon: MapPin, label: "Colombo, Sri Lanka" },
           ].map((c) => (
             <div key={c.label} className="flex items-center gap-4">

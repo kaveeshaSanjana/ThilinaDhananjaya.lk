@@ -60,7 +60,7 @@ const courseTypes = [
 ];
 
 const CourseTypesSection = () => (
-  <section className="relative py-20 md:py-32 bg-white">
+  <section className="relative py-20 md:py-32 bg-white" id="class-types">
     <div className="container mx-auto px-4 max-w-6xl">
       {/* Section Title */}
       <motion.div

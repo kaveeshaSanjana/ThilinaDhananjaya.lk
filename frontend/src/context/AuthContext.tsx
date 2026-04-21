@@ -12,6 +12,14 @@ interface User {
     whatsappPhone?: string;
     school?: string;
     avatarUrl?: string;
+    address?: string;
+    dateOfBirth?: string;
+    guardianName?: string;
+    guardianPhone?: string;
+    relationship?: string;
+    occupation?: string;
+    gender?: string;
+    status?: string;
   };
 }
 

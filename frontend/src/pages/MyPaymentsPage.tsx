@@ -9,9 +9,29 @@ const STATUS_MAP: Record<string, { bg: string; text: string; dot: string }> = {
   REJECTED: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', dot: 'bg-red-500' },
 };
 
+type PaymentItem = {
+  id: string;
+  status?: string;
+  type?: string;
+  createdAt?: string;
+  month?: {
+    name?: string;
+    class?: {
+      name?: string;
+    };
+  };
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return '\u2014';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '\u2014';
+  return parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 export default function MyPaymentsPage() {
   const { instituteId } = useParams();
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,30 +92,38 @@ export default function MyPaymentsPage() {
             </Link>
           </div>
         ) : (
-          <>
-            <div className="hidden sm:grid grid-cols-[1fr,auto,auto,auto] gap-4 px-5 py-3 bg-[hsl(var(--muted))] border-b border-[hsl(var(--border))] text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
-              <span>Class</span><span>Month</span><span>Type</span><span>Status</span>
-            </div>
-            <div className="divide-y divide-[hsl(var(--border))]">
-              {payments.map((p: any) => {
-                const st = STATUS_MAP[p.status] || STATUS_MAP.PENDING;
-                return (
-                  <div key={p.id} className="px-5 py-4 flex flex-col sm:grid sm:grid-cols-[1fr,auto,auto,auto] gap-2 sm:gap-4 sm:items-center hover:bg-[hsl(var(--muted)/0.3)] transition">
-                    <div>
-                      <p className="text-sm font-medium text-[hsl(var(--foreground))]">{p.month?.class?.name || 'Unknown class'}</p>
-                      {p.createdAt && <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">{new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
-                    </div>
-                    <span className="text-sm text-[hsl(var(--muted-foreground))] font-medium">{p.month?.name || '\u2014'}</span>
-                    <span className="text-sm font-bold text-[hsl(var(--foreground))]">{p.type || '\u2014'}</span>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border w-fit ${st.bg} ${st.text}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                      {p.status}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse">
+              <thead>
+                <tr className="bg-[hsl(var(--muted))] border-b border-[hsl(var(--border))] text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left">Class</th>
+                  <th className="px-5 py-3 text-left">Date</th>
+                  <th className="px-5 py-3 text-left">Month</th>
+                  <th className="px-5 py-3 text-left">Type</th>
+                  <th className="px-5 py-3 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => {
+                  const st = STATUS_MAP[p.status || ''] || STATUS_MAP.PENDING;
+                  return (
+                    <tr key={p.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--muted)/0.3)] transition-colors">
+                      <td className="px-5 py-4 text-sm font-medium text-[hsl(var(--foreground))] whitespace-nowrap">{p.month?.class?.name || 'Unknown class'}</td>
+                      <td className="px-5 py-4 text-sm text-[hsl(var(--muted-foreground))] whitespace-nowrap">{formatDate(p.createdAt)}</td>
+                      <td className="px-5 py-4 text-sm text-[hsl(var(--muted-foreground))] whitespace-nowrap">{p.month?.name || '\u2014'}</td>
+                      <td className="px-5 py-4 text-sm font-bold text-[hsl(var(--foreground))] whitespace-nowrap">{p.type || '\u2014'}</td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border w-fit ${st.bg} ${st.text}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                          {p.status || 'PENDING'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

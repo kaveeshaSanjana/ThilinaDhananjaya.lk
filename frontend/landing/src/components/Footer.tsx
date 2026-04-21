@@ -5,10 +5,9 @@ import { motion } from "framer-motion";
 const Footer = () => {
   const quickLinks = [
     { label: "Home", href: "#home" },
-    { label: "Classes", href: "#classes" },
-    { label: "Results", href: "#results" },
+    { label: "Class Types", href: "#class-types" },
+    { label: "Gallery", href: "#gallery" },
     { label: "About", href: "#about" },
-    { label: "Contact", href: "#contact" },
   ];
 
   return (
