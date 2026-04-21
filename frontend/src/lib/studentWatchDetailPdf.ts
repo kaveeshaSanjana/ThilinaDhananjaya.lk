@@ -168,19 +168,19 @@ export async function exportStudentWatchDetailPdf(data: any) {
   const pageHeight = doc.internal.pageSize.getHeight();
 
   const palette = {
-    headerDark: [10, 18, 34] as const,
-    headerAccent: [8, 145, 178] as const,
-    sectionBar: [30, 41, 59] as const,
-    tableHead: [30, 41, 59] as const,
-    summaryHead: [13, 148, 136] as const,
-    card: [248, 250, 252] as const,
-    cardBorder: [226, 232, 240] as const,
-    text: [15, 23, 42] as const,
-    muted: [100, 116, 139] as const,
-    white: [255, 255, 255] as const,
-    info: [29, 78, 216] as const,
-    success: [22, 163, 74] as const,
-    warning: [217, 119, 6] as const,
+    headerDark: [10, 18, 34] as [number, number, number],
+    headerAccent: [8, 145, 178] as [number, number, number],
+    sectionBar: [30, 41, 59] as [number, number, number],
+    tableHead: [30, 41, 59] as [number, number, number],
+    summaryHead: [13, 148, 136] as [number, number, number],
+    card: [248, 250, 252] as [number, number, number],
+    cardBorder: [226, 232, 240] as [number, number, number],
+    text: [15, 23, 42] as [number, number, number],
+    muted: [100, 116, 139] as [number, number, number],
+    white: [255, 255, 255] as [number, number, number],
+    info: [29, 78, 216] as [number, number, number],
+    success: [22, 163, 74] as [number, number, number],
+    warning: [217, 119, 6] as [number, number, number],
   };
 
   const sessionEventCount = (session: any): number => {
@@ -322,9 +322,9 @@ export async function exportStudentWatchDetailPdf(data: any) {
   const tableStyles = {
     fontSize: 8.3,
     cellPadding: 2.1,
-    lineColor: [...palette.cardBorder],
+    lineColor: palette.cardBorder,
     lineWidth: 0.15,
-    textColor: [...palette.text],
+    textColor: palette.text,
     overflow: 'linebreak' as const,
   };
 
@@ -342,8 +342,8 @@ export async function exportStudentWatchDetailPdf(data: any) {
     ],
     styles: { ...tableStyles, fontSize: 8.8, cellPadding: 2.4 },
     columnStyles: { 0: { cellWidth: 44, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
-    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [...palette.card] },
+    headStyles: { fillColor: palette.tableHead, textColor: palette.white, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: palette.card },
     margin: { left: 14, right: 14 },
     theme: 'grid',
   });
@@ -362,7 +362,7 @@ export async function exportStudentWatchDetailPdf(data: any) {
       String(allActivityEvents.length),
     ]],
     styles: { ...tableStyles, fontSize: 8.7, halign: 'center' },
-    headStyles: { fillColor: [...palette.summaryHead], textColor: [...palette.white], fontStyle: 'bold' },
+    headStyles: { fillColor: palette.summaryHead, textColor: palette.white, fontStyle: 'bold' },
     margin: { left: 14, right: 14 },
     theme: 'grid',
   });
@@ -402,8 +402,8 @@ export async function exportStudentWatchDetailPdf(data: any) {
       7: { cellWidth: 12, halign: 'center' },
       8: { cellWidth: 'auto' },
     },
-    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [...palette.card] },
+    headStyles: { fillColor: palette.tableHead, textColor: palette.white, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: palette.card },
     margin: { left: 14, right: 14 },
     theme: 'grid',
   });
@@ -447,8 +447,8 @@ export async function exportStudentWatchDetailPdf(data: any) {
       4: { cellWidth: 20, halign: 'center' },
       5: { cellWidth: 'auto' },
     },
-    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [...palette.card] },
+    headStyles: { fillColor: palette.tableHead, textColor: palette.white, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: palette.card },
     margin: { left: 14, right: 14, bottom: 10 },
     theme: 'grid',
   });
