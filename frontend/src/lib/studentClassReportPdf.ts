@@ -1,4 +1,5 @@
 import api from './api';
+import easyEnglishPdfHeader from '../assets/easy-english-pdf-header.png';
 
 export type RecordingReportMode = 'SUMMARY' | 'FULL';
 
@@ -85,12 +86,55 @@ export interface StudentClassReportPayload {
 // ─── Sinhala text handling ────────────────────────────────────────────────────
 //
 // Standard PDF fonts (Helvetica) cannot properly render Sinhala Unicode.
-// Sinhala text is included in bilingual labels but will appear corrupted in PDFs.
-// This is a known limitation of jsPDF with complex scripts.
+// We load a Sinhala-capable TTF font at runtime. If loading fails, we fall
+// back to English-only section labels to avoid garbled characters.
+
+const SINHALA_FONT_URL =
+  'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansSinhala/NotoSansSinhala-Regular.ttf';
+const SINHALA_FONT_NAME = 'NotoSansSinhala';
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  return btoa(binary);
+}
 
 async function registerSinhalaFont(doc: any): Promise<boolean> {
-  // Just use default helvetica - simple and reliable
-  return true;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(SINHALA_FONT_URL, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return false;
+
+    const fontBuffer = await response.arrayBuffer();
+    const base64Font = arrayBufferToBase64(fontBuffer);
+    const fileName = `${SINHALA_FONT_NAME}.ttf`;
+
+    let alreadyRegistered = false;
+    try {
+      alreadyRegistered = Boolean((doc as any).getFileFromVFS?.(fileName));
+    } catch {
+      alreadyRegistered = false;
+    }
+
+    if (!alreadyRegistered) {
+      doc.addFileToVFS(fileName, base64Font);
+      doc.addFont(fileName, SINHALA_FONT_NAME, 'normal');
+      doc.addFont(fileName, SINHALA_FONT_NAME, 'bold');
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Sinhala heading labels ────────────────────────────────────────────────────
@@ -100,25 +144,48 @@ const SI = {
   month:          'Month / මාසය',
   status:         'Status / තත්ත්වය',
   slips:          'Slips / රිසිට්පත්',
-  latestSlip:     'Latest Slip / අවසන් රිසිට්පත්',
+  latestSlip:     'Latest Slip / අවසන් රිසිට්පත',
   // Physical attendance
   date:           'Date / දිනය',
   session:        'Session / සැසිය',
   time:           'Time / වේලාව',
   total:          'Total / මුළු',
   present:        'Present / පැමිණි',
-  late:           'Late / පරක්කු',
+  late:           'Late / ප්‍රමාද',
   absent:         'Absent / නොපැමිණි',
-  excused:        'Excused / සමාවූ',
+  excused:        'Excused / අවසර',
   attendancePct:  'Attendance % / පැමිණීම %',
   // Recordings
   recordingTitle: 'Recording / පටිගත කිරීම',
   sessions:       'Sessions / සැසි',
-  watchedTime:    'Watched / නැරඹූ කාලය',
+  watchedTime:    'Watched Time / නැරඹූ කාලය',
   lastWatch:      'Last Watch / අවසන් නැරඹීම',
   started:        'Started / ආරම්භය',
   ended:          'Ended / අවසානය',
   watched:        'Watched / නැරඹූ',
+} as const;
+
+const SI_EN = {
+  month:          'Month',
+  status:         'Status',
+  slips:          'Slips',
+  latestSlip:     'Latest Slip',
+  date:           'Date',
+  session:        'Session',
+  time:           'Time',
+  total:          'Total',
+  present:        'Present',
+  late:           'Late',
+  absent:         'Absent',
+  excused:        'Excused',
+  attendancePct:  'Attendance %',
+  recordingTitle: 'Recording',
+  sessions:       'Sessions',
+  watchedTime:    'Watched Time',
+  lastWatch:      'Last Watch',
+  started:        'Started',
+  ended:          'Ended',
+  watched:        'Watched',
 } as const;
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
@@ -149,13 +216,17 @@ function fmtDuration(sec: number): string {
   return `${s}s`;
 }
 
-function fmtMoney(value: number | null | undefined): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  const rounded = Math.round(value * 100) / 100;
-  return `Rs. ${rounded.toLocaleString('en-LK', {
-    minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
+function normalizeText(value?: string | null): string {
+  return String(value || '')
+    .replace(/â€”|â€“/g, '-')
+    .replace(/â€œ|â€/g, '"')
+    .replace(/â€˜|â€™/g, "'")
+    .replace(/Â/g, '');
+}
+
+function safeText(value: string | null | undefined, fallback = '—'): string {
+  const cleaned = normalizeText(value).trim();
+  return cleaned || fallback;
 }
 
 function cleanFileName(value: string): string {
@@ -207,23 +278,29 @@ async function loadAvatarImage(rawUrl?: string | null): Promise<{ dataUrl: strin
     if (/^data:image\//i.test(resolved)) {
       return { dataUrl: resolved, format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG' };
     }
+
+    // Avoid browser CORS console errors from third-party avatar origins.
+    // If cross-origin, skip image fetch and use initials fallback in the PDF.
+    const targetUrl = new URL(resolved, window.location.origin);
+    if (targetUrl.origin !== window.location.origin) {
+      return null;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(resolved, { credentials: 'include', signal: controller.signal, headers: { Accept: 'image/*' } });
+    const response = await fetch(targetUrl.toString(), {
+      credentials: 'include',
+      signal: controller.signal,
+      headers: { Accept: 'image/*' },
+    });
     clearTimeout(timeoutId);
-    if (!response.ok) { console.warn(`Avatar fetch failed ${response.status}: ${resolved}`); return null; }
+    if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.type.startsWith('image/')) { console.warn(`Avatar blob not image: ${blob.type}`); return null; }
+    if (!blob.type.startsWith('image/')) return null;
     const dataUrl = await blobToDataUrl(blob);
     return { dataUrl, format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG' };
-  } catch (error) {
-    // Silently ignore avatar load errors (CORS, timeout, network issues)
-    // The report will still render with initials circle instead
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.warn(`Avatar fetch timed out: ${resolved}`);
-    } else {
-      console.warn(`Avatar fetch failed: ${resolved}`);
-    }
+  } catch {
+    // Silently ignore image load errors; PDF still renders with fallback avatar.
     return null;
   }
 }
@@ -275,29 +352,28 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
   const PW = doc.internal.pageSize.getWidth();   // 210
   const PH = doc.internal.pageSize.getHeight();  // 297
 
-  // Use helvetica for reliable rendering
   const sinhalaLoaded = await registerSinhalaFont(doc);
-  const headFont = 'helvetica';
+  const headFont = sinhalaLoaded ? SINHALA_FONT_NAME : 'helvetica';
 
   // ── Palette ──────────────────────────────────────────────────────────────
   const C = {
-    // Header gradient simulation (two rects)
-    hdrTop:     [10, 15, 40]    as RGB,   // very dark navy
-    hdrBot:     [18, 30, 72]    as RGB,   // deep navy
-    hdrAccent:  [56, 189, 248]  as RGB,   // sky blue accent bar
-    hdrAccent2: [99, 102, 241]  as RGB,   // indigo accent
+    // Header
+    hdrTop:     [31, 41, 55]    as RGB,
+    hdrBot:     [51, 65, 85]    as RGB,
+    hdrAccent:  [100, 116, 139] as RGB,
+    hdrAccent2: [148, 163, 184] as RGB,
     // Section headers
-    secPay:     [37, 99, 235]   as RGB,   // blue
-    secPhy:     [22, 163, 74]   as RGB,   // green
-    secRec:     [124, 58, 237]  as RGB,   // violet
-    secDetail:  [100, 116, 139] as RGB,   // slate
+    secPay:     [51, 65, 85]    as RGB,
+    secPhy:     [51, 65, 85]    as RGB,
+    secRec:     [51, 65, 85]    as RGB,
+    secDetail:  [51, 65, 85]    as RGB,
     // Table
-    tblHeadPay: [37, 99, 235]   as RGB,
-    tblHeadPhy: [22, 163, 74]   as RGB,
-    tblHeadRec: [124, 58, 237]  as RGB,
-    tblHeadSum: [71, 85, 105]   as RGB,
-    tblAlt:     [248, 250, 252] as RGB,
-    tblLine:    [226, 232, 240] as RGB,
+    tblHeadPay: [51, 65, 85]    as RGB,
+    tblHeadPhy: [51, 65, 85]    as RGB,
+    tblHeadRec: [51, 65, 85]    as RGB,
+    tblHeadSum: [51, 65, 85]    as RGB,
+    tblAlt:     [250, 250, 251] as RGB,
+    tblLine:    [229, 231, 235] as RGB,
     // Stat cards
     cardBg:     [248, 250, 252] as RGB,
     cardBdr:    [203, 213, 225] as RGB,
@@ -308,15 +384,23 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     // Stat accent colours
     green:      [22, 163, 74]   as RGB,
     red:        [220, 38, 38]   as RGB,
-    amber:      [217, 119, 6]   as RGB,
+    amber:      [202, 138, 4]   as RGB,
     blue:       [37, 99, 235]   as RGB,
     slate:      [71, 85, 105]   as RGB,
   };
 
-  const studentName = payload.student.fullName || payload.student.email || 'Student';
+  const studentName = safeText(payload.student.fullName || payload.student.email || 'Student', 'Student');
+  const sectionLabels = {
+    payments: sinhalaLoaded ? 'Payments History / පන්ති ගාස්තු ගෙවීම්' : 'Payments History',
+    physical: sinhalaLoaded ? 'Physical Attendance / පන්ති පැමිණීම' : 'Physical Attendance',
+    recording: sinhalaLoaded ? 'Recording Attendance / පටිගත නැරඹීම්' : 'Recording Attendance',
+    recordingDetails: sinhalaLoaded ? 'Recording Session Details / සැසි විස්තර' : 'Recording Session Details',
+  };
+  const tableLabels = sinhalaLoaded ? SI : SI_EN;
+  const preferredLetterheadUrl = payload.letterheadUrl || easyEnglishPdfHeader;
   const [avatarImage, letterheadImage] = await Promise.all([
     loadAvatarImage(payload.student.avatarUrl),
-    loadAvatarImage(payload.letterheadUrl),   // reuses the same loader — works for any image
+    loadAvatarImage(preferredLetterheadUrl),
   ]);
 
   const includedSections = [
@@ -366,7 +450,9 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     doc.setFontSize(7.5);
     doc.text(`Class: ${payload.classInfo.name || '—'}`, 14, stripY + 4.5);
 
-    const classLabel = [payload.classInfo.name, payload.classInfo.subject].filter(Boolean).join('  ·  ');
+    const classLabel = [safeText(payload.classInfo.name), safeText(payload.classInfo.subject)]
+      .filter((v) => v !== '—')
+      .join('  ·  ');
     doc.setTextColor(...C.text);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
@@ -426,8 +512,10 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     // Class and subject
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.2);
-    doc.setTextColor([186, 230, 253]);
-    const classLabel = [payload.classInfo.name, payload.classInfo.subject].filter(Boolean).join('  ·  ');
+    doc.setTextColor(186, 230, 253);
+    const classLabel = [safeText(payload.classInfo.name), safeText(payload.classInfo.subject)]
+      .filter((v) => v !== '—')
+      .join('  ·  ');
     doc.text(classLabel || 'No class info', 16, 31);
 
     // Right-aligned info: generated date and sections
@@ -437,7 +525,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     doc.text(`Generated ${fmtDateTime(new Date().toISOString())}`, PW - 16, 8.5, { align: 'right' });
 
     doc.setFontSize(8.5);
-    doc.setTextColor([186, 230, 253]);
+    doc.setTextColor(186, 230, 253);
     doc.setFont('helvetica', 'bold');
     doc.text(includedSections.length > 0 ? includedSections.join('  /  ') : 'No sections', PW - 16, 31, { align: 'right' });
 
@@ -550,33 +638,32 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
   /** Draws a styled section header bar with a left colour accent */
   const drawSection = (title: string, subtitle: string | undefined, accentColor: RGB) => {
-    ensureSpace(subtitle ? 17 : 14);
-    // Full-width gradient background
-    doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
-    doc.setGState(new (doc as any).GState({ opacity: 0.08 }));
-    doc.roundedRect(14, y, PW - 28, 11, 3, 3, 'F');
-    doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
+    ensureSpace(subtitle ? 14 : 11);
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(...C.cardBdr);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(14, y, PW - 28, 9, 1.5, 1.5, 'FD');
 
-    // Solid left accent bar - thicker and more prominent
+    // Subtle left accent
     doc.setFillColor(...accentColor);
-    doc.rect(14, y, 4, 11, 'F');
+    doc.rect(14, y, 2.2, 9, 'F');
 
-    // Title text - larger and bolder
+    // Title text
     doc.setTextColor(...accentColor);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11.5);
-    doc.text(title, 21, y + 7);
+    doc.setFont(headFont, 'bold');
+    doc.setFontSize(9.6);
+    doc.text(normalizeText(title), 19, y + 5.8);
 
-    // Subtitle — right-aligned with lighter color
+    // Subtitle
     if (subtitle) {
       doc.setTextColor(...C.muted);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.2);
-      doc.text(subtitle, PW - 16, y + 7, { align: 'right' });
+      doc.setFontSize(7.6);
+      doc.text(normalizeText(subtitle), PW - 16, y + 5.8, { align: 'right' });
     }
 
     doc.setTextColor(...C.text);
-    y += subtitle ? 16 : 14;
+    y += subtitle ? 13 : 11;
   };
 
   /** Empty state box */
@@ -596,44 +683,31 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
   /** Stat card row: array of { label, value, color } */
   const drawStatCards = (items: Array<{ label: string; value: string; color: RGB }>) => {
-    ensureSpace(24);
+    ensureSpace(18);
     const n = items.length;
-    const cardW = (PW - 28 - (n - 1) * 4) / n;
-    const cardH = 22;
+    const cardW = (PW - 28 - (n - 1) * 3) / n;
+    const cardH = 14;
     
     items.forEach((item, i) => {
-      const cx = 14 + i * (cardW + 4);
-      
-      // Card shadow effect
-      doc.setFillColor(0, 0, 0);
-      doc.setGState(new (doc as any).GState({ opacity: 0.03 }));
-      doc.roundedRect(cx + 0.5, y + 0.8, cardW, cardH, 2.5, 2.5, 'F');
-      doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
-      
-      // Card background with border
+      const cx = 14 + i * (cardW + 3);
+
       doc.setFillColor(...C.white);
-      doc.setDrawColor(...item.color);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(cx, y, cardW, cardH, 2.5, 2.5, 'FD');
-      
-      // Coloured top bar - thicker and more prominent
-      doc.setFillColor(...item.color);
-      doc.roundedRect(cx, y, cardW, 4, 2.5, 0, 'F');
-      
-      // Value - larger and more prominent
+      doc.setDrawColor(...C.cardBdr);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(cx, y, cardW, cardH, 1.5, 1.5, 'FD');
+
       doc.setTextColor(...item.color);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16.5);
-      doc.text(item.value, cx + cardW / 2, y + 12.5, { align: 'center' });
-      
-      // Label - more readable
+      doc.setFontSize(11);
+      doc.text(normalizeText(item.value), cx + cardW / 2, y + 6.8, { align: 'center' });
+
       doc.setTextColor(...C.muted);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.text(item.label.toUpperCase(), cx + cardW / 2, y + 17.5, { align: 'center' });
+      doc.setFontSize(6.8);
+      doc.text(normalizeText(item.label.toUpperCase()), cx + cardW / 2, y + 11.8, { align: 'center' });
     });
     
-    y += 26;
+    y += 17;
   };
 
   /** Renders a plain table. headings use the Sinhala font when available. */
@@ -729,7 +803,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
   if (payload.options.includePayments) {
     const rows = payload.payments?.rows || [];
-    drawSection('Payments History / පන්ති ගාස්තු ගෙවීම්', `${rows.length} record(s)`, C.secPay);
+    drawSection(sectionLabels.payments, `${rows.length} record(s)`, C.secPay);
 
     if (rows.length > 0) {
       // Stat cards
@@ -741,12 +815,12 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
       renderBadgeTable(
         {
-          head: [[SI.month, SI.status, SI.slips, SI.latestSlip]],
+          head: [[tableLabels.month, tableLabels.status, tableLabels.slips, tableLabels.latestSlip]],
           body: rows.map((r) => [
-            r.label,
-            r.status,
+            safeText(r.label),
+            safeText(r.status),
             String(r.slipCount || 0),
-            r.latestSlipStatus || '—',
+            safeText(r.latestSlipStatus),
           ]),
           columnStyles: {
             0: { cellWidth: 40 },
@@ -772,7 +846,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
   if (payload.options.includePhysicalAttendance) {
     const summary = payload.physicalAttendance?.summary;
     const pct = summary?.percentage || 0;
-    drawSection('Physical Attendance / පන්ති පැමිණීම්', `Attendance rate: ${pct}%`, C.secPhy);
+    drawSection(sectionLabels.physical, `Attendance rate: ${pct}%`, C.secPhy);
 
     // Stat cards
     drawStatCards([
@@ -787,8 +861,13 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     if (physRows.length > 0) {
       renderBadgeTable(
         {
-          head: [[SI.date, SI.session, SI.time, SI.status]],
-          body: physRows.map((r) => [r.date, r.session || '—', r.sessionTime || '—', r.status]),
+          head: [[tableLabels.date, tableLabels.session, tableLabels.time, tableLabels.status]],
+          body: physRows.map((r) => [
+            safeText(r.date),
+            safeText(r.session),
+            safeText(r.sessionTime),
+            safeText(r.status),
+          ]),
           columnStyles: {
             0: { cellWidth: 34 },
             1: { cellWidth: 40 },
@@ -812,15 +891,15 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
   if (payload.options.includeRecordingAttendance) {
     const summaryRows = payload.recordingAttendance?.summaryRows || [];
-    drawSection('Recording Attendance / පන්ති වීඩියෝ නැරබීම්', `${summaryRows.length} recording(s) tracked`, C.secRec);
+    drawSection(sectionLabels.recording, `${summaryRows.length} recording(s) tracked`, C.secRec);
 
     if (summaryRows.length > 0) {
       renderTable(
         {
-          head: [[SI.recordingTitle, SI.month, SI.sessions, SI.watchedTime, SI.lastWatch]],
+          head: [[tableLabels.recordingTitle, tableLabels.month, tableLabels.sessions, tableLabels.watchedTime, tableLabels.lastWatch]],
           body: summaryRows.map((r) => [
-            r.title || '—',
-            r.month || '—',
+            safeText(r.title),
+            safeText(r.month),
             String(r.sessions || 0),
             fmtDuration(r.watchedSec || 0),
             fmtDateTime(r.lastWatchedAt),
@@ -842,18 +921,18 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
     if (payload.options.recordingMode === 'FULL') {
       const sessionRows = payload.recordingAttendance?.sessionRows || [];
-      drawSection('Recording Session Details / වීඩියෝ නැරබීම් සමස්ත විස්තර', `${sessionRows.length} session(s)`, C.secDetail);
+      drawSection(sectionLabels.recordingDetails, `${sessionRows.length} session(s)`, C.secDetail);
 
       if (sessionRows.length > 0) {
         renderBadgeTable(
           {
-            head: [[SI.recordingTitle, SI.started, SI.ended, SI.watched, SI.status]],
+            head: [[tableLabels.recordingTitle, tableLabels.started, tableLabels.ended, tableLabels.watched, tableLabels.status]],
             body: sessionRows.map((r) => [
-              r.title || '—',
+              safeText(r.title),
               fmtDateTime(r.startedAt),
               fmtDateTime(r.endedAt),
               fmtDuration(r.watchedSec || 0),
-              r.status,
+              safeText(r.status),
             ]),
             columnStyles: {
               0: { cellWidth: 40 },
