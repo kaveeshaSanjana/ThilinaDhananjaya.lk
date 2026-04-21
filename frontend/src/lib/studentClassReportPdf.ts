@@ -4,17 +4,8 @@ import easyEnglishPdfHeader from '../assets/easy-english-pdf-header.png';
 export type RecordingReportMode = 'SUMMARY' | 'FULL';
 
 export interface StudentClassReportPayload {
-  /**
-   * Optional letterhead image shown full-width at the top of page 1 only.
-   * Recommended size: 2480 × 350 px (210 mm × ~30 mm at 300 dpi).
-   * Aspect ratio is preserved; height is capped at 45 mm.
-   */
   letterheadUrl?: string | null;
-  classInfo: {
-    id?: string;
-    name?: string;
-    subject?: string | null;
-  };
+  classInfo: { id?: string; name?: string; subject?: string | null };
   student: {
     userId: string;
     fullName: string;
@@ -25,13 +16,7 @@ export interface StudentClassReportPayload {
     paymentType?: string | null;
     effectiveMonthlyFee?: number | null;
   };
-  /** Custom footer text shown on every page. */
-  footer?: {
-    /** Left column — e.g. "thilinadhananjaya.lk | 0712525472" */
-    left?: string | null;
-    /** Centre column — e.g. "SurakshaLMS" */
-    center?: string | null;
-  } | null;
+  footer?: { left?: string | null; center?: string | null } | null;
   options: {
     includePayments: boolean;
     includePhysicalAttendance: boolean;
@@ -39,150 +24,77 @@ export interface StudentClassReportPayload {
     recordingMode: RecordingReportMode;
   };
   payments?: {
-    rows: Array<{
-      label: string;
-      status: string;
-      slipCount: number;
-      latestSlipStatus?: string | null;
-    }>;
+    rows: Array<{ label: string; status: string; slipCount: number; latestSlipStatus?: string | null }>;
     paidCount: number;
     pendingCount: number;
     unpaidCount: number;
   };
   physicalAttendance?: {
-    summary: {
-      total: number;
-      present: number;
-      late: number;
-      absent: number;
-      excused: number;
-      percentage: number;
-    };
-    rows: Array<{
-      date: string;
-      session: string;
-      sessionTime: string;
-      status: string;
-    }>;
+    summary: { total: number; present: number; late: number; absent: number; excused: number; percentage: number };
+    rows: Array<{ date: string; session: string; sessionTime: string; status: string }>;
   };
   recordingAttendance?: {
-    summaryRows: Array<{
-      title: string;
-      month: string;
-      sessions: number;
-      watchedSec: number;
-      lastWatchedAt?: string | null;
-    }>;
-    sessionRows: Array<{
-      title: string;
-      startedAt?: string;
-      endedAt?: string | null;
-      watchedSec: number;
-      status: string;
-    }>;
+    summaryRows: Array<{ title: string; month: string; sessions: number; watchedSec: number; lastWatchedAt?: string | null }>;
+    sessionRows: Array<{ title: string; startedAt?: string; endedAt?: string | null; watchedSec: number; status: string }>;
   };
 }
 
-// ─── Sinhala text handling ────────────────────────────────────────────────────
+// ─── Sinhala Font ─────────────────────────────────────────────────────────────
 
-const SINHALA_FONT_URL =
-  'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansSinhala/NotoSansSinhala-Regular.ttf';
+const SINHALA_FONT_URL = 'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansSinhala/NotoSansSinhala-Regular.ttf';
 const SINHALA_FONT_NAME = 'NotoSansSinhala';
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
   let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
+  for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   return btoa(binary);
 }
 
 async function registerSinhalaFont(doc: any): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const tid = setTimeout(() => controller.abort(), 10_000);
     const response = await fetch(SINHALA_FONT_URL, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    clearTimeout(tid);
     if (!response.ok) return false;
-    const fontBuffer = await response.arrayBuffer();
-    const base64Font = arrayBufferToBase64(fontBuffer);
+    const base64Font = arrayBufferToBase64(await response.arrayBuffer());
     const fileName = `${SINHALA_FONT_NAME}.ttf`;
     let alreadyRegistered = false;
-    try {
-      alreadyRegistered = Boolean((doc as any).getFileFromVFS?.(fileName));
-    } catch {
-      alreadyRegistered = false;
-    }
+    try { alreadyRegistered = Boolean((doc as any).getFileFromVFS?.(fileName)); } catch { alreadyRegistered = false; }
     if (!alreadyRegistered) {
       doc.addFileToVFS(fileName, base64Font);
       doc.addFont(fileName, SINHALA_FONT_NAME, 'normal');
       doc.addFont(fileName, SINHALA_FONT_NAME, 'bold');
     }
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-// ─── Sinhala heading labels ────────────────────────────────────────────────────
+// ─── Bilingual Section Labels (Sinhala / English) ────────────────────────────
+// NOTE: Table content (dynamic data) is ALWAYS English-only for clarity.
+// Section headers use bilingual labels when Sinhala font is available.
 
-const SI = {
-  month:          'Month / මාසය',
-  status:         'Status / තත්ත්වය',
-  slips:          'Slips / රිසිට්පත්',
-  latestSlip:     'Latest Slip / අවසන් රිසිට්පත',
-  date:           'Date / දිනය',
-  session:        'Session / සැසිය',
-  time:           'Time / වේලාව',
-  total:          'Total / මුළු',
-  present:        'Present / පැමිණි',
-  late:           'Late / ප්‍රමාද',
-  absent:         'Absent / නොපැමිණි',
-  excused:        'Excused / අවසර',
-  attendancePct:  'Attendance % / පැමිණීම %',
-  recordingTitle: 'Recording / පටිගත කිරීම',
-  sessions:       'Sessions / සැසි',
-  watchedTime:    'Watched Time / නැරඹූ කාලය',
-  lastWatch:      'Last Watch / අවසන් නැරඹීම',
-  started:        'Started / ආරම්භය',
-  ended:          'Ended / අවසානය',
-  watched:        'Watched / නැරඹූ',
+// Table column headers — always English only (avoids Sinhala rendering ugliness in table cells)
+const TABLE_LABELS = {
+  month: 'Month', status: 'Status', slips: 'Slips', latestSlip: 'Latest Slip',
+  date: 'Date', session: 'Session', time: 'Time', total: 'Total', present: 'Present',
+  late: 'Late', absent: 'Absent', excused: 'Excused', attendancePct: 'Attendance %',
+  recordingTitle: 'Recording', sessions: 'Sessions', watchedTime: 'Watched',
+  lastWatch: 'Last Watched', started: 'Started', ended: 'Ended', watched: 'Watched',
 } as const;
 
-const SI_EN = {
-  month:          'Month',
-  status:         'Status',
-  slips:          'Slips',
-  latestSlip:     'Latest Slip',
-  date:           'Date',
-  session:        'Session',
-  time:           'Time',
-  total:          'Total',
-  present:        'Present',
-  late:           'Late',
-  absent:         'Absent',
-  excused:        'Excused',
-  attendancePct:  'Attendance %',
-  recordingTitle: 'Recording',
-  sessions:       'Sessions',
-  watchedTime:    'Watched Time',
-  lastWatch:      'Last Watch',
-  started:        'Started',
-  ended:          'Ended',
-  watched:        'Watched',
-} as const;
+// ─── Formatters ───────────────────────────────────────────────────────────────
 
-// ─── Formatters ────────────────────────────────────────────────────────────────
+type RGB = [number, number, number];
 
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  return `${date}  ${time}`;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    '  ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtDate(iso?: string | null): string {
@@ -193,67 +105,72 @@ function fmtDate(iso?: string | null): string {
 }
 
 function fmtDuration(sec: number): string {
-  if (!sec || sec <= 0) return '0s';
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (!sec || sec <= 0) return '—';
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
 }
 
 /**
- * Formats a session time string that may arrive as "HH:MM", "HH:MM:SS", or full ISO.
- * Returns a clean "HH:MM" string, or "—" when the value is empty or midnight (00:00),
- * which typically signals that no actual session time was recorded in the DB.
+ * Formats attendance date — handles plain "YYYY-MM-DD" without UTC shift.
+ * Also handles numeric day-only values that come pre-formatted from the server.
  */
+function fmtAttendanceDate(raw: string | null | undefined): string {
+  if (!raw || raw.trim() === '' || raw === '—') return '—';
+  const s = raw.trim();
+  // Full ISO date YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(`${s}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  // Full ISO datetime
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    return fmtDate(s);
+  }
+  // Pure numeric (day only, e.g. "13" or "19") — return as-is; caller should provide full dates
+  return s;
+}
+
+/** Formats session time — suppresses meaningless "00:00" values */
 function fmtSessionTime(raw: string | null | undefined): string {
   if (!raw || raw.trim() === '' || raw === '—') return '—';
   const s = raw.trim();
-
-  // Short time pattern: "HH:MM" or "HH:MM:SS"
   if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
     const parts = s.split(':');
     const display = `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
     return display === '00:00' ? '—' : display;
   }
-
-  // Full ISO datetime — extract time part
   const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return safeText(s); // unknown format — pass through
+  if (Number.isNaN(d.getTime())) return safeText(s);
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   return time === '00:00' ? '—' : time;
 }
 
 /**
- * Formats a date that may arrive as "YYYY-MM-DD" (plain date from the DB)
- * or a full ISO string. Always returns "DD Mon YYYY".
- * Parses plain dates as local midnight to avoid UTC timezone shifts.
+ * Cleans raw session names: formats ISO dates, humanises system tokens.
  */
-function fmtAttendanceDate(raw: string | null | undefined): string {
-  if (!raw || raw.trim() === '' || raw === '—') return '—';
+function cleanSessionLabel(raw: string | null | undefined): string {
+  if (!raw || raw.trim() === '') return '—';
   const s = raw.trim();
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const d = new Date(`${s}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return s;
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  }
-
-  return fmtDate(s);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return fmtAttendanceDate(s.slice(0, 10));
+  const upper = s.toUpperCase();
+  if (upper === 'AUTO_CLOSE' || upper === 'AUTO_CLOSED') return 'Auto Closed';
+  if (upper === 'AUTO_OPEN'  || upper === 'AUTO_OPENED') return 'Auto Opened';
+  if (upper === 'MANUAL')   return 'Manual';
+  if (upper === 'LIVE')     return 'Live Session';
+  if (upper === 'RECORDED') return 'Recorded';
+  if (upper === 'ONLINE')   return 'Online';
+  if (upper === 'PHYSICAL') return 'Physical';
+  return s;
 }
 
 function normalizeText(value?: string | null): string {
-  return String(value || '')
-    .replace(/â€"|â€"/g, '-')
-    .replace(/â€œ|â€/g, '"')
-    .replace(/â€˜|â€™/g, "'")
-    .replace(/Â/g, '');
+  return String(value || '').replace(/â€"|â€"/g, '-').replace(/â€œ|â€/g, '"').replace(/â€˜|â€™/g, "'").replace(/Â/g, '');
 }
 
 function safeText(value: string | null | undefined, fallback = '—'): string {
-  const cleaned = normalizeText(value).trim();
-  return cleaned || fallback;
+  return normalizeText(value).trim() || fallback;
 }
 
 function cleanFileName(value: string): string {
@@ -261,15 +178,7 @@ function cleanFileName(value: string): string {
 }
 
 function initialsFromName(name: string): string {
-  return (
-    name
-      .split(' ')
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() || '')
-      .join('') || 'ST'
-  );
+  return name.split(' ').map(p => p.trim()).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || 'ST';
 }
 
 function resolveAssetUrl(rawUrl?: string): string {
@@ -279,9 +188,7 @@ function resolveAssetUrl(rawUrl?: string): string {
   if (value.startsWith('//')) return `${window.location.protocol}${value}`;
   const apiBase = typeof api.defaults.baseURL === 'string' ? api.defaults.baseURL : '';
   let origin = window.location.origin;
-  if (/^https?:\/\//i.test(apiBase)) {
-    try { origin = new URL(apiBase).origin; } catch { /* keep fallback */ }
-  }
+  if (/^https?:\/\//i.test(apiBase)) { try { origin = new URL(apiBase).origin; } catch { /**/ } }
   if (value.startsWith('/')) return `${origin}${value}`;
   return `${origin}/${value.replace(/^\/+/, '')}`;
 }
@@ -289,45 +196,31 @@ function resolveAssetUrl(rawUrl?: string): string {
 async function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') resolve(reader.result);
-      else reject(new Error('Failed to convert blob to data URL'));
-    };
-    reader.onerror = () => reject(new Error('Failed to read image blob'));
+    reader.onloadend = () => { if (typeof reader.result === 'string') resolve(reader.result); else reject(new Error('Failed')); };
+    reader.onerror = () => reject(new Error('Failed'));
     reader.readAsDataURL(blob);
   });
 }
 
-async function loadAvatarImage(rawUrl?: string | null): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
+async function loadImage(rawUrl?: string | null): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
   const resolved = resolveAssetUrl(rawUrl || '');
   if (!resolved) return null;
   try {
-    if (/^data:image\//i.test(resolved)) {
-      return { dataUrl: resolved, format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG' };
-    }
+    if (/^data:image\//i.test(resolved)) return { dataUrl: resolved, format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG' };
     const targetUrl = new URL(resolved, window.location.origin);
     if (targetUrl.origin !== window.location.origin) return null;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(targetUrl.toString(), {
-      credentials: 'include',
-      signal: controller.signal,
-      headers: { Accept: 'image/*' },
-    });
-    clearTimeout(timeoutId);
+    const tid = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(targetUrl.toString(), { credentials: 'include', signal: controller.signal, headers: { Accept: 'image/*' } });
+    clearTimeout(tid);
     if (!response.ok) return null;
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) return null;
-    const dataUrl = await blobToDataUrl(blob);
-    return { dataUrl, format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG' };
-  } catch {
-    return null;
-  }
+    return { dataUrl: await blobToDataUrl(blob), format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG' };
+  } catch { return null; }
 }
 
-// ─── Status badge colours ───────────────────────────────────────────────────
-
-type RGB = [number, number, number];
+// ─── Status Badge Colors ──────────────────────────────────────────────────────
 
 function paymentStatusColors(raw: string | null | undefined): { bg: RGB; text: RGB; label: string } {
   const v = (raw || '').trim().toUpperCase();
@@ -349,13 +242,13 @@ function attendanceStatusColors(raw: string | null | undefined): { bg: RGB; text
 
 function recordingStatusColors(raw: string | null | undefined): { bg: RGB; text: RGB; label: string } {
   const v = (raw || '').trim().toUpperCase();
-  if (v === 'WATCHED' || v === 'COMPLETED')     return { bg: [220, 252, 231], text: [22, 101, 52], label: 'Watched'   };
-  if (v === 'PARTIAL')                          return { bg: [255, 237, 213], text: [154, 52, 18], label: 'Partial'   };
-  if (v === 'NOT_WATCHED' || v === 'UNWATCHED') return { bg: [254, 226, 226], text: [153, 27, 27], label: 'Unwatched' };
+  if (v === 'WATCHED' || v === 'COMPLETED')     return { bg: [220, 252, 231], text: [22, 101, 52],  label: 'Watched'   };
+  if (v === 'PARTIAL')                          return { bg: [255, 237, 213], text: [154, 52, 18],  label: 'Partial'   };
+  if (v === 'NOT_WATCHED' || v === 'UNWATCHED') return { bg: [254, 226, 226], text: [153, 27, 27],  label: 'Unwatched' };
   return { bg: [241, 245, 249], text: [71, 85, 105], label: v || '—' };
 }
 
-// ─── Exports ────────────────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export function createStudentClassReportFileName(studentName: string, instituteId?: string | null): string {
   const suffix = instituteId ? `${studentName}-${instituteId}` : studentName;
@@ -363,62 +256,67 @@ export function createStudentClassReportFileName(studentName: string, instituteI
 }
 
 export async function buildStudentClassReportPdf(payload: StudentClassReportPayload): Promise<Blob> {
-  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
-    import('jspdf'),
-    import('jspdf-autotable'),
-  ]);
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const PW = doc.internal.pageSize.getWidth();   // 210
-  const PH = doc.internal.pageSize.getHeight();  // 297
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
 
   const sinhalaLoaded = await registerSinhalaFont(doc);
-  const headFont = sinhalaLoaded ? SINHALA_FONT_NAME : 'helvetica';
+  // SF is used ONLY for section headers (bilingual). Table cells always use 'helvetica'.
+  const SF = sinhalaLoaded ? SINHALA_FONT_NAME : 'helvetica';
 
-  // ── Palette ──────────────────────────────────────────────────────────────
   const C = {
-    hdrTop:     [31, 41, 55]    as RGB,
-    hdrBot:     [51, 65, 85]    as RGB,
-    hdrAccent:  [100, 116, 139] as RGB,
-    hdrAccent2: [148, 163, 184] as RGB,
-    secPay:     [51, 65, 85]    as RGB,
-    secPhy:     [51, 65, 85]    as RGB,
-    secRec:     [51, 65, 85]    as RGB,
-    secDetail:  [51, 65, 85]    as RGB,
-    tblHeadPay: [51, 65, 85]    as RGB,
-    tblHeadPhy: [51, 65, 85]    as RGB,
-    tblHeadRec: [51, 65, 85]    as RGB,
-    tblHeadSum: [51, 65, 85]    as RGB,
-    tblAlt:     [250, 250, 251] as RGB,
-    tblLine:    [229, 231, 235] as RGB,
-    cardBg:     [248, 250, 252] as RGB,
-    cardBdr:    [203, 213, 225] as RGB,
-    text:       [15, 23, 42]    as RGB,
-    muted:      [100, 116, 139] as RGB,
-    white:      [255, 255, 255] as RGB,
-    green:      [22, 163, 74]   as RGB,
-    red:        [220, 38, 38]   as RGB,
-    amber:      [202, 138, 4]   as RGB,
-    blue:       [37, 99, 235]   as RGB,
-    slate:      [71, 85, 105]   as RGB,
+    pageBg:    [247, 248, 250] as RGB,
+    white:     [255, 255, 255] as RGB,
+    cardBdr:   [209, 213, 219] as RGB,
+    rowAlt:    [249, 250, 252] as RGB,
+    hdrBg:     [17, 24, 39]   as RGB,
+    hdrBlue:   [37, 99, 235]  as RGB,
+    secPay:    [79, 70, 229]  as RGB,
+    secPhy:    [5, 150, 105]  as RGB,
+    secRec:    [217, 119, 6]  as RGB,
+    secDet:    [124, 58, 237] as RGB,
+    tblPay:    [79, 70, 229]  as RGB,
+    tblPhy:    [5, 150, 105]  as RGB,
+    tblRec:    [217, 119, 6]  as RGB,
+    tblDet:    [124, 58, 237] as RGB,
+    textDark:  [15, 23, 42]   as RGB,
+    textMuted: [107, 114, 128] as RGB,
+    green:     [22, 163, 74]  as RGB,
+    red:       [220, 38, 38]  as RGB,
+    amber:     [202, 138, 4]  as RGB,
+    blue:      [37, 99, 235]  as RGB,
+    slate:     [71, 85, 105]  as RGB,
   };
 
   const studentName = safeText(payload.student.fullName || payload.student.email || 'Student', 'Student');
 
+  // Section labels: bilingual heading / English subtext
   const sectionLabels = {
-    payments:         sinhalaLoaded ? 'Payments History / පන්ති ගාස්තු ගෙවීම්' : 'Payments History',
-    physical:         sinhalaLoaded ? 'Physical Attendance / පන්ති පැමිණීම'      : 'Physical Attendance',
-    recording:        sinhalaLoaded ? 'Recording Attendance / පටිගත නැරඹීම්'     : 'Recording Attendance',
-    recordingDetails: sinhalaLoaded ? 'Recording Session Details / සැසි විස්තර'  : 'Recording Session Details',
+    payments:  sinhalaLoaded ? 'ගෙවීම් ඉතිහාසය  /  Payments History'      : 'Payments History',
+    physical:  sinhalaLoaded ? 'භෞතික පැමිණීම  /  Physical Attendance'     : 'Physical Attendance',
+    recording: sinhalaLoaded ? 'පටිගත නැරඹීම  /  Recording Attendance'     : 'Recording Attendance',
+    recDetail: sinhalaLoaded ? 'සැසි විස්තර  /  Recording Session Details' : 'Recording Session Details',
   };
-
-  const tableLabels = sinhalaLoaded ? SI : SI_EN;
 
   const preferredLetterheadUrl = payload.letterheadUrl || easyEnglishPdfHeader;
   const [avatarImage, letterheadImage] = await Promise.all([
-    loadAvatarImage(payload.student.avatarUrl),
-    loadAvatarImage(preferredLetterheadUrl),
+    loadImage(payload.student.avatarUrl),
+    loadImage(preferredLetterheadUrl),
   ]);
+
+  // Measure letterhead height once so we can reuse on every page
+  let letterheadH = 0;
+  if (letterheadImage) {
+    const naturalDims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const img = new Image();
+      img.onload  = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+      img.onerror = () => resolve({ w: 1, h: 1 });
+      img.src = letterheadImage.dataUrl;
+    });
+    letterheadH = Math.min(45, Math.max(18, PW * (naturalDims.h / naturalDims.w)));
+  }
 
   const includedSections = [
     payload.options.includePayments            ? 'Payments'             : null,
@@ -426,17 +324,9 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     payload.options.includeRecordingAttendance ? 'Recording Attendance' : null,
   ].filter((v): v is string => Boolean(v));
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PAGE 1 HEADER
-  // ─────────────────────────────────────────────────────────────────────────
+  let y = 0;
 
-  let y: number;
-
-  /**
-   * Builds the "Class · Subject" label, deduplicating when both values are
-   * identical (case-insensitive). Used in both the letterhead strip and the
-   * fallback banner.
-   */
+  // ── Build class label from classInfo ──────────────────────────────────────
   const buildClassLabel = (): string => {
     const cn = safeText(payload.classInfo.name);
     const sj = safeText(payload.classInfo.subject);
@@ -446,590 +336,434 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     return `${cn}  ·  ${sj}`;
   };
 
+  // ── Page background + repeated header drawn on every page ──────────────────
+  const paintPage = (pageNum: number) => {
+    // Full-page background
+    doc.setFillColor(...C.pageBg);
+    doc.rect(0, 0, PW, PH, 'F');
+
+    if (letterheadImage) {
+      // Letterhead on EVERY page
+      doc.addImage(letterheadImage.dataUrl, letterheadImage.format, 0, 0, PW, letterheadH);
+
+      // Blue separator line under letterhead
+      doc.setFillColor(...C.hdrBlue);
+      doc.rect(0, letterheadH, PW, 1.2, 'F');
+
+      // Sub-bar with student name + generated date (page 1) or just student name (other pages)
+      const sY = letterheadH + 1.2, sH = 10.5, sTextY = sY + 7;
+      doc.setFillColor(244, 246, 250);
+      doc.rect(0, sY, PW, sH, 'F');
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...C.textDark);
+      doc.text(studentName, 16, sTextY);
+
+      const cl = buildClassLabel();
+      if (cl) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...C.textMuted);
+        doc.text(normalizeText(cl), PW / 2, sTextY, { align: 'center' });
+      }
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.textMuted);
+      if (pageNum === 1) {
+        doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 16, sTextY, { align: 'right' });
+      } else {
+        doc.text(`Page ${pageNum}`, PW - 16, sTextY, { align: 'right' });
+      }
+    } else {
+      // Dark header banner — only page 1 gets the full tall banner; subsequent pages get a slim strip
+      if (pageNum === 1) {
+        doc.setFillColor(...C.hdrBg);
+        doc.rect(0, 0, PW, 52, 'F');
+        doc.setFillColor(...C.hdrBlue);
+        doc.rect(0, 0, PW, 2.5, 'F');
+        doc.rect(0, 49.5, PW, 2.5, 'F');
+
+        doc.setFillColor(255, 255, 255);
+        doc.setGState(new (doc as any).GState({ opacity: 0.04 }));
+        doc.circle(PW + 5, -5, 52, 'F');
+        doc.circle(-5, 52, 36, 'F');
+        doc.setGState(new (doc as any).GState({ opacity: 1 }));
+
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text('STUDENT REPORT', 16, 11);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255);
+        doc.text(studentName, 16, 26);
+        doc.setFont(SF, 'normal'); doc.setFontSize(9); doc.setTextColor(147, 197, 253);
+        doc.text(normalizeText(buildClassLabel() || 'Student Progress Report'), 16, 34);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+        doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 16, 11, { align: 'right' });
+        doc.setFont(SF, 'bold'); doc.setFontSize(8); doc.setTextColor(147, 197, 253);
+        doc.text(includedSections.length > 0 ? includedSections.join('  ·  ') : 'No sections selected', PW - 16, 34, { align: 'right' });
+      } else {
+        // Slim continuation header
+        doc.setFillColor(...C.hdrBg);
+        doc.rect(0, 0, PW, 14, 'F');
+        doc.setFillColor(...C.hdrBlue);
+        doc.rect(0, 0, PW, 2, 'F');
+        doc.rect(0, 12, PW, 2, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255);
+        doc.text(studentName, 16, 9);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+        doc.text(`Page ${pageNum}`, PW - 16, 9, { align: 'right' });
+      }
+    }
+  };
+
+  // Paint page 1
+  paintPage(1);
+
+  // ── New page helper — paints background + header on each new page ──────────
+  const newPage = () => {
+    doc.addPage();
+    const pn = doc.getNumberOfPages();
+    paintPage(pn);
+    // Content starts below header
+    y = letterheadImage ? letterheadH + 1.2 + 10.5 + 8 : 22;
+  };
+
+  const ensureSpace = (n: number) => { if (y + n > PH - 16) newPage(); };
+
+  // Set initial y after header
   if (letterheadImage) {
-    // ── Letterhead image path ──────────────────────────────────────────────
-    const MAX_LH_H = 45;
-    const MIN_LH_H = 20;
+    y = letterheadH + 1.2 + 10.5 + 9;
+  } else {
+    y = 60;
+  }
 
-    const naturalDims = await new Promise<{ w: number; h: number }>((resolve) => {
-      const img = new Image();
-      img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-      img.onerror = () => resolve({ w: 1, h: 1 });
-      img.src = letterheadImage.dataUrl;
-    });
-
-    const aspectRatio = naturalDims.h / naturalDims.w;
-    const rawH = PW * aspectRatio;
-    const lhH  = Math.min(MAX_LH_H, Math.max(MIN_LH_H, rawH));
-
-    doc.addImage(letterheadImage.dataUrl, letterheadImage.format, 0, 0, PW, lhH);
-
-    // Divider lines below letterhead
-    doc.setFillColor(...C.hdrAccent);
-    doc.rect(0, lhH, PW, 1.0, 'F');
-    doc.setFillColor(...C.hdrAccent2);
-    doc.rect(0, lhH + 1.0, PW, 0.5, 'F');
-
-    // ── Info strip ────────────────────────────────────────────────────────
-    // Left:   student name  (bold, dark)
-    // Center: class label   (deduplicated, muted)
-    // Right:  generated ts  (muted)
-    const stripY     = lhH + 2.0;
-    const stripH     = 9;
-    const stripTextY = stripY + 5.8;
-
-    // Subtle strip background + top border
-    doc.setFillColor(248, 250, 252);
-    doc.rect(0, stripY, PW, stripH, 'F');
-    doc.setFillColor(...C.cardBdr);
-    doc.rect(0, stripY, PW, 0.3, 'F');
-
-    // Left — student name
-    doc.setTextColor(...C.text);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.2);
-    doc.text(studentName, 14, stripTextY);
-
-    // Center — class · subject (only when not empty)
-    const classLabel = buildClassLabel();
-    if (classLabel) {
-      doc.setTextColor(...C.muted);
+  // ── Section header: coloured pill with left accent bar ────────────────────
+  const drawSection = (title: string, subtitle: string | undefined, colour: RGB) => {
+    ensureSpace(16);
+    const H = 10;
+    doc.setFillColor(...C.white);
+    doc.setDrawColor(...colour);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(14, y, PW - 28, H, 2, 2, 'FD');
+    doc.setFillColor(...colour);
+    doc.roundedRect(14, y, 4, H, 2, 0, 'F');
+    doc.rect(16.5, y, 1.5, H, 'F');
+    // Title — use SF only for bilingual text; it handles mixed Sinhala+English well
+    doc.setFont(SF, 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...colour);
+    doc.text(normalizeText(title), 22, y + 6.7);
+    if (subtitle) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
-      doc.text(classLabel, PW / 2, stripTextY, { align: 'center' });
+      doc.setTextColor(...C.textMuted);
+      doc.text(normalizeText(subtitle), PW - 16, y + 6.7, { align: 'right' });
     }
+    doc.setTextColor(...C.textDark);
+    y += H + 5;
+  };
 
-    // Right — generated timestamp
-    doc.setTextColor(...C.muted);
+  const drawEmptyState = (msg: string) => {
+    ensureSpace(12);
+    doc.setFillColor(250, 251, 252);
+    doc.setDrawColor(...C.cardBdr);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(14, y, PW - 28, 9, 2, 2, 'FD');
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 14, stripTextY, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setTextColor(...C.textMuted);
+    doc.text(normalizeText(msg), PW / 2, y + 6.2, { align: 'center' });
+    y += 14;
+  };
 
-    y = lhH + stripH + 6;
+  const drawStatRow = (items: Array<{ label: string; value: string; color: RGB }>) => {
+    ensureSpace(22);
+    const n = items.length;
+    const gap = 3;
+    const cardW = (PW - 28 - gap * (n - 1)) / n;
+    const cardH = 17;
+    items.forEach((item, i) => {
+      const cx = 14 + i * (cardW + gap);
+      doc.setFillColor(0, 0, 0);
+      doc.setGState(new (doc as any).GState({ opacity: 0.03 }));
+      doc.roundedRect(cx + 0.5, y + 0.5, cardW, cardH, 2, 2, 'F');
+      doc.setGState(new (doc as any).GState({ opacity: 1 }));
+      doc.setFillColor(...C.white);
+      doc.setDrawColor(...C.cardBdr);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(cx, y, cardW, cardH, 2, 2, 'FD');
+      doc.setFillColor(...item.color);
+      doc.roundedRect(cx, y, cardW, 2.5, 2, 0, 'F');
+      doc.rect(cx, y + 1.2, cardW, 1.3, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...item.color);
+      doc.text(item.value, cx + cardW / 2, y + 10.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...C.textMuted);
+      doc.text(item.label.toUpperCase(), cx + cardW / 2, y + 14.5, { align: 'center' });
+    });
+    y += cardH + 5;
+  };
 
-  } else {
-    // ── Fallback: modern gradient banner ─────────────────────────────────
-    doc.setFillColor(...C.hdrTop);
-    doc.rect(0, 0, PW, 48, 'F');
-    doc.setFillColor(...C.hdrBot);
-    doc.rect(0, 28, PW, 20, 'F');
+  // All tables use 'helvetica' — NO Sinhala font in table cells (dynamic data is English only)
+  const renderTable = (config: Record<string, any>, hdrColor: RGB, gap = 6) => {
+    const sy = y;
+    autoTable(doc, {
+      ...config, startY: y, margin: { left: 14, right: 14 }, theme: 'striped',
+      styles: {
+        fontSize: 8.5, cellPadding: 3, textColor: [...C.textDark],
+        overflow: 'linebreak', lineWidth: 0, font: 'helvetica',
+      },
+      headStyles: {
+        fillColor: [...hdrColor], textColor: [255, 255, 255], fontStyle: 'bold',
+        font: 'helvetica', fontSize: 8.5, cellPadding: 3.5,
+      },
+      alternateRowStyles: { fillColor: [...C.rowAlt] },
+      tableLineColor: [...C.cardBdr], tableLineWidth: 0.3,
+    });
+    y = ((doc as any).lastAutoTable?.finalY ?? sy) + gap;
+  };
 
-    doc.setFillColor(...C.hdrAccent);
-    doc.rect(0, 0, PW, 2.5, 'F');
-    doc.setFillColor(...C.hdrAccent2);
-    doc.rect(0, 2.5, PW, 1, 'F');
-    doc.setFillColor(...C.hdrAccent);
-    doc.rect(0, 47.5, PW, 0.8, 'F');
-    doc.setFillColor(...C.hdrAccent2);
-    doc.rect(0, 48.3, PW, 0.7, 'F');
-
-    // Decorative circles
-    doc.setFillColor(255, 255, 255);
-    doc.setGState(new (doc as any).GState({ opacity: 0.05 }));
-    doc.circle(PW - 5, -10, 40, 'F');
-    doc.circle(PW + 10, 25, 30, 'F');
-    doc.circle(-5, 35, 28, 'F');
-    doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
-
-    doc.setTextColor(...C.hdrAccent);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.text('STUDENT REPORT', 16, 8.5);
-
-    doc.setTextColor(...C.white);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18.5);
-    doc.text(studentName, 16, 24);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.2);
-    doc.setTextColor(186, 230, 253);
-    doc.text(buildClassLabel() || 'No class info', 16, 31);
-
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
-    doc.text(`Generated ${fmtDateTime(new Date().toISOString())}`, PW - 16, 8.5, { align: 'right' });
-
-    doc.setFontSize(8.5);
-    doc.setTextColor(186, 230, 253);
-    doc.setFont('helvetica', 'bold');
-    doc.text(
-      includedSections.length > 0 ? includedSections.join('  /  ') : 'No sections',
-      PW - 16, 31, { align: 'right' },
-    );
-
-    y = 56;
-  }
+  const renderBadgeTable = (
+    config: Record<string, any>, hdrColor: RGB, badgeCol: number,
+    colorFn: (v: string) => { bg: RGB; text: RGB; label: string }, gap = 6,
+  ) => {
+    const sy = y;
+    autoTable(doc, {
+      ...config, startY: y, margin: { left: 14, right: 14 }, theme: 'striped',
+      styles: {
+        fontSize: 8.5, cellPadding: 3, textColor: [...C.textDark],
+        overflow: 'linebreak', lineWidth: 0, font: 'helvetica',
+      },
+      headStyles: {
+        fillColor: [...hdrColor], textColor: [255, 255, 255], fontStyle: 'bold',
+        font: 'helvetica', fontSize: 8.5, cellPadding: 3.5,
+      },
+      alternateRowStyles: { fillColor: [...C.rowAlt] },
+      tableLineColor: [...C.cardBdr], tableLineWidth: 0.3,
+      didDrawCell: (data: any) => {
+        if (data.section !== 'body' || data.column.index !== badgeCol) return;
+        const col = colorFn(String(data.cell.raw || ''));
+        const { x, y: cy, width, height } = data.cell;
+        const bW = Math.min(width - 6, 26), bH = 5.5;
+        const bX = x + (width - bW) / 2, bY = cy + (height - bH) / 2;
+        doc.setFillColor(...col.bg);
+        doc.roundedRect(bX, bY, bW, bH, 1.5, 1.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...col.text);
+        doc.text(col.label, bX + bW / 2, bY + bH / 2 + 1.1, { align: 'center' });
+      },
+    });
+    y = ((doc as any).lastAutoTable?.finalY ?? sy) + gap;
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // STUDENT INFO CARD
   // ─────────────────────────────────────────────────────────────────────────
 
-  const CARD_H = 42;
-
-  // Card shadow
+  const CARD_H = 46;
   doc.setFillColor(0, 0, 0);
   doc.setGState(new (doc as any).GState({ opacity: 0.04 }));
-  doc.roundedRect(13.5, y + 0.8, PW - 27, CARD_H, 3, 3, 'F');
-  doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
+  doc.roundedRect(14.5, y + 1, PW - 29, CARD_H, 3, 3, 'F');
+  doc.setGState(new (doc as any).GState({ opacity: 1 }));
 
-  // Card background
   doc.setFillColor(...C.white);
-  doc.setDrawColor(...C.hdrAccent2);
-  doc.setLineWidth(0.6);
+  doc.setDrawColor(...C.cardBdr);
+  doc.setLineWidth(0.5);
   doc.roundedRect(14, y, PW - 28, CARD_H, 3, 3, 'FD');
 
-  // Left accent band
-  doc.setFillColor(...C.hdrAccent2);
+  doc.setFillColor(...C.hdrBlue);
   doc.roundedRect(14, y, 4, CARD_H, 2.5, 0, 'F');
-  doc.rect(18, y, 1, CARD_H, 'F');
+  doc.rect(17, y, 1, CARD_H, 'F');
 
-  // Avatar
-  const avX = 24, avY = y + 8, avSize = 26;
+  const avX = 24, avY = y + 9, avR = 13;
   if (avatarImage) {
-    doc.addImage(avatarImage.dataUrl, avatarImage.format, avX, avY, avSize, avSize);
-    doc.setDrawColor(...C.hdrAccent2);
-    doc.setLineWidth(1.2);
-    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'S');
+    doc.addImage(avatarImage.dataUrl, avatarImage.format, avX, avY, avR * 2, avR * 2);
+    doc.setDrawColor(...C.cardBdr); doc.setLineWidth(1.2);
+    doc.circle(avX + avR, avY + avR, avR, 'S');
   } else {
-    doc.setFillColor(...C.hdrAccent2);
-    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'F');
-    doc.setDrawColor(...C.white);
-    doc.setLineWidth(1.2);
-    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'S');
-    doc.setTextColor(...C.white);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text(initialsFromName(studentName), avX + avSize / 2, avY + avSize / 2 + 2, { align: 'center' });
+    doc.setFillColor(...C.hdrBlue);
+    doc.circle(avX + avR, avY + avR, avR, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...C.white);
+    doc.text(initialsFromName(studentName), avX + avR, avY + avR + 2.5, { align: 'center' });
   }
 
-  // Student details — right of avatar
-  const tx = avX + avSize + 8;
+  const tx = avX + avR * 2 + 7;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...C.textDark);
+  doc.text(studentName, tx, y + 15);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...C.textMuted);
+  doc.text(`ID: ${safeText(payload.student.userId)}`, tx, y + 21);
+  doc.text(`Email: ${safeText(payload.student.email)}`, tx, y + 27);
+  doc.text(`Phone: ${safeText(payload.student.phone)}`, tx, y + 33);
+  doc.text(`Institute ID: ${safeText(payload.student.instituteId)}`, tx, y + 39);
 
-  doc.setTextColor(...C.text);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12.5);
-  doc.text(studentName, tx, y + 12);
+  const rx = PW - 55;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.textMuted);
+  doc.text('Payment Type', rx, y + 15);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...C.textDark);
+  doc.text(safeText(payload.student.paymentType), rx, y + 21);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.textMuted);
+  doc.text('Monthly Fee', rx, y + 28);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...C.textDark);
+  doc.text(`Rs. ${(payload.student.effectiveMonthlyFee || 0).toLocaleString()}`, rx, y + 34);
 
-  doc.setTextColor(...C.muted);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(`ID: ${payload.student.userId || '—'}`, tx, y + 18);
-
-  doc.setFontSize(7.8);
-  doc.text(`Email: ${payload.student.email || '—'}`, tx, y + 23);
-  doc.text(`Phone: ${payload.student.phone || '—'}`, tx, y + 27);
-
-  // Right column — payment info
-  const rhs_x = PW - 48;
-  doc.setTextColor(...C.muted);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.text('Payment Type:', rhs_x, y + 12);
-
-  doc.setTextColor(...C.text);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text(payload.student.paymentType || '—', rhs_x, y + 16.5);
-
-  doc.setTextColor(...C.muted);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.text('Monthly Fee:', rhs_x, y + 22);
-
-  const monthlyFee = payload.student.effectiveMonthlyFee || 0;
-  doc.setTextColor(...C.text);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text(`Rs. ${monthlyFee.toLocaleString()}`, rhs_x, y + 26.5);
-
-  y += CARD_H + 8;
+  y += CARD_H + 10;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Helpers
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const ensureSpace = (needed: number) => {
-    if (y + needed <= PH - 18) return;
-    doc.addPage();
-    y = 18;
-  };
-
-  const drawSection = (title: string, subtitle: string | undefined, accentColor: RGB) => {
-    ensureSpace(subtitle ? 14 : 11);
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(...C.cardBdr);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(14, y, PW - 28, 9, 1.5, 1.5, 'FD');
-
-    doc.setFillColor(...accentColor);
-    doc.rect(14, y, 2.2, 9, 'F');
-
-    doc.setTextColor(...accentColor);
-    doc.setFont(headFont, 'bold');
-    doc.setFontSize(9.6);
-    doc.text(normalizeText(title), 19, y + 5.8);
-
-    if (subtitle) {
-      doc.setTextColor(...C.muted);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.6);
-      doc.text(normalizeText(subtitle), PW - 16, y + 5.8, { align: 'right' });
-    }
-
-    doc.setTextColor(...C.text);
-    y += subtitle ? 13 : 11;
-  };
-
-  const drawEmpty = (msg: string) => {
-    ensureSpace(11);
-    doc.setFillColor(250, 250, 252);
-    doc.setDrawColor(...C.cardBdr);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(14, y, PW - 28, 8, 1.5, 1.5, 'FD');
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8.2);
-    doc.text(msg, 20, y + 5.3);
-    doc.setTextColor(...C.text);
-    y += 12;
-  };
-
-  const drawStatCards = (items: Array<{ label: string; value: string; color: RGB }>) => {
-    ensureSpace(18);
-    const n = items.length;
-    const cardW = (PW - 28 - (n - 1) * 3) / n;
-    const cardH = 14;
-
-    items.forEach((item, i) => {
-      const cx = 14 + i * (cardW + 3);
-      doc.setFillColor(...C.white);
-      doc.setDrawColor(...C.cardBdr);
-      doc.setLineWidth(0.25);
-      doc.roundedRect(cx, y, cardW, cardH, 1.5, 1.5, 'FD');
-
-      doc.setTextColor(...item.color);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text(normalizeText(item.value), cx + cardW / 2, y + 6.8, { align: 'center' });
-
-      doc.setTextColor(...C.muted);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6.8);
-      doc.text(normalizeText(item.label.toUpperCase()), cx + cardW / 2, y + 11.8, { align: 'center' });
-    });
-
-    y += 17;
-  };
-
-  const renderTable = (config: Record<string, any>, headColor: RGB, gap = 6) => {
-    const startY = y;
-    autoTable(doc, {
-      ...config,
-      startY: y,
-      margin: { left: 16, right: 16 },
-      theme: 'striped',
-      styles: {
-        fontSize: 8.2,
-        cellPadding: 2.5,
-        textColor: [...C.text],
-        lineColor: [...C.tblLine],
-        lineWidth: 0,
-        overflow: 'linebreak',
-      },
-      headStyles: {
-        fillColor: [...headColor],
-        textColor: [...C.white],
-        fontStyle: 'normal',
-        font: headFont,
-        fontSize: 8.4,
-        cellPadding: 3.2,
-      },
-      alternateRowStyles: { fillColor: [...C.tblAlt] },
-      tableLineColor: [...C.cardBdr],
-      tableLineWidth: 0.25,
-    });
-    y = ((doc as any).lastAutoTable?.finalY || startY) + gap;
-  };
-
-  const renderBadgeTable = (
-    config: Record<string, any>,
-    headColor: RGB,
-    badgeColIndex: number,
-    colorFn: (v: string) => { bg: RGB; text: RGB; label: string },
-    gap = 6,
-  ) => {
-    const startY = y;
-    autoTable(doc, {
-      ...config,
-      startY: y,
-      margin: { left: 16, right: 16 },
-      theme: 'striped',
-      styles: {
-        fontSize: 8.2,
-        cellPadding: 2.5,
-        textColor: [...C.text],
-        lineColor: [...C.tblLine],
-        lineWidth: 0,
-        overflow: 'linebreak',
-      },
-      headStyles: {
-        fillColor: [...headColor],
-        textColor: [...C.white],
-        fontStyle: 'normal',
-        font: headFont,
-        fontSize: 8.4,
-        cellPadding: 3.2,
-      },
-      alternateRowStyles: { fillColor: [...C.tblAlt] },
-      tableLineColor: [...C.cardBdr],
-      tableLineWidth: 0.25,
-      didDrawCell: (data: any) => {
-        if (data.section !== 'body' || data.column.index !== badgeColIndex) return;
-        const raw = String(data.cell.raw || '');
-        const colors = colorFn(raw);
-        const { x, y: cy, width, height } = data.cell;
-        const bW = Math.min(width - 4, 22);
-        const bH = 4.8;
-        const bX = x + (width - bW) / 2;
-        const bY = cy + (height - bH) / 2;
-        doc.setFillColor(...colors.bg);
-        doc.roundedRect(bX, bY, bW, bH, 1.2, 1.2, 'F');
-        doc.setTextColor(...colors.text);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.2);
-        doc.text(colors.label, bX + bW / 2, bY + bH / 2 + 1, { align: 'center' });
-      },
-    });
-    y = ((doc as any).lastAutoTable?.finalY || startY) + gap;
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // PAYMENTS SECTION
+  // PAYMENTS
   // ─────────────────────────────────────────────────────────────────────────
 
   if (payload.options.includePayments) {
-    const rows = payload.payments?.rows || [];
+    const rows = payload.payments?.rows ?? [];
     drawSection(sectionLabels.payments, `${rows.length} record(s)`, C.secPay);
-
     if (rows.length > 0) {
-      drawStatCards([
-        { label: 'Paid',    value: String(payload.payments?.paidCount    || 0), color: C.green },
-        { label: 'Pending', value: String(payload.payments?.pendingCount || 0), color: C.amber },
-        { label: 'Unpaid',  value: String(payload.payments?.unpaidCount  || 0), color: C.red   },
+      drawStatRow([
+        { label: 'Paid',    value: String(payload.payments?.paidCount    ?? 0), color: C.green },
+        { label: 'Pending', value: String(payload.payments?.pendingCount ?? 0), color: C.amber },
+        { label: 'Unpaid',  value: String(payload.payments?.unpaidCount  ?? 0), color: C.red   },
       ]);
-
-      renderBadgeTable(
-        {
-          head: [[tableLabels.month, tableLabels.status, tableLabels.slips, tableLabels.latestSlip]],
-          body: rows.map((r) => [
-            safeText(r.label),
-            safeText(r.status),
-            String(r.slipCount || 0),
-            // Resolve raw enum → friendly label for the Latest Slip column
-            r.latestSlipStatus
-              ? paymentStatusColors(r.latestSlipStatus).label
-              : '—',
-          ]),
-          columnStyles: {
-            0: { cellWidth: 40 },
-            1: { cellWidth: 34, halign: 'center' },
-            2: { cellWidth: 18, halign: 'center' },
-            3: { cellWidth: 34, halign: 'center' },
-          },
+      renderBadgeTable({
+        head: [[TABLE_LABELS.month, TABLE_LABELS.status, TABLE_LABELS.slips, TABLE_LABELS.latestSlip]],
+        body: rows.map(r => [
+          safeText(r.label),
+          safeText(r.status),
+          String(r.slipCount || 0),
+          r.latestSlipStatus ? paymentStatusColors(r.latestSlipStatus).label : '—',
+        ]),
+        columnStyles: {
+          0: { cellWidth: 44 },
+          1: { cellWidth: 38, halign: 'center' },
+          2: { cellWidth: 22, halign: 'center' },
+          3: { cellWidth: 38, halign: 'center' },
         },
-        C.tblHeadPay,
-        1,
-        paymentStatusColors,
-        8,
-      );
-    } else {
-      drawEmpty('No payment records found for this student.');
-    }
+      }, C.tblPay, 1, paymentStatusColors, 10);
+    } else { drawEmptyState('No payment records found for this student.'); }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PHYSICAL ATTENDANCE SECTION
+  // PHYSICAL ATTENDANCE
   // ─────────────────────────────────────────────────────────────────────────
 
   if (payload.options.includePhysicalAttendance) {
     const summary = payload.physicalAttendance?.summary;
-    const pct     = summary?.percentage || 0;
+    const pct = summary?.percentage ?? 0;
     drawSection(sectionLabels.physical, `Attendance rate: ${pct}%`, C.secPhy);
-
-    drawStatCards([
-      { label: 'Total',   value: String(summary?.total   || 0), color: C.slate },
-      { label: 'Present', value: String(summary?.present || 0), color: C.green },
-      { label: 'Late',    value: String(summary?.late    || 0), color: C.amber },
-      { label: 'Absent',  value: String(summary?.absent  || 0), color: C.red   },
-      { label: 'Excused', value: String(summary?.excused || 0), color: C.blue  },
+    drawStatRow([
+      { label: 'Total',   value: String(summary?.total   ?? 0), color: C.slate },
+      { label: 'Present', value: String(summary?.present ?? 0), color: C.green },
+      { label: 'Late',    value: String(summary?.late    ?? 0), color: C.amber },
+      { label: 'Absent',  value: String(summary?.absent  ?? 0), color: C.red   },
+      { label: 'Excused', value: String(summary?.excused ?? 0), color: C.blue  },
     ]);
-
-    const physRows = payload.physicalAttendance?.rows || [];
-    if (physRows.length > 0) {
-      renderBadgeTable(
-        {
-          head: [[tableLabels.date, tableLabels.session, tableLabels.time, tableLabels.status]],
-          body: physRows.map((r) => [
-            // FIX: "YYYY-MM-DD" → "DD Mon YYYY" (avoids UTC shift)
-            fmtAttendanceDate(r.date),
-            // FIX: if the session field accidentally contains a raw date, format it;
-            //      otherwise use the session name as-is
-            /^\d{4}-\d{2}-\d{2}$/.test((r.session || '').trim())
-              ? fmtAttendanceDate(r.session)
-              : safeText(r.session),
-            // FIX: suppress meaningless "00:00" placeholder times
-            fmtSessionTime(r.sessionTime),
-            safeText(r.status),
-          ]),
-          columnStyles: {
-            0: { cellWidth: 34 },
-            1: { cellWidth: 40 },
-            2: { cellWidth: 30 },
-            3: { cellWidth: 28, halign: 'center' },
-          },
+    const rows = payload.physicalAttendance?.rows ?? [];
+    if (rows.length > 0) {
+      renderBadgeTable({
+        head: [[TABLE_LABELS.date, TABLE_LABELS.session, TABLE_LABELS.time, TABLE_LABELS.status]],
+        body: rows.map(r => [
+          fmtAttendanceDate(r.date),
+          cleanSessionLabel(r.session),
+          fmtSessionTime(r.sessionTime),
+          safeText(r.status),
+        ]),
+        columnStyles: {
+          0: { cellWidth: 36 },
+          1: { cellWidth: 54 },
+          2: { cellWidth: 24, halign: 'center' },
+          3: { cellWidth: 30, halign: 'center' },
         },
-        C.tblHeadPhy,
-        3,
-        attendanceStatusColors,
-        8,
-      );
-    } else {
-      drawEmpty('No physical attendance records found.');
-    }
+      }, C.tblPhy, 3, attendanceStatusColors, 10);
+    } else { drawEmptyState('No physical attendance records found.'); }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // RECORDING ATTENDANCE SECTION
+  // RECORDING ATTENDANCE
   // ─────────────────────────────────────────────────────────────────────────
 
   if (payload.options.includeRecordingAttendance) {
-    const summaryRows = payload.recordingAttendance?.summaryRows || [];
+    const summaryRows = payload.recordingAttendance?.summaryRows ?? [];
     drawSection(sectionLabels.recording, `${summaryRows.length} recording(s) tracked`, C.secRec);
-
     if (summaryRows.length > 0) {
-      renderTable(
-        {
-          head: [[
-            tableLabels.recordingTitle,
-            tableLabels.month,
-            tableLabels.sessions,
-            tableLabels.watchedTime,
-            tableLabels.lastWatch,
-          ]],
-          body: summaryRows.map((r) => [
-            safeText(r.title),
-            safeText(r.month),
-            String(r.sessions || 0),
-            fmtDuration(r.watchedSec || 0),
-            fmtDateTime(r.lastWatchedAt),
-          ]),
-          columnStyles: {
-            0: { cellWidth: 40 },
-            1: { cellWidth: 22 },
-            2: { cellWidth: 20, halign: 'center' },
-            3: { cellWidth: 28, halign: 'right' },
-            4: { cellWidth: 36 },
-          },
+      renderTable({
+        head: [[TABLE_LABELS.recordingTitle, TABLE_LABELS.month, TABLE_LABELS.sessions, TABLE_LABELS.watchedTime, TABLE_LABELS.lastWatch]],
+        body: summaryRows.map(r => [
+          safeText(r.title),
+          safeText(r.month),
+          String(r.sessions || 0),
+          fmtDuration(r.watchedSec || 0),
+          fmtDateTime(r.lastWatchedAt),
+        ]),
+        columnStyles: {
+          0: { cellWidth: 52 },
+          1: { cellWidth: 22 },
+          2: { cellWidth: 18, halign: 'center' },
+          3: { cellWidth: 24, halign: 'center' },
+          4: { cellWidth: 38 },
         },
-        C.tblHeadRec,
-        8,
-      );
-    } else {
-      drawEmpty('No recording activity found for this student.');
-    }
+      }, C.tblRec, 8);
+    } else { drawEmptyState('No recording activity found for this student.'); }
 
     if (payload.options.recordingMode === 'FULL') {
-      const sessionRows = payload.recordingAttendance?.sessionRows || [];
-      drawSection(sectionLabels.recordingDetails, `${sessionRows.length} session(s)`, C.secDetail);
-
+      const sessionRows = payload.recordingAttendance?.sessionRows ?? [];
+      drawSection(sectionLabels.recDetail, `${sessionRows.length} session(s)`, C.secDet);
       if (sessionRows.length > 0) {
-        renderBadgeTable(
-          {
-            head: [[
-              tableLabels.recordingTitle,
-              tableLabels.started,
-              tableLabels.ended,
-              tableLabels.watched,
-              tableLabels.status,
-            ]],
-            body: sessionRows.map((r) => [
-              safeText(r.title),
-              fmtDateTime(r.startedAt),
-              fmtDateTime(r.endedAt),
-              fmtDuration(r.watchedSec || 0),
-              safeText(r.status),
-            ]),
-            columnStyles: {
-              0: { cellWidth: 40 },
-              1: { cellWidth: 34 },
-              2: { cellWidth: 34 },
-              3: { cellWidth: 24, halign: 'right' },
-              4: { cellWidth: 26, halign: 'center' },
-            },
+        renderBadgeTable({
+          head: [[TABLE_LABELS.recordingTitle, TABLE_LABELS.started, TABLE_LABELS.ended, TABLE_LABELS.watched, TABLE_LABELS.status]],
+          body: sessionRows.map(r => [
+            safeText(r.title),
+            fmtDateTime(r.startedAt),
+            fmtDateTime(r.endedAt),
+            fmtDuration(r.watchedSec || 0),
+            safeText(r.status),
+          ]),
+          columnStyles: {
+            0: { cellWidth: 46 },
+            1: { cellWidth: 34 },
+            2: { cellWidth: 34 },
+            3: { cellWidth: 20, halign: 'center' },
+            4: { cellWidth: 26, halign: 'center' },
           },
-          C.tblHeadRec,
-          4,
-          recordingStatusColors,
-          8,
-        );
-      } else {
-        drawEmpty('No recording session details found.');
-      }
+        }, C.tblDet, 4, recordingStatusColors, 10);
+      } else { drawEmptyState('No recording session details found.'); }
     }
   }
 
-  // Nothing selected
-  if (
-    !payload.options.includePayments &&
-    !payload.options.includePhysicalAttendance &&
-    !payload.options.includeRecordingAttendance
-  ) {
+  if (!payload.options.includePayments && !payload.options.includePhysicalAttendance && !payload.options.includeRecordingAttendance) {
     drawSection('No Sections Selected', undefined, C.slate);
-    drawEmpty('Select at least one section (Payments, Physical Attendance, or Recording Attendance) before exporting.');
+    drawEmptyState('Select at least one section before exporting.');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // FOOTER — every page
   // ─────────────────────────────────────────────────────────────────────────
 
-  const pageCount    = doc.getNumberOfPages();
-  const footerLeft   = payload.footer?.left   ?? `Class: ${payload.classInfo.name || '—'}`;
-  const footerCenter = payload.footer?.center ?? studentName;
+  const pageCount = doc.getNumberOfPages();
+  const fLeft   = payload.footer?.left   ?? `Class: ${safeText(payload.classInfo.name)}`;
+  const fCenter = payload.footer?.center ?? studentName;
 
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
 
-    doc.setFillColor(...C.hdrAccent2);
-    doc.rect(0, PH - 10, PW, 0.8, 'F');
-
-    doc.setFillColor(250, 250, 252);
-    doc.rect(0, PH - 9.2, PW, 9.2, 'F');
-
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text(footerLeft,                 14,      PH - 3.8);
-    doc.text(footerCenter,               PW / 2,  PH - 3.8, { align: 'center' });
-    doc.text(`Page ${p} / ${pageCount}`, PW - 14, PH - 3.8, { align: 'right' });
+    // Footer bar
+    doc.setFillColor(...C.hdrBlue);
+    doc.rect(0, PH - 11, PW, 0.9, 'F');
+    doc.setFillColor(244, 246, 250);
+    doc.rect(0, PH - 10.1, PW, 10.1, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.textMuted);
+    doc.text(normalizeText(fLeft), 16, PH - 4);
+    doc.text(normalizeText(fCenter), PW / 2, PH - 4, { align: 'center' });
+    doc.text(`Page ${p} / ${pageCount}`, PW - 16, PH - 4, { align: 'right' });
   }
 
   return doc.output('blob');
 }
 
-// ─── Utility exports ────────────────────────────────────────────────────────
+// ─── Utility Exports ──────────────────────────────────────────────────────────
 
 export function normalizeDateLabel(year: number, month: number, name?: string): string {
-  if (name && name.trim()) return name.trim();
+  if (name?.trim()) return name.trim();
   const d = new Date(year, month - 1, 1);
-  if (Number.isNaN(d.getTime())) return `${year}-${String(month).padStart(2, '0')}`;
-  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? `${year}-${String(month).padStart(2, '0')}` : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
 export function normalizePhysicalDate(dateText: string): string {
   if (!dateText) return '—';
-  const date = new Date(`${dateText}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateText;
-  return fmtDate(date.toISOString());
+  const d = new Date(`${dateText}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? dateText : fmtDate(d.toISOString());
 }
