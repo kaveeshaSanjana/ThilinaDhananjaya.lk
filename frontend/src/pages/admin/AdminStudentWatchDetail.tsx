@@ -63,6 +63,7 @@ export default function AdminStudentWatchDetail() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!recordingId || !userId) return;
@@ -154,15 +155,30 @@ export default function AdminStudentWatchDetail() {
         </div>
 
         <button
-          onClick={() => {
-            void exportStudentWatchDetailPdf(data);
+          onClick={async () => {
+            try {
+              setExporting(true);
+              await exportStudentWatchDetailPdf(data);
+            } catch (err) {
+              console.error('PDF export failed:', err);
+              alert('Failed to export PDF. Please try again.');
+            } finally {
+              setExporting(false);
+            }
           }}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition"
+          disabled={exporting}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
-          </svg>
-          Export A4 PDF
+          {exporting ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+            </svg>
+          )}
+          {exporting ? 'Exporting...' : 'Export A4 PDF'}
         </button>
       </div>
 
