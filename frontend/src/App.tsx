@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { InstituteProvider, useInstitute } from './context/InstituteContext';
@@ -109,6 +110,49 @@ function MarkAttendanceExternalOnlyRedirect() {
   return <Navigate to={target} replace />;
 }
 
+function LandingPageView() {
+  const { user, loading } = useAuth();
+  const { selected } = useInstitute();
+  const [iframeError, setIframeError] = useState(false);
+
+  if (loading) {
+    return <LandingStyleLoading />;
+  }
+
+  // If user is authenticated, redirect to appropriate dashboard
+  if (user) {
+    if (user.role === 'ADMIN' && selected) {
+      return <Navigate to={getInstituteAdminPath(selected.id)} replace />;
+    }
+    if (user.role === 'STUDENT') {
+      return <Navigate to="/dashboard" replace />;
+    }
+  }
+
+  // For unauthenticated users, show the landing page in an iframe
+  return (
+    <div style={{ width: '100%', height: '100vh' }}>
+      <iframe
+        src="/landing-page.html"
+        onError={() => setIframeError(true)}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          margin: 0,
+          padding: 0
+        }}
+        title="Landing Page"
+      />
+      {iframeError && (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p>Landing page could not load. Please <a href="/login">login here</a>.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { loading } = useAuth();
 
@@ -116,6 +160,10 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Serve static landing page HTML - outside Layout to avoid routing conflicts */}
+      <Route path="/landing-page.html" element={<div />} />
+      <Route path="/" element={<LandingPageView />} />
+      
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/landing" element={<Navigate to="/" replace />} />
@@ -185,6 +233,9 @@ function AppRoutes() {
         <Route path="institute/:instituteId/admin/recordings/:recordingId/student/:userId" element={<ProtectedRoute role="ADMIN"><AdminStudentWatchDetail /></ProtectedRoute>} />
         <Route path="admin/*" element={<ProtectedRoute role="ADMIN"><AdminLegacyRedirect /></ProtectedRoute>} />
       </Route>
+
+      {/* Catch-all for unmatched routes */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

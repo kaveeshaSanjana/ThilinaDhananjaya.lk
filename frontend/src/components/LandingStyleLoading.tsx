@@ -1,5 +1,4 @@
-import LoadingPage from '../landing/components/LoadingPage';
-
+// Landing page is served at root from /frontend/landing/ folder
 export default function LandingStyleLoading() {
-  return <LoadingPage onLoadComplete={() => {}} />;
+  return null;
 }
