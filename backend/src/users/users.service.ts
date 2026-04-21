@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 interface CreateUserData {
@@ -105,7 +105,7 @@ export class UsersService {
         include: { profile: true },
       });
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error?.code === 'P2002') {
         const target = String((error as any)?.meta?.target || '');
         if (target.includes('instituteId')) {
           throw new ConflictException('Institute user ID already exists');
@@ -287,7 +287,7 @@ export class UsersService {
         data: updateData,
       });
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error?.code === 'P2002') {
         const target = String((error as any)?.meta?.target || '');
         if (target.includes('instituteId')) {
           throw new ConflictException('Institute user ID already exists');

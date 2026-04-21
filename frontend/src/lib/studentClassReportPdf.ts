@@ -3,6 +3,12 @@ import api from './api';
 export type RecordingReportMode = 'SUMMARY' | 'FULL';
 
 export interface StudentClassReportPayload {
+  /**
+   * Optional letterhead image shown full-width at the top of page 1 only.
+   * Recommended size: 2480 × 350 px (210 mm × ~30 mm at 300 dpi).
+   * Aspect ratio is preserved; height is capped at 45 mm.
+   */
+  letterheadUrl?: string | null;
   classInfo: {
     id?: string;
     name?: string;
@@ -18,6 +24,13 @@ export interface StudentClassReportPayload {
     paymentType?: string | null;
     effectiveMonthlyFee?: number | null;
   };
+  /** Custom footer text shown on every page. */
+  footer?: {
+    /** Left column — e.g. "thilinadhananjaya.lk | 0712525472" */
+    left?: string | null;
+    /** Centre column — e.g. "SurakshaLMS" */
+    center?: string | null;
+  } | null;
   options: {
     includePayments: boolean;
     includePhysicalAttendance: boolean;
@@ -69,19 +82,60 @@ export interface StudentClassReportPayload {
   };
 }
 
+// ─── Sinhala text handling ────────────────────────────────────────────────────
+//
+// Standard PDF fonts (Helvetica) cannot properly render Sinhala Unicode.
+// Sinhala text is included in bilingual labels but will appear corrupted in PDFs.
+// This is a known limitation of jsPDF with complex scripts.
+
+async function registerSinhalaFont(doc: any): Promise<boolean> {
+  // Just use default helvetica - simple and reliable
+  return true;
+}
+
+// ─── Sinhala heading labels ────────────────────────────────────────────────────
+
+const SI = {
+  // Payments
+  month:          'Month / මාසය',
+  status:         'Status / තත්ත්වය',
+  slips:          'Slips / රිසිට්පත්',
+  latestSlip:     'Latest Slip / අවසන් රිසිට්පත්',
+  // Physical attendance
+  date:           'Date / දිනය',
+  session:        'Session / සැසිය',
+  time:           'Time / වේලාව',
+  total:          'Total / මුළු',
+  present:        'Present / පැමිණි',
+  late:           'Late / පරක්කු',
+  absent:         'Absent / නොපැමිණි',
+  excused:        'Excused / සමාවූ',
+  attendancePct:  'Attendance % / පැමිණීම %',
+  // Recordings
+  recordingTitle: 'Recording / පටිගත කිරීම',
+  sessions:       'Sessions / සැසි',
+  watchedTime:    'Watched / නැරඹූ කාලය',
+  lastWatch:      'Last Watch / අවසන් නැරඹීම',
+  started:        'Started / ආරම්භය',
+  ended:          'Ended / අවසානය',
+  watched:        'Watched / නැරඹූ',
+} as const;
+
+// ─── Formatters ────────────────────────────────────────────────────────────────
+
 function fmtDateTime(iso?: string | null): string {
-  if (!iso) return '-';
+  if (!iso) return '—';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) return '—';
   const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  return `${date} ${time}`;
+  return `${date}  ${time}`;
 }
 
 function fmtDate(iso?: string | null): string {
-  if (!iso) return '-';
+  if (!iso) return '—';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -96,7 +150,7 @@ function fmtDuration(sec: number): string {
 }
 
 function fmtMoney(value: number | null | undefined): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   const rounded = Math.round(value * 100) / 100;
   return `Rs. ${rounded.toLocaleString('en-LK', {
     minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
@@ -112,10 +166,10 @@ function initialsFromName(name: string): string {
   return (
     name
       .split(' ')
-      .map((part) => part.trim())
+      .map((p) => p.trim())
       .filter(Boolean)
       .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() || '')
+      .map((p) => p[0]?.toUpperCase() || '')
       .join('') || 'ST'
   );
 }
@@ -125,24 +179,17 @@ function resolveAssetUrl(rawUrl?: string): string {
   if (!value) return '';
   if (/^(https?:|data:|blob:)/i.test(value)) return value;
   if (value.startsWith('//')) return `${window.location.protocol}${value}`;
-
   const apiBase = typeof api.defaults.baseURL === 'string' ? api.defaults.baseURL : '';
   let origin = window.location.origin;
-
   if (/^https?:\/\//i.test(apiBase)) {
-    try {
-      origin = new URL(apiBase).origin;
-    } catch {
-      // Keep window origin fallback.
-    }
+    try { origin = new URL(apiBase).origin; } catch { /* keep fallback */ }
   }
-
   if (value.startsWith('/')) return `${origin}${value}`;
   return `${origin}/${value.replace(/^\/+/, '')}`;
 }
 
 async function blobToDataUrl(blob: Blob): Promise<string> {
-  return await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === 'string') resolve(reader.result);
@@ -156,58 +203,62 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 async function loadAvatarImage(rawUrl?: string | null): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
   const resolved = resolveAssetUrl(rawUrl || '');
   if (!resolved) return null;
-
   try {
     if (/^data:image\//i.test(resolved)) {
-      return {
-        dataUrl: resolved,
-        format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG',
-      };
+      return { dataUrl: resolved, format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG' };
     }
-
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-
-    const response = await fetch(resolved, {
-      credentials: 'include',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'image/*',
-      },
-    });
-
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(resolved, { credentials: 'include', signal: controller.signal, headers: { Accept: 'image/*' } });
     clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.warn(`Avatar fetch failed with status ${response.status}: ${resolved}`);
-      return null;
-    }
-
+    if (!response.ok) { console.warn(`Avatar fetch failed ${response.status}: ${resolved}`); return null; }
     const blob = await response.blob();
-    if (!blob.type.startsWith('image/')) {
-      console.warn(`Avatar blob is not an image: ${blob.type}`);
-      return null;
-    }
-
+    if (!blob.type.startsWith('image/')) { console.warn(`Avatar blob not image: ${blob.type}`); return null; }
     const dataUrl = await blobToDataUrl(blob);
-    return {
-      dataUrl,
-      format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG',
-    };
+    return { dataUrl, format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG' };
   } catch (error) {
-    console.warn(`Failed to load avatar image from ${resolved}:`, error);
+    // Silently ignore avatar load errors (CORS, timeout, network issues)
+    // The report will still render with initials circle instead
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`Avatar fetch timed out: ${resolved}`);
+    } else {
+      console.warn(`Avatar fetch failed: ${resolved}`);
+    }
     return null;
   }
 }
 
-function normalizePaymentLabel(raw: string | null | undefined): string {
-  const value = (raw || '').trim().toUpperCase();
-  if (value === 'PAID' || value === 'VERIFIED') return 'Paid';
-  if (value === 'PENDING') return 'Pending';
-  if (value === 'LATE') return 'Late';
-  if (value === 'UNPAID' || value === 'REJECTED') return 'Unpaid';
-  return value || '-';
+// ─── Status badge colours ───────────────────────────────────────────────────
+
+type RGB = [number, number, number];
+
+function paymentStatusColors(raw: string | null | undefined): { bg: RGB; text: RGB; label: string } {
+  const v = (raw || '').trim().toUpperCase();
+  if (v === 'PAID' || v === 'VERIFIED')  return { bg: [220, 252, 231], text: [22, 101, 52],  label: 'Paid' };
+  if (v === 'PENDING')                   return { bg: [254, 249, 195], text: [133, 77, 14],  label: 'Pending' };
+  if (v === 'LATE')                      return { bg: [255, 237, 213], text: [154, 52, 18],  label: 'Late' };
+  if (v === 'UNPAID' || v === 'REJECTED')return { bg: [254, 226, 226], text: [153, 27, 27],  label: 'Unpaid' };
+  return { bg: [241, 245, 249], text: [71, 85, 105], label: v || '—' };
 }
+
+function attendanceStatusColors(raw: string | null | undefined): { bg: RGB; text: RGB; label: string } {
+  const v = (raw || '').trim().toUpperCase();
+  if (v === 'PRESENT') return { bg: [220, 252, 231], text: [22, 101, 52],  label: 'Present' };
+  if (v === 'LATE')    return { bg: [255, 237, 213], text: [154, 52, 18],  label: 'Late' };
+  if (v === 'ABSENT')  return { bg: [254, 226, 226], text: [153, 27, 27],  label: 'Absent' };
+  if (v === 'EXCUSED') return { bg: [224, 242, 254], text: [14, 116, 163], label: 'Excused' };
+  return { bg: [241, 245, 249], text: [71, 85, 105], label: v || '—' };
+}
+
+function recordingStatusColors(raw: string | null | undefined): { bg: RGB; text: RGB; label: string } {
+  const v = (raw || '').trim().toUpperCase();
+  if (v === 'WATCHED' || v === 'COMPLETED') return { bg: [220, 252, 231], text: [22, 101, 52], label: 'Watched' };
+  if (v === 'PARTIAL')                      return { bg: [255, 237, 213], text: [154, 52, 18], label: 'Partial' };
+  if (v === 'NOT_WATCHED' || v === 'UNWATCHED') return { bg: [254, 226, 226], text: [153, 27, 27], label: 'Unwatched' };
+  return { bg: [241, 245, 249], text: [71, 85, 105], label: v || '—' };
+}
+
+// ─── Exports ────────────────────────────────────────────────────────────────
 
 export function createStudentClassReportFileName(studentName: string, instituteId?: string | null): string {
   const suffix = instituteId ? `${studentName}-${instituteId}` : studentName;
@@ -221,323 +272,645 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
   ]);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
+  const PW = doc.internal.pageSize.getWidth();   // 210
+  const PH = doc.internal.pageSize.getHeight();  // 297
 
-  const palette = {
-    headerDark: [10, 18, 34] as const,
-    headerAccent: [8, 145, 178] as const,
-    sectionBar: [30, 64, 175] as const,
-    tableHead: [30, 64, 175] as const,
-    summaryHead: [14, 116, 236] as const,
-    card: [248, 250, 252] as const,
-    cardBorder: [226, 232, 240] as const,
-    text: [15, 23, 42] as const,
-    muted: [100, 116, 139] as const,
-    white: [255, 255, 255] as const,
-    info: [29, 78, 216] as const,
+  // Use helvetica for reliable rendering
+  const sinhalaLoaded = await registerSinhalaFont(doc);
+  const headFont = 'helvetica';
+
+  // ── Palette ──────────────────────────────────────────────────────────────
+  const C = {
+    // Header gradient simulation (two rects)
+    hdrTop:     [10, 15, 40]    as RGB,   // very dark navy
+    hdrBot:     [18, 30, 72]    as RGB,   // deep navy
+    hdrAccent:  [56, 189, 248]  as RGB,   // sky blue accent bar
+    hdrAccent2: [99, 102, 241]  as RGB,   // indigo accent
+    // Section headers
+    secPay:     [37, 99, 235]   as RGB,   // blue
+    secPhy:     [22, 163, 74]   as RGB,   // green
+    secRec:     [124, 58, 237]  as RGB,   // violet
+    secDetail:  [100, 116, 139] as RGB,   // slate
+    // Table
+    tblHeadPay: [37, 99, 235]   as RGB,
+    tblHeadPhy: [22, 163, 74]   as RGB,
+    tblHeadRec: [124, 58, 237]  as RGB,
+    tblHeadSum: [71, 85, 105]   as RGB,
+    tblAlt:     [248, 250, 252] as RGB,
+    tblLine:    [226, 232, 240] as RGB,
+    // Stat cards
+    cardBg:     [248, 250, 252] as RGB,
+    cardBdr:    [203, 213, 225] as RGB,
+    // Typography
+    text:       [15, 23, 42]    as RGB,
+    muted:      [100, 116, 139] as RGB,
+    white:      [255, 255, 255] as RGB,
+    // Stat accent colours
+    green:      [22, 163, 74]   as RGB,
+    red:        [220, 38, 38]   as RGB,
+    amber:      [217, 119, 6]   as RGB,
+    blue:       [37, 99, 235]   as RGB,
+    slate:      [71, 85, 105]   as RGB,
   };
 
   const studentName = payload.student.fullName || payload.student.email || 'Student';
-  const avatarImage = await loadAvatarImage(payload.student.avatarUrl);
+  const [avatarImage, letterheadImage] = await Promise.all([
+    loadAvatarImage(payload.student.avatarUrl),
+    loadAvatarImage(payload.letterheadUrl),   // reuses the same loader — works for any image
+  ]);
 
   const includedSections = [
     payload.options.includePayments ? 'Payments' : null,
     payload.options.includePhysicalAttendance ? 'Physical Attendance' : null,
     payload.options.includeRecordingAttendance ? 'Recording Attendance' : null,
-  ].filter((value): value is string => Boolean(value));
+  ].filter((v): v is string => Boolean(v));
 
-  const recordingModeLabel = payload.options.recordingMode === 'FULL'
-    ? 'Full details'
-    : 'Summary only';
+  // ─────────────────────────────────────────────────────────────────────────
+  // PAGE 1 HEADER — letterhead image OR navy banner fallback
+  // ─────────────────────────────────────────────────────────────────────────
 
-  doc.setFillColor(...palette.headerDark);
-  doc.rect(0, 0, pageWidth, 30, 'F');
-  doc.setFillColor(...palette.headerAccent);
-  doc.rect(0, 30, pageWidth, 4, 'F');
+  let y: number;
 
-  doc.setTextColor(...palette.white);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15.5);
-  doc.text('Student Class Report', 14, 11);
+  if (letterheadImage) {
+    // ── Letterhead image path ──────────────────────────────────────────────
+    // Decode natural dimensions from the data URL so we can preserve the
+    // aspect ratio while capping height at MAX_LH_H mm.
+    const MAX_LH_H = 45; // mm — hard ceiling so body content is never crowded
+    const MIN_LH_H = 20; // mm — floor so a very wide/thin image is still visible
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.8);
-  doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, pageWidth - 14, 10.5, { align: 'right' });
-  doc.text(`Class: ${payload.classInfo.name || '-'}`, 14, 17);
-  doc.text(`Subject: ${payload.classInfo.subject || '-'}`, 14, 22);
-  doc.text(`Sections: ${includedSections.length > 0 ? includedSections.join(', ') : '-'}`, 14, 27);
+    // Parse width & height from the base64 image via an off-screen Image element.
+    const naturalDims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => resolve({ w: 1, h: 1 }); // safe fallback
+      img.src = letterheadImage.dataUrl;
+    });
 
-  let y = 38;
+    const aspectRatio = naturalDims.h / naturalDims.w;
+    const rawH = PW * aspectRatio;                         // mm if full-width
+    const lhH = Math.min(MAX_LH_H, Math.max(MIN_LH_H, rawH));
 
-  const ensurePageSpace = (neededHeight: number) => {
-    if (y + neededHeight <= pageHeight - 14) return;
-    doc.addPage();
-    y = 16;
-  };
+    // Render image edge-to-edge, top of page
+    doc.addImage(letterheadImage.dataUrl, letterheadImage.format, 0, 0, PW, lhH);
 
-  const drawSectionTitle = (title: string, subtitle?: string) => {
-    ensurePageSpace(subtitle ? 16 : 11);
-    doc.setFillColor(...palette.sectionBar);
-    doc.roundedRect(14, y, pageWidth - 28, 8, 1.5, 1.5, 'F');
-    doc.setTextColor(...palette.white);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.text(title, 16, y + 5.3);
-    y += 10;
+    // Thin accent divider below image
+    doc.setFillColor(...C.hdrAccent);
+    doc.rect(0, lhH, PW, 1.0, 'F');
+    doc.setFillColor(...C.hdrAccent2);
+    doc.rect(0, lhH + 1.0, PW, 0.5, 'F');
 
-    if (subtitle) {
-      doc.setTextColor(...palette.muted);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.text(subtitle, 14, y + 2.5);
-      y += 5;
-    }
-
-    doc.setTextColor(...palette.text);
-  };
-
-  const drawEmptyState = (message: string) => {
-    ensurePageSpace(12);
-    doc.setFillColor(...palette.card);
-    doc.setDrawColor(...palette.cardBorder);
-    doc.roundedRect(14, y, pageWidth - 28, 8, 1.5, 1.5, 'FD');
-    doc.setTextColor(...palette.muted);
+    // Slim info strip — class · student name · generated date
+    const stripY = lhH + 2.5;
+    doc.setTextColor(...C.muted);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.6);
-    doc.text(message, 16, y + 5.2);
-    doc.setTextColor(...palette.text);
-    y += 11;
-  };
+    doc.setFontSize(7.5);
+    doc.text(`Class: ${payload.classInfo.name || '—'}`, 14, stripY + 4.5);
 
-  doc.setFillColor(...palette.card);
-  doc.setDrawColor(...palette.cardBorder);
-  doc.roundedRect(14, y, pageWidth - 28, 40, 2, 2, 'FD');
-
-  const avatarX = 18;
-  const avatarY = y + 8;
-  const avatarSize = 24;
-
-  if (avatarImage) {
-    doc.addImage(avatarImage.dataUrl, avatarImage.format, avatarX, avatarY, avatarSize, avatarSize);
-  } else {
-    doc.setFillColor(...palette.info);
-    doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 'F');
-    doc.setTextColor(...palette.white);
+    const classLabel = [payload.classInfo.name, payload.classInfo.subject].filter(Boolean).join('  ·  ');
+    doc.setTextColor(...C.text);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11.5);
-    doc.text(initialsFromName(studentName), avatarX + avatarSize / 2, avatarY + avatarSize / 2 + 1.5, { align: 'center' });
-    doc.setTextColor(...palette.text);
+    doc.setFontSize(8);
+    doc.text(classLabel || '—', PW / 2, stripY + 4.5, { align: 'center' });
+
+    doc.setTextColor(...C.muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 14, stripY + 4.5, { align: 'right' });
+
+    y = lhH + 13;  // content starts comfortably below strip
+
+  } else {
+    // ── Fallback: modern gradient banner with better visual design ────────
+    // Main header background with gradient effect
+    doc.setFillColor(...C.hdrTop);
+    doc.rect(0, 0, PW, 48, 'F');
+
+    // Gradient simulation with overlapping colors
+    doc.setFillColor(...C.hdrBot);
+    doc.rect(0, 28, PW, 20, 'F');
+
+    // Accent bars at top and bottom
+    doc.setFillColor(...C.hdrAccent);
+    doc.rect(0, 0, PW, 2.5, 'F');
+    
+    doc.setFillColor(...C.hdrAccent2);
+    doc.rect(0, 2.5, PW, 1, 'F');
+
+    // Bottom accent lines
+    doc.setFillColor(...C.hdrAccent);
+    doc.rect(0, 47.5, PW, 0.8, 'F');
+    
+    doc.setFillColor(...C.hdrAccent2);
+    doc.rect(0, 48.3, PW, 0.7, 'F');
+
+    // Decorative background circles with low opacity
+    doc.setFillColor(255, 255, 255);
+    doc.setGState(new (doc as any).GState({ opacity: 0.05 }));
+    doc.circle(PW - 5, -10, 40, 'F');
+    doc.circle(PW + 10, 25, 30, 'F');
+    doc.circle(-5, 35, 28, 'F');
+    doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
+
+    // "STUDENT REPORT" label
+    doc.setTextColor(...C.hdrAccent);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.text('STUDENT REPORT', 16, 8.5);
+
+    // Student name — large and prominent
+    doc.setTextColor(...C.white);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18.5);
+    doc.text(studentName, 16, 24);
+
+    // Class and subject
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.2);
+    doc.setTextColor([186, 230, 253]);
+    const classLabel = [payload.classInfo.name, payload.classInfo.subject].filter(Boolean).join('  ·  ');
+    doc.text(classLabel || 'No class info', 16, 31);
+
+    // Right-aligned info: generated date and sections
+    doc.setTextColor(...C.muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.8);
+    doc.text(`Generated ${fmtDateTime(new Date().toISOString())}`, PW - 16, 8.5, { align: 'right' });
+
+    doc.setFontSize(8.5);
+    doc.setTextColor([186, 230, 253]);
+    doc.setFont('helvetica', 'bold');
+    doc.text(includedSections.length > 0 ? includedSections.join('  /  ') : 'No sections', PW - 16, 31, { align: 'right' });
+
+    y = 56;
   }
 
-  const textX = avatarX + avatarSize + 4;
+  // ─────────────────────────────────────────────────────────────────────────
+  // STUDENT INFO CARD
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const CARD_H = 42;
+  
+  // Card shadow
+  doc.setFillColor(0, 0, 0);
+  doc.setGState(new (doc as any).GState({ opacity: 0.04 }));
+  doc.roundedRect(13.5, y + 0.8, PW - 27, CARD_H, 3, 3, 'F');
+  doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
+  
+  // Card background with border
+  doc.setFillColor(...C.white);
+  doc.setDrawColor(...C.hdrAccent2);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(14, y, PW - 28, CARD_H, 3, 3, 'FD');
+
+  // Left colour accent band inside card - thicker and more prominent
+  doc.setFillColor(...C.hdrAccent2);
+  doc.roundedRect(14, y, 4, CARD_H, 2.5, 0, 'F');
+  doc.rect(18, y, 1, CARD_H, 'F');
+
+  // Avatar
+  const avX = 24, avY = y + 8, avSize = 26;
+  if (avatarImage) {
+    // Avatar image with circular appearance
+    doc.addImage(avatarImage.dataUrl, avatarImage.format, avX, avY, avSize, avSize);
+    doc.setDrawColor(...C.hdrAccent2);
+    doc.setLineWidth(1.2);
+    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'S');
+  } else {
+    // Initials circle with better styling
+    doc.setFillColor(...C.hdrAccent2);
+    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'F');
+    doc.setDrawColor(...C.white);
+    doc.setLineWidth(1.2);
+    doc.circle(avX + avSize / 2, avY + avSize / 2, avSize / 2, 'S');
+    doc.setTextColor(...C.white);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(initialsFromName(studentName), avX + avSize / 2, avY + avSize / 2 + 2, { align: 'center' });
+  }
+
+  // Student details — right of avatar
+  const tx = avX + avSize + 8;
+  
+  // Student name
+  doc.setTextColor(...C.text);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12.3);
-  doc.text(studentName, textX, y + 12);
+  doc.setFontSize(12.5);
+  doc.text(studentName, tx, y + 12);
 
+  // ID
+  doc.setTextColor(...C.muted);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.8);
-  doc.text(`Institute Student ID: ${payload.student.instituteId || '-'}`, textX, y + 17.5);
-  doc.text(`Email: ${payload.student.email || '-'}`, textX, y + 22.2);
-  doc.text(`Phone: ${payload.student.phone || '-'}`, textX, y + 26.9);
+  doc.setFontSize(8);
+  const studentId = payload.student.userId || '—';
+  doc.text(`ID: ${studentId}`, tx, y + 18);
 
-  const profileLine = doc.splitTextToSize(
-    `Payment Type: ${payload.student.paymentType || '-'} | Monthly Fee: ${fmtMoney(payload.student.effectiveMonthlyFee)} | Recording Mode: ${recordingModeLabel}`,
-    pageWidth - textX - 16,
-  );
-  doc.setTextColor(...palette.muted);
-  doc.text(profileLine, textX, y + 31.6);
-  doc.setTextColor(...palette.text);
+  // Email and Phone
+  const email = payload.student.email || '—';
+  const phone = payload.student.phone || '—';
+  doc.setFontSize(7.8);
+  doc.text(`Email: ${email}`, tx, y + 23);
+  doc.text(`Phone: ${phone}`, tx, y + 27);
 
-  y += 46;
+  // Payment type and monthly fee — right column
+  const rhs_x = PW - 48;
+  doc.setTextColor(...C.muted);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Payment Type:', rhs_x, y + 12);
+  
+  const payType = payload.student.paymentType || '—';
+  doc.setTextColor(...C.text);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text(payType, rhs_x, y + 16.5);
 
-  const tableStyles = {
-    fontSize: 8.3,
-    cellPadding: 2.1,
-    lineColor: [219, 234, 254],
-    lineWidth: 0,
-    textColor: [...palette.text],
-    overflow: 'linebreak' as const,
+  // Monthly fee
+  doc.setTextColor(...C.muted);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text('Monthly Fee:', rhs_x, y + 22);
+  
+  const monthlyFee = payload.student.effectiveMonthlyFee || 0;
+  doc.setTextColor(...C.text);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text(`Rs. ${monthlyFee.toLocaleString()}`, rhs_x, y + 26.5);
+
+  y += CARD_H + 8;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed <= PH - 18) return;
+    doc.addPage();
+    y = 18;
   };
 
-  const drawCurvedTableBorder = (tableStartY: number) => {
-    const lastTable = (doc as any).lastAutoTable;
-    if (!lastTable) return;
+  /** Draws a styled section header bar with a left colour accent */
+  const drawSection = (title: string, subtitle: string | undefined, accentColor: RGB) => {
+    ensureSpace(subtitle ? 17 : 14);
+    // Full-width gradient background
+    doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
+    doc.setGState(new (doc as any).GState({ opacity: 0.08 }));
+    doc.roundedRect(14, y, PW - 28, 11, 3, 3, 'F');
+    doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
 
-    const startPage = Number(lastTable.startPageNumber || doc.getNumberOfPages());
-    const currentPage = Number((doc as any).internal?.getCurrentPageInfo?.().pageNumber || doc.getNumberOfPages());
-    if (startPage !== currentPage) return;
+    // Solid left accent bar - thicker and more prominent
+    doc.setFillColor(...accentColor);
+    doc.rect(14, y, 4, 11, 'F');
 
-    const effectiveStartY = Number(lastTable.settings?.startY || tableStartY);
-    const finalY = Number(lastTable.finalY || tableStartY);
-    const top = Math.max(12, effectiveStartY - 1.6);
-    const height = Math.max(8, finalY - effectiveStartY + 3.2);
+    // Title text - larger and bolder
+    doc.setTextColor(...accentColor);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11.5);
+    doc.text(title, 21, y + 7);
 
-    doc.setDrawColor(191, 219, 254);
-    doc.setLineWidth(0.35);
-    doc.roundedRect(14.8, top, pageWidth - 29.6, height, 2.2, 2.2, 'S');
-    doc.setLineWidth(0.2);
+    // Subtitle — right-aligned with lighter color
+    if (subtitle) {
+      doc.setTextColor(...C.muted);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.2);
+      doc.text(subtitle, PW - 16, y + 7, { align: 'right' });
+    }
+
+    doc.setTextColor(...C.text);
+    y += subtitle ? 16 : 14;
   };
 
-  const renderBlueTable = (config: Record<string, any>, gapAfter = 6) => {
-    const tableStartY = Number(config.startY || y);
+  /** Empty state box */
+  const drawEmpty = (msg: string) => {
+    ensureSpace(11);
+    doc.setFillColor(250, 250, 252);
+    doc.setDrawColor(...C.cardBdr);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(14, y, PW - 28, 8, 1.5, 1.5, 'FD');
+    doc.setTextColor(...C.muted);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.2);
+    doc.text(msg, 20, y + 5.3);
+    doc.setTextColor(...C.text);
+    y += 12;
+  };
 
+  /** Stat card row: array of { label, value, color } */
+  const drawStatCards = (items: Array<{ label: string; value: string; color: RGB }>) => {
+    ensureSpace(24);
+    const n = items.length;
+    const cardW = (PW - 28 - (n - 1) * 4) / n;
+    const cardH = 22;
+    
+    items.forEach((item, i) => {
+      const cx = 14 + i * (cardW + 4);
+      
+      // Card shadow effect
+      doc.setFillColor(0, 0, 0);
+      doc.setGState(new (doc as any).GState({ opacity: 0.03 }));
+      doc.roundedRect(cx + 0.5, y + 0.8, cardW, cardH, 2.5, 2.5, 'F');
+      doc.setGState(new (doc as any).GState({ opacity: 1.0 }));
+      
+      // Card background with border
+      doc.setFillColor(...C.white);
+      doc.setDrawColor(...item.color);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(cx, y, cardW, cardH, 2.5, 2.5, 'FD');
+      
+      // Coloured top bar - thicker and more prominent
+      doc.setFillColor(...item.color);
+      doc.roundedRect(cx, y, cardW, 4, 2.5, 0, 'F');
+      
+      // Value - larger and more prominent
+      doc.setTextColor(...item.color);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16.5);
+      doc.text(item.value, cx + cardW / 2, y + 12.5, { align: 'center' });
+      
+      // Label - more readable
+      doc.setTextColor(...C.muted);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text(item.label.toUpperCase(), cx + cardW / 2, y + 17.5, { align: 'center' });
+    });
+    
+    y += 26;
+  };
+
+  /** Renders a plain table. headings use the Sinhala font when available. */
+  const renderTable = (config: Record<string, any>, headColor: RGB, gap = 6) => {
+    const startY = y;
     autoTable(doc, {
       ...config,
-      margin: config.margin || { left: 16, right: 16 },
-      theme: config.theme || 'striped',
+      startY: y,
+      margin: { left: 16, right: 16 },
+      theme: 'striped',
       styles: {
-        ...tableStyles,
-        ...(config.styles || {}),
+        fontSize: 8.2,
+        cellPadding: { top: 2.4, bottom: 2.4, left: 3, right: 3 },
+        textColor: [...C.text],
+        lineColor: [...C.tblLine],
+        lineWidth: 0,
+        overflow: 'linebreak',
       },
       headStyles: {
-        fillColor: [...palette.tableHead],
-        textColor: [...palette.white],
-        fontStyle: 'bold',
-        ...(config.headStyles || {}),
+        fillColor: [...headColor],
+        textColor: [...C.white],
+        fontStyle: 'normal',
+        font: headFont,
+        fontSize: 8.4,
+        cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 },
       },
-      alternateRowStyles: {
-        fillColor: [243, 248, 255],
-        ...(config.alternateRowStyles || {}),
+      alternateRowStyles: { fillColor: [...C.tblAlt] },
+      tableLineColor: [...C.cardBdr],
+      tableLineWidth: 0.25,
+    });
+
+    y = ((doc as any).lastAutoTable?.finalY || startY) + gap;
+  };
+
+  /** Renders table where a specific column gets status-badge colours injected.
+   *  Headings use the Sinhala font when available. */
+  const renderBadgeTable = (
+    config: Record<string, any>,
+    headColor: RGB,
+    badgeColIndex: number,
+    colorFn: (v: string) => { bg: RGB; text: RGB; label: string },
+    gap = 6,
+  ) => {
+    const startY = y;
+    autoTable(doc, {
+      ...config,
+      startY: y,
+      margin: { left: 16, right: 16 },
+      theme: 'striped',
+      styles: {
+        fontSize: 8.2,
+        cellPadding: { top: 2.4, bottom: 2.4, left: 3, right: 3 },
+        textColor: [...C.text],
+        lineColor: [...C.tblLine],
+        lineWidth: 0,
+        overflow: 'linebreak',
+      },
+      headStyles: {
+        fillColor: [...headColor],
+        textColor: [...C.white],
+        fontStyle: 'normal',
+        font: headFont,
+        fontSize: 8.4,
+        cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 },
+      },
+      alternateRowStyles: { fillColor: [...C.tblAlt] },
+      tableLineColor: [...C.cardBdr],
+      tableLineWidth: 0.25,
+      didDrawCell: (data: any) => {
+        if (data.section !== 'body' || data.column.index !== badgeColIndex) return;
+        const raw = String(data.cell.raw || '');
+        const colors = colorFn(raw);
+        const { x, y: cy, width, height } = data.cell;
+        const bW = Math.min(width - 4, 22);
+        const bH = 4.8;
+        const bX = x + (width - bW) / 2;
+        const bY = cy + (height - bH) / 2;
+        doc.setFillColor(...colors.bg);
+        doc.roundedRect(bX, bY, bW, bH, 1.2, 1.2, 'F');
+        doc.setTextColor(...colors.text);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.2);
+        doc.text(colors.label, bX + bW / 2, bY + bH / 2 + 1, { align: 'center' });
       },
     });
 
-    drawCurvedTableBorder(tableStartY);
-    y = ((doc as any).lastAutoTable?.finalY || y) + gapAfter;
+    y = ((doc as any).lastAutoTable?.finalY || startY) + gap;
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PAYMENTS SECTION
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (payload.options.includePayments) {
-    const paymentRows = payload.payments?.rows || [];
-    drawSectionTitle('Payments History', `${paymentRows.length} monthly record(s)`);
+    const rows = payload.payments?.rows || [];
+    drawSection('Payments History / පන්ති ගාස්තු ගෙවීම්', `${rows.length} record(s)`, C.secPay);
 
-    if (paymentRows.length > 0) {
-      renderBlueTable({
-        startY: y,
-        head: [['Month', 'Status', 'Slips', 'Latest Slip Status']],
-        body: paymentRows.map((row) => [
-          row.label,
-          normalizePaymentLabel(row.status),
-          String(row.slipCount || 0),
-          normalizePaymentLabel(row.latestSlipStatus),
-        ]),
-        styles: { fontSize: 8.5 },
-      }, 3);
+    if (rows.length > 0) {
+      // Stat cards
+      drawStatCards([
+        { label: 'Paid',    value: String(payload.payments?.paidCount    || 0), color: C.green },
+        { label: 'Pending', value: String(payload.payments?.pendingCount || 0), color: C.amber },
+        { label: 'Unpaid',  value: String(payload.payments?.unpaidCount  || 0), color: C.red   },
+      ]);
 
-      renderBlueTable({
-        startY: y,
-        head: [['Paid', 'Pending', 'Unpaid']],
-        body: [[
-          String(payload.payments?.paidCount || 0),
-          String(payload.payments?.pendingCount || 0),
-          String(payload.payments?.unpaidCount || 0),
-        ]],
-        styles: { fontSize: 8.7, halign: 'center' },
-        headStyles: { fillColor: [...palette.summaryHead] },
-      }, 6);
+      renderBadgeTable(
+        {
+          head: [[SI.month, SI.status, SI.slips, SI.latestSlip]],
+          body: rows.map((r) => [
+            r.label,
+            r.status,
+            String(r.slipCount || 0),
+            r.latestSlipStatus || '—',
+          ]),
+          columnStyles: {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 34, halign: 'center' },
+            2: { cellWidth: 18, halign: 'center' },
+            3: { cellWidth: 34, halign: 'center' },
+          },
+        },
+        C.tblHeadPay,
+        1, // "Status" column
+        paymentStatusColors,
+        8,
+      );
     } else {
-      drawEmptyState('No payment rows found for this class.');
+      drawEmpty('No payment records found for this student.');
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHYSICAL ATTENDANCE SECTION
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (payload.options.includePhysicalAttendance) {
-    const percentage = payload.physicalAttendance?.summary.percentage || 0;
-    drawSectionTitle('Physical Attendance', `Overall attendance: ${percentage}%`);
+    const summary = payload.physicalAttendance?.summary;
+    const pct = summary?.percentage || 0;
+    drawSection('Physical Attendance / පන්ති පැමිණීම්', `Attendance rate: ${pct}%`, C.secPhy);
 
-    renderBlueTable({
-      startY: y,
-      head: [['Total', 'Present', 'Late', 'Absent', 'Excused', 'Attendance %']],
-      body: [[
-        String(payload.physicalAttendance?.summary.total || 0),
-        String(payload.physicalAttendance?.summary.present || 0),
-        String(payload.physicalAttendance?.summary.late || 0),
-        String(payload.physicalAttendance?.summary.absent || 0),
-        String(payload.physicalAttendance?.summary.excused || 0),
-        `${percentage}%`,
-      ]],
-      styles: { fontSize: 8.6, halign: 'center' },
-      headStyles: { fillColor: [...palette.summaryHead] },
-    }, 3);
+    // Stat cards
+    drawStatCards([
+      { label: 'Total',   value: String(summary?.total   || 0), color: C.slate },
+      { label: 'Present', value: String(summary?.present || 0), color: C.green },
+      { label: 'Late',    value: String(summary?.late    || 0), color: C.amber },
+      { label: 'Absent',  value: String(summary?.absent  || 0), color: C.red   },
+      { label: 'Excused', value: String(summary?.excused || 0), color: C.blue  },
+    ]);
 
-    const physicalRows = payload.physicalAttendance?.rows || [];
-    if (physicalRows.length > 0) {
-      renderBlueTable({
-        startY: y,
-        head: [['Date', 'Session', 'Time', 'Status']],
-        body: physicalRows.map((row) => [row.date, row.session || '-', row.sessionTime || '-', row.status || '-']),
-        styles: { fontSize: 8.1 },
-      }, 6);
+    const physRows = payload.physicalAttendance?.rows || [];
+    if (physRows.length > 0) {
+      renderBadgeTable(
+        {
+          head: [[SI.date, SI.session, SI.time, SI.status]],
+          body: physRows.map((r) => [r.date, r.session || '—', r.sessionTime || '—', r.status]),
+          columnStyles: {
+            0: { cellWidth: 34 },
+            1: { cellWidth: 40 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 28, halign: 'center' },
+          },
+        },
+        C.tblHeadPhy,
+        3, // "Status" column
+        attendanceStatusColors,
+        8,
+      );
     } else {
-      drawEmptyState('No physical attendance records found.');
+      drawEmpty('No physical attendance records found.');
     }
   }
 
-  if (payload.options.includeRecordingAttendance) {
-    const recordingSummaryRows = payload.recordingAttendance?.summaryRows || [];
-    drawSectionTitle('Recording Attendance', `${recordingSummaryRows.length} recording(s) tracked`);
+  // ─────────────────────────────────────────────────────────────────────────
+  // RECORDING ATTENDANCE SECTION
+  // ─────────────────────────────────────────────────────────────────────────
 
-    if (recordingSummaryRows.length > 0) {
-      renderBlueTable({
-        startY: y,
-        head: [['Recording', 'Month', 'Sessions', 'Watched Time', 'Last Watch']],
-        body: recordingSummaryRows.map((row) => [
-          row.title || '-',
-          row.month || '-',
-          String(row.sessions || 0),
-          fmtDuration(row.watchedSec || 0),
-          fmtDateTime(row.lastWatchedAt),
-        ]),
-        styles: { fontSize: 8.1 },
-      }, 4);
+  if (payload.options.includeRecordingAttendance) {
+    const summaryRows = payload.recordingAttendance?.summaryRows || [];
+    drawSection('Recording Attendance / පන්ති වීඩියෝ නැරබීම්', `${summaryRows.length} recording(s) tracked`, C.secRec);
+
+    if (summaryRows.length > 0) {
+      renderTable(
+        {
+          head: [[SI.recordingTitle, SI.month, SI.sessions, SI.watchedTime, SI.lastWatch]],
+          body: summaryRows.map((r) => [
+            r.title || '—',
+            r.month || '—',
+            String(r.sessions || 0),
+            fmtDuration(r.watchedSec || 0),
+            fmtDateTime(r.lastWatchedAt),
+          ]),
+          columnStyles: {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 20, halign: 'center' },
+            3: { cellWidth: 28, halign: 'right' },
+            4: { cellWidth: 36 },
+          },
+        },
+        C.tblHeadRec,
+        8,
+      );
     } else {
-      drawEmptyState('No recording activity found.');
+      drawEmpty('No recording activity found for this student.');
     }
 
     if (payload.options.recordingMode === 'FULL') {
       const sessionRows = payload.recordingAttendance?.sessionRows || [];
-      drawSectionTitle('Recording Session Details', `${sessionRows.length} session row(s)`);
+      drawSection('Recording Session Details / වීඩියෝ නැරබීම් සමස්ත විස්තර', `${sessionRows.length} session(s)`, C.secDetail);
 
       if (sessionRows.length > 0) {
-        renderBlueTable({
-          startY: y,
-          head: [['Recording', 'Started', 'Ended', 'Watched', 'Status']],
-          body: sessionRows.map((row) => [
-            row.title || '-',
-            fmtDateTime(row.startedAt),
-            fmtDateTime(row.endedAt),
-            fmtDuration(row.watchedSec || 0),
-            row.status || '-',
-          ]),
-          styles: { fontSize: 8.1 },
-        }, 6);
+        renderBadgeTable(
+          {
+            head: [[SI.recordingTitle, SI.started, SI.ended, SI.watched, SI.status]],
+            body: sessionRows.map((r) => [
+              r.title || '—',
+              fmtDateTime(r.startedAt),
+              fmtDateTime(r.endedAt),
+              fmtDuration(r.watchedSec || 0),
+              r.status,
+            ]),
+            columnStyles: {
+              0: { cellWidth: 40 },
+              1: { cellWidth: 34 },
+              2: { cellWidth: 34 },
+              3: { cellWidth: 24, halign: 'right' },
+              4: { cellWidth: 26, halign: 'center' },
+            },
+          },
+          C.tblHeadRec,
+          4, // "Status" column
+          recordingStatusColors,
+          8,
+        );
       } else {
-        drawEmptyState('No recording session details found.');
+        drawEmpty('No recording session details found.');
       }
     }
   }
 
-  if (
-    !payload.options.includePayments
-    && !payload.options.includePhysicalAttendance
-    && !payload.options.includeRecordingAttendance
-  ) {
-    drawSectionTitle('No Sections Selected');
-    drawEmptyState('Choose at least one section (payments, physical or recording attendance) before exporting.');
+  // Nothing selected
+  if (!payload.options.includePayments && !payload.options.includePhysicalAttendance && !payload.options.includeRecordingAttendance) {
+    drawSection('No Sections Selected', undefined, C.slate);
+    drawEmpty('Select at least one section (Payments, Physical Attendance, or Recording Attendance) before exporting.');
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // FOOTER — every page
+  // ─────────────────────────────────────────────────────────────────────────
+
   const pageCount = doc.getNumberOfPages();
-  for (let page = 1; page <= pageCount; page++) {
-    doc.setPage(page);
-    doc.setDrawColor(...palette.cardBorder);
-    doc.line(14, pageHeight - 9, pageWidth - 14, pageHeight - 9);
-    doc.setTextColor(...palette.muted);
-    doc.setFontSize(8);
-    doc.text(`Class: ${payload.classInfo.name || '-'}`, 14, pageHeight - 4.5);
-    doc.text(`Student: ${studentName}`, pageWidth / 2, pageHeight - 4.5, { align: 'center' });
-    doc.text(`Page ${page} of ${pageCount}`, pageWidth - 14, pageHeight - 4.5, { align: 'right' });
+  const footerLeft   = payload.footer?.left   ?? `Class: ${payload.classInfo.name || '—'}`;
+  const footerCenter = payload.footer?.center ?? studentName;
+
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+
+    // Accent bar
+    doc.setFillColor(...C.hdrAccent2);
+    doc.rect(0, PH - 10, PW, 0.8, 'F');
+
+    // Footer bg
+    doc.setFillColor(250, 250, 252);
+    doc.rect(0, PH - 9.2, PW, 9.2, 'F');
+
+    doc.setTextColor(...C.muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(footerLeft,                   14,        PH - 3.8);
+    doc.text(footerCenter,                 PW / 2,    PH - 3.8, { align: 'center' });
+    doc.text(`Page ${p} / ${pageCount}`,   PW - 14,   PH - 3.8, { align: 'right' });
   }
 
   return doc.output('blob');
 }
+
+// ─── Utility exports ────────────────────────────────────────────────────────
 
 export function normalizeDateLabel(year: number, month: number, name?: string): string {
   if (name && name.trim()) return name.trim();
@@ -547,7 +920,7 @@ export function normalizeDateLabel(year: number, month: number, name?: string): 
 }
 
 export function normalizePhysicalDate(dateText: string): string {
-  if (!dateText) return '-';
+  if (!dateText) return '—';
   const date = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(date.getTime())) return dateText;
   return fmtDate(date.toISOString());

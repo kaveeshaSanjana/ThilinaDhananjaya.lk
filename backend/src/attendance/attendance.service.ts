@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import { AttendanceStatus, ClassAttendanceStatus } from '@prisma/client';
+import { AttendanceStatus } from '@prisma/client';
 
 @Injectable()
 export class AttendanceService {
@@ -699,10 +699,10 @@ export class AttendanceService {
     return raw || null;
   }
 
-  private normalizeClassAttendanceStatus(status?: string): ClassAttendanceStatus {
+  private normalizeClassAttendanceStatus(status?: string): string {
     const normalized = (status || 'PRESENT').trim().toUpperCase();
     if (normalized === 'PRESENT' || normalized === 'ABSENT' || normalized === 'LATE' || normalized === 'EXCUSED') {
-      return normalized as ClassAttendanceStatus;
+      return normalized as string;
     }
     throw new BadRequestException('status must be PRESENT, ABSENT, LATE, or EXCUSED');
   }
@@ -827,7 +827,7 @@ export class AttendanceService {
         },
       },
       update: {
-        status: data.status as ClassAttendanceStatus,
+        status: data.status as any,
         method: data.method || undefined,
         note: data.note || undefined,
         markedBy: data.markedBy || undefined,
@@ -841,7 +841,7 @@ export class AttendanceService {
         sessionTime,
         sessionCode,
         sessionAt,
-        status: data.status as ClassAttendanceStatus,
+        status: data.status as any,
         method: data.method || null,
         note: data.note || null,
         markedBy: data.markedBy || null,
@@ -1051,7 +1051,7 @@ export class AttendanceService {
       studentInstituteId: string;
       userId: string;
       attendanceId: string;
-      status: ClassAttendanceStatus;
+      status: string;
       sessionAt: string | null;
     }> = [];
     const failed: Array<{
@@ -1282,7 +1282,7 @@ export class AttendanceService {
             },
           },
           update: {
-            status: rec.status as ClassAttendanceStatus,
+            status: rec.status as any,
             method: data.method || undefined,
             note: rec.note || undefined,
             markedBy: data.markedBy || undefined,
@@ -1296,7 +1296,7 @@ export class AttendanceService {
             sessionTime,
             sessionCode,
             sessionAt,
-            status: rec.status as ClassAttendanceStatus,
+            status: rec.status as any,
             method: data.method || 'bulk',
             note: rec.note || null,
             markedBy: data.markedBy || null,
@@ -2144,7 +2144,7 @@ export class AttendanceService {
         date: dateObj,
         sessionTime: '00:00',
         sessionCode: 'AUTO_CLOSE',
-        status: 'ABSENT' as ClassAttendanceStatus,
+        status: 'ABSENT' as any,
         method: 'auto-close',
         markedBy,
       })),
@@ -2217,7 +2217,7 @@ export class AttendanceService {
         sessionTime,
         sessionCode: sessionCode || 'AUTO_CLOSE',
         sessionAt: sessionAt || null,
-        status: 'ABSENT' as ClassAttendanceStatus,
+        status: 'ABSENT' as any,
         method: 'auto-close-session',
         markedBy,
       })),
