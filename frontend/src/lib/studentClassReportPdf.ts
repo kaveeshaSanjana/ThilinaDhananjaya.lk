@@ -165,18 +165,37 @@ async function loadAvatarImage(rawUrl?: string | null): Promise<{ dataUrl: strin
       };
     }
 
-    const response = await fetch(resolved, { credentials: 'include' });
-    if (!response.ok) return null;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+    const response = await fetch(resolved, {
+      credentials: 'include',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'image/*',
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`Avatar fetch failed with status ${response.status}: ${resolved}`);
+      return null;
+    }
 
     const blob = await response.blob();
-    if (!blob.type.startsWith('image/')) return null;
+    if (!blob.type.startsWith('image/')) {
+      console.warn(`Avatar blob is not an image: ${blob.type}`);
+      return null;
+    }
 
     const dataUrl = await blobToDataUrl(blob);
     return {
       dataUrl,
       format: blob.type.toLowerCase().includes('png') ? 'PNG' : 'JPEG',
     };
-  } catch {
+  } catch (error) {
+    console.warn(`Failed to load avatar image from ${resolved}:`, error);
     return null;
   }
 }

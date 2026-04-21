@@ -18,7 +18,7 @@ const images: { src: string; alt: string; title: string }[] = [
   { src: g05, alt: "Media interview", title: "Media Interview" },
   { src: g06, alt: "Lecture hall full of students", title: "Lecture Hall" },
   { src: g07, alt: "Free O/L batch session", title: "Free O/L Batch" },
-  { src: g08, alt: "Vocabulary practice — kitchen items", title: "Vocabulary Practice" },
+  { src: g08, alt: "Online class session", title: "Online Class" },
 ];
 
 const ImageGallerySection = () => {
