@@ -194,36 +194,40 @@ export async function exportStudentWatchDetailPdf(data: any): Promise<void> {
   const PW = doc.internal.pageSize.getWidth();
   const PH = doc.internal.pageSize.getHeight();
 
-  const sinhalaLoaded = await registerSinhalaFont(doc);
-  const SF = sinhalaLoaded ? SINHALA_FONT_NAME : 'helvetica';
-
-  type RGB = readonly [number, number, number];
-
-  const C = {
-    pageBg:    [247, 248, 250] as RGB,
-    white:     [255, 255, 255] as RGB,
-    cardBdr:   [209, 213, 219] as RGB,
-    rowAlt:    [249, 250, 252] as RGB,
-    hdrBg:     [17, 24, 39]   as RGB,
-    hdrBlue:   [37, 99, 235]  as RGB,
-    secOver:   [15, 118, 110] as RGB,    // teal — overview
-    secSes:    [79, 70, 229]  as RGB,    // indigo — sessions
-    secAct:    [180, 83, 9]   as RGB,    // amber — activity
-    tblOver:   [15, 118, 110] as RGB,
-    tblSes:    [79, 70, 229]  as RGB,
-    tblAct:    [180, 83, 9]   as RGB,
-    textDark:  [15, 23, 42]   as RGB,
-    textMuted: [107, 114, 128] as RGB,
-    info:      [37, 99, 235]  as RGB,
-    success:   [22, 163, 74]  as RGB,
-    warning:   [217, 119, 6]  as RGB,
-    slate:     [71, 85, 105]  as RGB,
+  const palette = {
+    headerDark: [10, 18, 34] as const,
+    headerAccent: [8, 145, 178] as const,
+    sectionBar: [30, 41, 59] as const,
+    tableHead: [30, 41, 59] as const,
+    summaryHead: [13, 148, 136] as const,
+    card: [248, 250, 252] as const,
+    cardBorder: [226, 232, 240] as const,
+    text: [15, 23, 42] as const,
+    muted: [100, 116, 139] as const,
+    white: [255, 255, 255] as const,
+    info: [29, 78, 216] as const,
+    success: [22, 163, 74] as const,
+    warning: [217, 119, 6] as const,
   };
 
-  let y = 0;
+  const sessionEventCount = (session: any): number => {
+    if (!Array.isArray(session?.events)) return 0;
+    return session.events.filter((event: any) => {
+      const type = String(event?.type || event?.event || '').toUpperCase();
+      return !type.includes('HB') && !type.includes('HEARTBEAT') && type !== 'IDLE' && type !== 'FOCUS';
+    }).length;
+  };
 
-  const initBg = () => { doc.setFillColor(...C.pageBg); doc.rect(0, 0, PW, PH, 'F'); };
-  initBg();
+  const normalizeSessionStatus = (raw: string | undefined): string => {
+    const value = (raw || '').toUpperCase();
+    if (value === 'WATCHING') return 'Watching';
+    if (value === 'ENDED') return 'Ended';
+    if (value === 'PAUSED') return 'Paused';
+    if (value === 'JOINED') return 'Joined';
+    return value || '-';
+  };
+
+  let y = 38;
 
   const ensureSpace = (needed: number) => {
     if (y + needed <= PH - 16) return;
@@ -372,26 +376,27 @@ export async function exportStudentWatchDetailPdf(data: any): Promise<void> {
   doc.setFont(SF, 'bold'); doc.setFontSize(9); doc.setTextColor(...C.textDark);
   doc.text(payStatus, rx, y + 34);
 
-  y += CARD_H + 10;
+  y += 46;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // METRIC ROW
-  // ─────────────────────────────────────────────────────────────────────────
+  drawMetricCard(14, 'Watch Sessions', String(student.sessionCount || 0), 'Total sessions captured', palette.info);
+  drawMetricCard(14 + ((pageWidth - 28 - 6) / 3) + 3, 'Total Watched', fmtDuration(student.totalWatchedSec || 0), 'Across all sessions', palette.success);
+  drawMetricCard(14 + (((pageWidth - 28 - 6) / 3) * 2) + 6, 'Activity Events', String(allActivityEvents.length), 'Playback + attendance events', palette.warning);
 
-  drawMetricRow([
-    { title: sinhalaLoaded ? 'නැරඹීමේ සැසි' : 'Watch Sessions', value: String(student.sessionCount || 0), sub: 'Total sessions', accent: C.info },
-    { title: sinhalaLoaded ? 'මුළු නැරඹීම'  : 'Total Watched',   value: fmtDuration(student.totalWatchedSec || 0), sub: 'Across all sessions', accent: C.success },
-    { title: sinhalaLoaded ? 'ක්‍රියාකාරකම්' : 'Activity Events', value: String(allActivityEvents.length), sub: 'Filtered events', accent: C.warning },
-  ]);
+  y += 22;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // REPORT OVERVIEW
-  // ─────────────────────────────────────────────────────────────────────────
+  const tableStyles = {
+    fontSize: 8.3,
+    cellPadding: 2.1,
+    lineColor: [...palette.cardBorder],
+    lineWidth: 0.15,
+    textColor: [...palette.text],
+    overflow: 'linebreak' as const,
+  };
 
-  drawSection(sinhalaLoaded ? 'වාර්තා දළ විශ්ලේෂණය  /  Report Overview' : 'Report Overview', undefined, C.secOver);
-
-  renderTable({
-    head: [[sinhalaLoaded ? 'තොරතුර' : 'Field', sinhalaLoaded ? 'විස්තරය' : 'Value']],
+  drawSectionTitle('Report Overview', 'Core class, recording and timeline metadata');
+  autoTable(doc, {
+    startY: y,
+    head: [['Field', 'Value']],
     body: [
       [sinhalaLoaded ? 'පන්තිය'           : 'Class',          cls.name        || '—'],
       [sinhalaLoaded ? 'මාසය'             : 'Month',          month.name      || '—'],
@@ -403,43 +408,39 @@ export async function exportStudentWatchDetailPdf(data: any): Promise<void> {
       [sinhalaLoaded ? 'අවසාන නැරඹීම'    : 'Last Watched',   fmtDateTime(student.lastWatchedAt)],
       [sinhalaLoaded ? 'සජීවී සම්බන්ධය'  : 'Live Joined At', fmtDateTime(student.liveJoinedAt)],
     ],
-    styles: { fontSize: 8.8, cellPadding: 3.2, overflow: 'linebreak' },
-    columnStyles: {
-      0: { cellWidth: (PW - 28) * 0.38, fontStyle: 'bold', font: SF },
-      1: { cellWidth: (PW - 28) * 0.62 },
-    },
-  }, C.tblOver, 10);
+    styles: { ...tableStyles, fontSize: 8.8, cellPadding: 2.4 },
+    columnStyles: { 0: { cellWidth: 44, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14 },
+    theme: 'grid',
+  });
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // WATCH SESSIONS TABLE
-  // ─────────────────────────────────────────────────────────────────────────
+  y = ((doc as any).lastAutoTable?.finalY || y) + 5;
 
-  const countSessionEvents = (session: any): number =>
-    Array.isArray(session?.events)
-      ? session.events.filter((e: any) => {
-          const t = String(e?.type || e?.event || '').toUpperCase();
-          return !t.includes('HB') && !t.includes('HEARTBEAT') && t !== 'IDLE' && t !== 'FOCUS';
-        }).length
-      : 0;
-
-  drawSection(
-    sinhalaLoaded ? `නැරඹීමේ සැසි  /  Watch Sessions (${sessions.length})` : `Watch Sessions (${sessions.length})`,
-    sinhalaLoaded ? 'සැසි මට්ටමේ ක්‍රියාකාරකම් විස්තර' : 'Per-session breakdown',
-    C.secSes,
-  );
-
-  renderTable({
-    head: [[
-      '#',
-      sinhalaLoaded ? 'තත්ත්වය'     : 'Status',
-      sinhalaLoaded ? 'ආරම්භය'      : 'Started',
-      sinhalaLoaded ? 'අවසානය'      : 'Ended',
-      sinhalaLoaded ? 'නැරඹීම'      : 'Watched',
-      sinhalaLoaded ? 'සැබෑ කාලය'   : 'Duration',
-      sinhalaLoaded ? 'සක්‍රිය %'   : 'Active%',
-      sinhalaLoaded ? 'සිදුවීම්'    : 'Events',
-      sinhalaLoaded ? 'වීඩියෝ පරාසය': 'Video Range',
+  autoTable(doc, {
+    startY: y,
+    head: [['Session Count', 'Total Watch', 'Attendance Watch', 'Attendance Status', 'Payment Status', 'Events']],
+    body: [[
+      String(student.sessionCount || 0),
+      fmtDuration(student.totalWatchedSec || 0),
+      fmtDuration(student.attendanceWatchedSec || 0),
+      student.attendanceStatus || 'NOT VIEWED',
+      student.paymentStatus || 'UNPAID',
+      String(allActivityEvents.length),
     ]],
+    styles: { ...tableStyles, fontSize: 8.7, halign: 'center' },
+    headStyles: { fillColor: [...palette.summaryHead], textColor: [...palette.white], fontStyle: 'bold' },
+    margin: { left: 14, right: 14 },
+    theme: 'grid',
+  });
+
+  y = ((doc as any).lastAutoTable?.finalY || y) + 6;
+
+  drawSectionTitle(`Watch Sessions (${sessions.length})`, 'Session-level watch behavior with event counts and active ratio');
+  autoTable(doc, {
+    startY: y,
+    head: [['#', 'Status', 'Started', 'Ended', 'Watched', 'Real Time', 'Active', 'Events', 'Video Range']],
     body: sessions.length > 0
       ? sessions.map((session: any, i: number) => [
           String(i + 1),
@@ -465,42 +466,40 @@ export async function exportStudentWatchDetailPdf(data: any): Promise<void> {
       7: { cellWidth: 12, halign: 'center', font: SF },
       8: { cellWidth: 30, font: SF },
     },
-  }, C.tblSes, 10);
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14 },
+    theme: 'grid',
+  });
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ACTIVITY TIMELINE
-  // ─────────────────────────────────────────────────────────────────────────
+  y = ((doc as any).lastAutoTable?.finalY || y) + 6;
 
-  const maxEvents = 60;
-  const displayEvents = allActivityEvents.slice(0, maxEvents);
+  drawSectionTitle(`Activity Timeline (${allActivityEvents.length})`, 'Playback actions, seeks and attendance events in chronological order');
+  autoTable(doc, {
+    startY: y,
+    head: [['When', 'Activity', 'Source', 'Video Position', 'Watched Time', 'Details']],
+    body: allActivityEvents.length > 0
+      ? allActivityEvents.map((evt: any) => {
+          const raw = String(evt.type || evt.event || 'UNKNOWN');
+          const when = fmtDateTime(evt.at || evt.wallTime || evt.timestamp);
+          const source = evt._source === 'session'
+            ? `Session${evt._sessionNum ? ` #${evt._sessionNum}` : ''}`
+            : 'Attendance';
+          const videoTime = evt.videoTime ?? evt.videoPosition;
+          const seekFrom = evt.seekFrom ?? evt.fromVideoTime;
+          const seekTo = evt.seekTo ?? evt.toVideoTime;
+          const details = seekFrom != null && seekTo != null
+            ? `${fmtSec(Number(seekFrom))} -> ${fmtSec(Number(seekTo))}`
+            : (evt.note || evt.reason || '-');
 
-  drawSection(
-    sinhalaLoaded ? `ක්‍රියාකාරකම් කාලරේඛාව  /  Activity Timeline (${allActivityEvents.length})` : `Activity Timeline (${allActivityEvents.length})`,
-    allActivityEvents.length > maxEvents ? `Showing first ${maxEvents} of ${allActivityEvents.length}` : undefined,
-    C.secAct,
-  );
-
-  renderTable({
-    head: [[
-      sinhalaLoaded ? 'කවදා'        : 'When',
-      sinhalaLoaded ? 'ක්‍රියාකාරකම' : 'Activity',
-      sinhalaLoaded ? 'මූලාශ්‍රය'   : 'Source',
-      sinhalaLoaded ? 'වීඩියෝ ස්ථානය': 'Video Pos',
-      sinhalaLoaded ? 'නැරඹූ'       : 'Watched',
-      sinhalaLoaded ? 'විස්තරය'     : 'Detail',
-    ]],
-    body: displayEvents.length > 0
-      ? displayEvents.map((evt: any) => {
-          const raw    = String(evt.type || evt.event || 'UNKNOWN');
-          const when   = fmtDateTime(evt.at || evt.wallTime || evt.timestamp);
-          const source = evt._source === 'session' ? `Session${evt._sessionNum ? ` #${evt._sessionNum}` : ''}` : (sinhalaLoaded ? 'පැමිණීම' : 'Attendance');
-          const vt     = evt.videoTime ?? evt.videoPosition;
-          const sFrom  = evt.seekFrom  ?? evt.fromVideoTime;
-          const sTo    = evt.seekTo    ?? evt.toVideoTime;
-          const detail = sFrom != null && sTo != null
-            ? `${fmtSec(Number(sFrom))} → ${fmtSec(Number(sTo))}`
-            : (evt.note || evt.reason || '—');
-          return [when, activityLabel(raw), source, vt != null ? fmtSec(Number(vt)) : '—', evt.watchedSec != null ? fmtDuration(Number(evt.watchedSec)) : '—', String(detail)];
+          return [
+            when,
+            activityLabel(raw),
+            source,
+            videoTime != null ? fmtSec(Number(videoTime)) : '-',
+            evt.watchedSec != null ? fmtDuration(Number(evt.watchedSec)) : '-',
+            String(details),
+          ];
         })
       : [['—', '—', '—', '—', '—', '—']],
     styles: { fontSize: 7.5, cellPadding: 2.2 },
@@ -512,11 +511,11 @@ export async function exportStudentWatchDetailPdf(data: any): Promise<void> {
       4: { cellWidth: 16, halign: 'center' },
       5: { cellWidth: 30, font: SF },
     },
-  }, C.tblAct, 8);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // FOOTER — every page
-  // ─────────────────────────────────────────────────────────────────────────
+    headStyles: { fillColor: [...palette.tableHead], textColor: [...palette.white], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [...palette.card] },
+    margin: { left: 14, right: 14, bottom: 10 },
+    theme: 'grid',
+  });
 
   const pageCount = doc.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
