@@ -562,6 +562,7 @@ export default function AdminClassDetail() {
   const [physicalSessionFormOpen, setPhysicalSessionFormOpen] = useState(false);
   const [physicalNewSessionDate, setPhysicalNewSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [physicalNewSessionTime, setPhysicalNewSessionTime] = useState('00:00');
+  const [physicalNewSessionEndTime, setPhysicalNewSessionEndTime] = useState('');
   const [physicalNewSessionName, setPhysicalNewSessionName] = useState('');
   const [physicalCreatingSession, setPhysicalCreatingSession] = useState(false);
   const [physicalCreateSessionError, setPhysicalCreateSessionError] = useState('');
@@ -594,6 +595,14 @@ export default function AdminClassDetail() {
   const [physicalPaymentExportError, setPhysicalPaymentExportError] = useState('');
   const [physicalPaymentStatusFilter, setPhysicalPaymentStatusFilter] = useState<ClassPaymentStatusFilter>(initialPaymentStatusFilter);
   const [physicalPaymentSearchText, setPhysicalPaymentSearchText] = useState(initialPaymentSearchText);
+  
+  // Edit session/week name states
+  const [editingSessionKey, setEditingSessionKey] = useState('');
+  const [editingSessionNameValue, setEditingSessionNameValue] = useState('');
+  const [savingEditingSessionKey, setSavingEditingSessionKey] = useState('');
+  const [editingWeekId, setEditingWeekId] = useState('');
+  const [editingWeekNameValue, setEditingWeekNameValue] = useState('');
+  const [savingEditingWeekId, setSavingEditingWeekId] = useState('');
 
   const loadClass = () => api.get(`/classes/${id}`).then(r => setCls(r.data)).catch(() => {});
   const loadMonths = () => api.get(`/classes/${id}/months`).then(r => setMonths(r.data)).catch(() => {});
@@ -1150,6 +1159,7 @@ export default function AdminClassDetail() {
       setPhysicalGroupSelectedSlots([]);
       setPhysicalGroupError('');
       setPhysicalWeeksError('');
+      setPhysicalWeekBuilderOpen(false);
     } catch (error: any) {
       const message = error?.response?.data?.message;
       if (Array.isArray(message)) {
@@ -1535,6 +1545,12 @@ export default function AdminClassDetail() {
     const normalizedSessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(physicalNewSessionTime)
       ? physicalNewSessionTime
       : '00:00';
+    const normalizedEndTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(physicalNewSessionEndTime)
+      ? physicalNewSessionEndTime
+      : '';
+    const sessionTimePayload = normalizedEndTime
+      ? `${normalizedSessionTime}-${normalizedEndTime}`
+      : normalizedSessionTime;
 
     setPhysicalCreatingSession(true);
     setPhysicalCreateSessionError('');
@@ -1543,7 +1559,7 @@ export default function AdminClassDetail() {
     try {
       const response = await api.post(`/attendance/class-attendance/class/${id}/sessions`, {
         date,
-        sessionTime: normalizedSessionTime,
+        sessionTime: sessionTimePayload,
         sessionCode: physicalNewSessionName.trim() || undefined,
       });
 
@@ -1568,6 +1584,7 @@ export default function AdminClassDetail() {
       setPhysicalSessionFormOpen(false);
       setPhysicalNewSessionName('');
       setPhysicalNewSessionTime(createdSession.sessionTime || '00:00');
+      setPhysicalNewSessionEndTime('');
       setPhysicalSessionCloseMessage('');
       setPhysicalCreateSessionSuccess(`Session created: ${formatPhysicalSlotLabel(createdSession)}`);
     } catch (error: any) {
@@ -1579,6 +1596,78 @@ export default function AdminClassDetail() {
       }
     } finally {
       setPhysicalCreatingSession(false);
+    }
+  };
+
+  const handleEditSessionName = (session: PhysicalQuickSession) => {
+    setEditingSessionKey(session.key);
+    setEditingSessionNameValue(session.sessionCode || '');
+  };
+
+  const handleSaveSessionName = async () => {
+    if (!editingSessionKey || !id) return;
+    setSavingEditingSessionKey(editingSessionKey);
+    setPhysicalGroupError('');
+
+    try {
+      const response = await api.patch(`/attendance/class-attendance/class/${id}/sessions/${editingSessionKey}/name`, {
+        sessionCode: editingSessionNameValue.trim(),
+      });
+      const updatedSession = normalizePhysicalQuickSessionItem(response.data);
+
+      if (!updatedSession) {
+        throw new Error('Invalid session payload');
+      }
+
+      setPhysicalQuickSessions((prev) => prev.map((item) => (
+        item.key === editingSessionKey
+          ? { ...item, ...updatedSession }
+          : item
+      )));
+
+      setEditingSessionKey('');
+      setEditingSessionNameValue('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to update session name.');
+    } finally {
+      setSavingEditingSessionKey('');
+    }
+  };
+
+  const handleEditWeekName = (group: PhysicalReportGroup) => {
+    setEditingWeekId(group.id);
+    setEditingWeekNameValue(group.name);
+  };
+
+  const handleSaveWeekName = async () => {
+    if (!editingWeekId || !id) return;
+    setSavingEditingWeekId(editingWeekId);
+    setPhysicalGroupError('');
+
+    try {
+      const response = await api.patch(`/attendance/class-attendance/class/${id}/weeks/${editingWeekId}`, {
+        name: editingWeekNameValue.trim(),
+      });
+      const updatedGroup = normalizePhysicalWeekGroupItem(response.data);
+
+      if (!updatedGroup) {
+        throw new Error('Invalid week group payload');
+      }
+
+      setPhysicalReportGroups((prev) => prev.map((item) => (
+        item.id === editingWeekId
+          ? { ...item, ...updatedGroup }
+          : item
+      )));
+
+      setEditingWeekId('');
+      setEditingWeekNameValue('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to update week name.');
+    } finally {
+      setSavingEditingWeekId('');
     }
   };
 
@@ -3171,6 +3260,14 @@ export default function AdminClassDetail() {
 
     const physicalRow = shared.physicalByUser.get(enr.userId);
     const physicalStatuses = physicalRow?.statuses || {};
+    // Build slot-key → week-name map from current groups in state
+    const slotKeyToWeekName = new Map<string, string>();
+    for (const group of physicalReportGroups) {
+      for (const slotKey of group.slotKeys) {
+        slotKeyToWeekName.set(slotKey, group.name);
+      }
+    }
+
     const physicalRows = shared.physicalSlots
       .map((slot: any) => {
         const status = physicalStatuses[slot.key];
@@ -3187,9 +3284,10 @@ export default function AdminClassDetail() {
           session: sessionLabel,
           sessionTime: slot.sessionTime || '00:00',
           status,
+          weekName: slotKeyToWeekName.get(slot.key) ?? null,
         };
       })
-      .filter(Boolean) as Array<{ date: string; session: string; sessionTime: string; status: string }>;
+      .filter(Boolean) as Array<{ date: string; session: string; sessionTime: string; status: string; weekName: string | null }>;
 
     const studentSessions = shared.recordingSessions
       .filter((row: any) => row.userId === enr.userId)
@@ -3284,6 +3382,9 @@ export default function AdminClassDetail() {
           percentage: physicalRow?.percentage || 0,
         },
         rows: physicalRows,
+        weekGroupOrder: physicalReportGroups
+          .filter((group) => physicalRows.some((r) => r.weekName === group.name))
+          .map((group) => group.name),
       },
       recordingAttendance: {
         summaryRows: recordingSummaryRows,
@@ -5277,13 +5378,13 @@ export default function AdminClassDetail() {
                   <button
                     type="button"
                     onClick={() => {
-                      setPhysicalSessionFormOpen((prev) => !prev);
+                      setPhysicalSessionFormOpen(true);
                       setPhysicalCreateSessionError('');
                       setPhysicalCreateSessionSuccess('');
                     }}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
                   >
-                    {physicalSessionFormOpen ? 'Cancel Session Create' : 'Create Session'}
+                    Create Session
                   </button>
                   <Link
                     to={markAttendanceScannerPath}
@@ -5316,62 +5417,92 @@ export default function AdminClassDetail() {
             <div className={tab === 'attendance' ? 'space-y-3' : 'hidden'}>
 
             {physicalSessionFormOpen && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3">
-                <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Create Session (Standalone)</p>
-                <p className="text-[11px] text-violet-700/80">
-                  This creates a class session only. Attendance can be imported or marked later.
-                </p>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-violet-700">Create Session</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Attendance can be marked or imported later.</p>
+                    </div>
+                    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-100">Standalone</span>
+                  </div>
 
-                <div className="grid gap-2 md:grid-cols-[160px_140px_minmax(0,1fr)_auto]">
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Date
-                    <input
-                      type="date"
-                      value={physicalNewSessionDate}
-                      onChange={(event) => setPhysicalNewSessionDate(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                  <div className="px-5 py-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Date
+                        <input
+                          type="date"
+                          value={physicalNewSessionDate}
+                          onChange={(event) => setPhysicalNewSessionDate(event.target.value)}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Time
-                    <input
-                      type="time"
-                      value={physicalNewSessionTime}
-                      onChange={(event) => setPhysicalNewSessionTime(event.target.value || '00:00')}
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Session Name <span className="font-normal text-slate-400">(optional)</span>
+                        <input
+                          type="text"
+                          value={physicalNewSessionName}
+                          onChange={(event) => setPhysicalNewSessionName(event.target.value)}
+                          placeholder="e.g. Week 04 – Group A"
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Name
-                    <input
-                      type="text"
-                      value={physicalNewSessionName}
-                      onChange={(event) => setPhysicalNewSessionName(event.target.value)}
-                      placeholder="e.g. Week 04 - Group A"
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Start Time
+                        <input
+                          type="time"
+                          value={physicalNewSessionTime}
+                          onChange={(event) => setPhysicalNewSessionTime(event.target.value || '00:00')}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <div className="flex items-end">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        End Time <span className="font-normal text-slate-400">(optional)</span>
+                        <input
+                          type="time"
+                          value={physicalNewSessionEndTime}
+                          onChange={(event) => setPhysicalNewSessionEndTime(event.target.value)}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
+                    </div>
+
+                    {physicalNewSessionEndTime && physicalNewSessionTime > physicalNewSessionEndTime && (
+                      <p className="text-[11px] text-amber-600 font-medium">⚠ End time should be after start time.</p>
+                    )}
+                    {physicalCreateSessionError && (
+                      <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs font-medium text-red-600">{physicalCreateSessionError}</p>
+                    )}
+                    {physicalCreateSessionSuccess && (
+                      <p className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs font-medium text-emerald-700">{physicalCreateSessionSuccess}</p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhysicalSessionFormOpen(false);
+                        setPhysicalCreateSessionError('');
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleCreatePhysicalSession()}
                       disabled={physicalCreatingSession}
-                      className="rounded-lg border border-violet-300 bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                      className="rounded-lg border border-violet-300 bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                     >
-                      {physicalCreatingSession ? 'Creating...' : 'Save Session'}
+                      {physicalCreatingSession ? 'Creating…' : 'Save Session'}
                     </button>
                   </div>
                 </div>
-
-                {physicalCreateSessionError && (
-                  <p className="text-xs font-medium text-red-600">{physicalCreateSessionError}</p>
-                )}
-                {physicalCreateSessionSuccess && (
-                  <p className="text-xs font-medium text-emerald-700">{physicalCreateSessionSuccess}</p>
-                )}
               </div>
             )}
 
@@ -5523,7 +5654,19 @@ export default function AdminClassDetail() {
                               </td>
                               <td className="px-3 py-2 align-middle font-medium text-slate-700">{session.date}</td>
                               <td className="px-3 py-2 align-middle text-slate-700">{session.recordsCount}</td>
-                              <td className="px-3 py-2 align-middle text-slate-700">{sessionName}</td>
+                              <td className="px-3 py-2 align-middle text-slate-700">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{sessionName}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditSessionName(session)}
+                                    title="Edit session name"
+                                    className="text-slate-400 hover:text-slate-600 transition"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  </button>
+                                </div>
+                              </td>
                               <td className="px-3 py-2 align-middle text-slate-700">
                                 <div className="flex items-center gap-2">
                                   <select
@@ -5578,6 +5721,44 @@ export default function AdminClassDetail() {
                       </tbody>
                     </table>
                   </div>
+
+                  {editingSessionKey && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                        <div className="border-b border-slate-100 px-5 py-4">
+                          <h3 className="text-sm font-semibold text-sky-700">Edit Session Name</h3>
+                          <p className="text-[11px] text-slate-500 mt-0.5">Update the display name for this session.</p>
+                        </div>
+                        <div className="px-5 py-4">
+                          <input
+                            type="text"
+                            value={editingSessionNameValue}
+                            onChange={(event) => setEditingSessionNameValue(event.target.value)}
+                            placeholder="Enter session name"
+                            autoFocus
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingSessionKey(''); setEditingSessionNameValue(''); }}
+                            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveSessionName()}
+                            disabled={savingEditingSessionKey.length > 0 || !editingSessionNameValue.trim()}
+                            className="rounded-lg border border-emerald-200 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {savingEditingSessionKey ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5619,12 +5800,12 @@ export default function AdminClassDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPhysicalWeekBuilderOpen((prev) => !prev);
+                    setPhysicalWeekBuilderOpen(true);
                     setPhysicalGroupError('');
                   }}
                   className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                 >
-                  {physicalWeekBuilderOpen ? 'Close Group Builder' : 'Create Group'}
+                  Create Group
                 </button>
                 <p className="text-[11px] text-slate-500">
                   Weeks appear below. Select only the weeks you need for week-wise report.
@@ -5680,7 +5861,7 @@ export default function AdminClassDetail() {
                       return (
                         <span
                           key={group.id}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                             selected
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                               : 'border-slate-200 bg-slate-50 text-slate-500'
@@ -5694,6 +5875,26 @@ export default function AdminClassDetail() {
                           >
                             {selected ? 'Selected: ' : ''}{group.name} ({group.slotKeys.length})
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditWeekName(group)}
+                            title="Edit group name"
+                            className={`text-slate-400 hover:text-slate-600 transition ${selected ? 'text-emerald-400 hover:text-emerald-600' : ''}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removePhysicalReportGroup(group.id)}
+                            disabled={physicalDeletingWeekId === group.id}
+                            title="Delete group"
+                            className="text-slate-300 hover:text-red-500 transition disabled:opacity-40"
+                          >
+                            {physicalDeletingWeekId === group.id
+                              ? <span className="text-[9px] font-semibold text-red-400">…</span>
+                              : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            }
+                          </button>
                           {selected && (
                             <button
                               type="button"
@@ -5701,7 +5902,7 @@ export default function AdminClassDetail() {
                               className="text-slate-500/80 hover:text-slate-700"
                               aria-label={`Unselect ${group.name} from report`}
                             >
-                              x
+                              ×
                             </button>
                           )}
                         </span>
@@ -5711,55 +5912,84 @@ export default function AdminClassDetail() {
                 )}
               </div>
 
-              {physicalWeekBuilderOpen && (
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                    <label className="text-[11px] font-semibold text-slate-500">
-                      Week Name
+              {editingWeekId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <h3 className="text-sm font-semibold text-amber-700">Edit Group Name</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Rename this week group.</p>
+                    </div>
+                    <div className="px-5 py-4">
                       <input
                         type="text"
-                        value={physicalGroupName}
-                        onChange={(event) => setPhysicalGroupName(event.target.value)}
-                        placeholder={`Week ${physicalReportGroups.length + 1}`}
-                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                        value={editingWeekNameValue}
+                        onChange={(event) => setEditingWeekNameValue(event.target.value)}
+                        placeholder="Enter group name"
+                        autoFocus
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
                       />
-                    </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                      <button
+                        type="button"
+                        onClick={() => { setEditingWeekId(''); setEditingWeekNameValue(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveWeekName()}
+                        disabled={savingEditingWeekId.length > 0 || !editingWeekNameValue.trim()}
+                        className="rounded-lg border border-emerald-200 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {savingEditingWeekId ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                    <div className="flex items-end">
+              {physicalWeekBuilderOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <h3 className="text-sm font-semibold text-indigo-700">Create Week Group</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Name the group, then assign sessions from the session table.
+                      </p>
+                    </div>
+                    <div className="px-5 py-4">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Group Name
+                        <input
+                          type="text"
+                          value={physicalGroupName}
+                          onChange={(event) => setPhysicalGroupName(event.target.value)}
+                          placeholder={`Week ${physicalReportGroups.length + 1}`}
+                          autoFocus
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                      <button
+                        type="button"
+                        onClick={() => { setPhysicalWeekBuilderOpen(false); setPhysicalGroupName(''); setPhysicalGroupError(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
                       <button
                         type="button"
                         onClick={() => void addPhysicalReportGroup()}
                         disabled={physicalSavingWeekGroup}
-                        className="rounded-lg border border-indigo-200 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                        className="rounded-lg border border-indigo-200 bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                       >
-                        {physicalSavingWeekGroup ? 'Creating...' : 'Create Week'}
+                        {physicalSavingWeekGroup ? 'Creating…' : 'Create Group'}
                       </button>
                     </div>
                   </div>
-                  <p className="text-[11px] text-indigo-800/80">
-                    After creating a week, go to <span className="font-semibold">Attendance Sessions (Class Level)</span> and use the <span className="font-semibold">Week Assign</span> dropdown in each row.
-                  </p>
-
-                  {physicalReportGroups.length > 0 && (
-                    <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 space-y-2">
-                      <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide">
-                        Delete Week Group (will unassign linked sessions)
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {physicalReportGroups.map((group) => (
-                          <button
-                            key={`delete-week-${group.id}`}
-                            type="button"
-                            onClick={() => void removePhysicalReportGroup(group.id)}
-                            disabled={physicalDeletingWeekId === group.id}
-                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            {physicalDeletingWeekId === group.id ? 'Deleting...' : `Delete ${group.name}`}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
