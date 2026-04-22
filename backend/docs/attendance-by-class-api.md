@@ -1,5 +1,9 @@
 # Get Attendance by Class API
 
+**Production URL:** `https://api.thilinadhananjaya.lk/api/attendance/class/...`
+
+**Development URL:** `http://localhost:3001/api/attendance/class/...`
+
 ## `GET /attendance/class/:classId`
 
 Returns all attendance records for every recording that belongs to the given class.

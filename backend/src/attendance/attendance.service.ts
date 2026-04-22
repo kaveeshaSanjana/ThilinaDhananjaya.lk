@@ -927,8 +927,22 @@ export class AttendanceService {
     });
   }
 
-  private async getClassAttendanceSessionForPublicImport(sessionId: string) {
-    const session = await this.prisma.classAttendanceSession.findUnique({
+  private parseReadableSessionId(readableId: string): { date: string; sessionTime: string } | null {
+    // Format: SES-YYYYMMDD-HHMM or SES-YYYYMMDD-HHMM-CODE
+    // Example: SES-20260302-0100-03012026SU
+    const match = readableId.match(/^SES-(\d{8})-(\d{4})(?:-(.+))?$/);
+    if (!match) return null;
+
+    const [, dateStr, timeStr] = match;
+    const date = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
+    const sessionTime = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
+
+    return { date, sessionTime };
+  }
+
+  private async getClassAttendanceSessionForPublicImport(sessionId: string, classId?: string) {
+    // Try to find by UUID first (exact match)
+    let session = await this.prisma.classAttendanceSession.findUnique({
       where: { id: sessionId },
       select: {
         id: true,
@@ -945,6 +959,46 @@ export class AttendanceService {
         },
       },
     });
+
+    // If not found and sessionId looks like a readable ID, try to parse and look up by unique constraint
+    if (!session && sessionId.startsWith('SES-')) {
+      const parsed = this.parseReadableSessionId(sessionId);
+      if (parsed) {
+        if (!classId) {
+          // Readable ID format requires classId for lookup
+          throw new BadRequestException(
+            `When using readable session ID format (${sessionId}), classId must be provided in the request.`
+          );
+        }
+
+        const dateObj = this.normalizeClassAttendanceDate(parsed.date);
+        const normalizedTime = this.normalizeSessionTime(parsed.sessionTime);
+
+        session = await this.prisma.classAttendanceSession.findUnique({
+          where: {
+            classId_date_sessionTime: {
+              classId,
+              date: dateObj,
+              sessionTime: normalizedTime,
+            },
+          },
+          select: {
+            id: true,
+            classId: true,
+            date: true,
+            sessionTime: true,
+            sessionEndTime: true,
+            sessionCode: true,
+            sessionAt: true,
+            class: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+      }
+    }
 
     if (!session) {
       throw new NotFoundException(`Class attendance session not found: ${sessionId}`);
@@ -980,6 +1034,7 @@ export class AttendanceService {
 
   async importPublicClassAttendanceBySessionBarcode(data: {
     sessionId: string;
+    classId?: string;
     barcode: string;
     status: string;
     sessionAt?: string;
@@ -988,7 +1043,7 @@ export class AttendanceService {
     note?: string;
   }) {
     const [session, profile] = await Promise.all([
-      this.getClassAttendanceSessionForPublicImport(data.sessionId),
+      this.getClassAttendanceSessionForPublicImport(data.sessionId, data.classId),
       this.prisma.profile.findUnique({
         where: { barcodeId: data.barcode },
         select: {
@@ -1047,13 +1102,14 @@ export class AttendanceService {
 
   async importPublicClassAttendanceBySessionInstituteId(data: {
     sessionId: string;
+    classId?: string;
     instituteId: string;
     status: string;
     sessionAt?: string;
     note?: string;
   }) {
     const [session, profile] = await Promise.all([
-      this.getClassAttendanceSessionForPublicImport(data.sessionId),
+      this.getClassAttendanceSessionForPublicImport(data.sessionId, data.classId),
       this.prisma.profile.findUnique({
         where: { instituteId: data.instituteId },
         select: {
@@ -1122,12 +1178,13 @@ export class AttendanceService {
       note?: string;
     }>;
   }) {
-    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId);
     const requestedClassId = (data.classId || '').trim();
 
     if (!requestedClassId) {
       throw new BadRequestException('classId is required');
     }
+
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId, requestedClassId);
 
     if (session.classId !== requestedClassId) {
       throw new BadRequestException('sessionId does not belong to the provided classId');
@@ -1190,6 +1247,7 @@ export class AttendanceService {
           if (rowCheckInTime === '00:00') {
             rowSessionAtIso = new Date().toISOString();
           } else {
+            // Store checkInTime as-is without timezone conversion
             const parsed = new Date(`${rowDate}T${rowCheckInTime}:00`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkInTime');
@@ -1212,6 +1270,7 @@ export class AttendanceService {
             : (session.sessionEndTime || null);
 
           if (normalizedRowCheckOutTime) {
+            // Store checkOutTime as-is without timezone conversion
             const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkOutTime');

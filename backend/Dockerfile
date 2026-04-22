@@ -30,6 +30,6 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-# Run pending migrations then start the app.
-# If migrate deploy fails (e.g. a prior broken migration is recorded), resolve it and retry.
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy || (echo 'Retrying: resolving stuck migration...' && node_modules/.bin/prisma migrate resolve --rolled-back 20260409020000_add_payment_method_portion 2>/dev/null; node_modules/.bin/prisma migrate deploy) && node dist/main"]
+# Run pending migrations with timeout, then start the app
+# Use timeout to ensure the app starts even if migrations hang
+CMD ["sh", "-c", "timeout 30 node_modules/.bin/prisma migrate deploy || true; node dist/main"]

@@ -2,6 +2,10 @@
 
 Allows a logged-in student to retrieve their own physical (date-based) class attendance records, optionally filtered to a specific class.
 
+**Production URL:** `https://api.thilinadhananjaya.lk/api/attendance/my/class-attendance`
+
+**Development URL:** `http://localhost:3001/api/attendance/my/class-attendance`
+
 ---
 
 ## Endpoint
@@ -35,22 +39,31 @@ Authorization: Bearer <student-jwt>
       "records": [
         {
           "id": "ca_clxxxxx",
-          "date": "2025-08-05T00:00:00.000Z",
+          "date": "2025-08-05",
+          "sessionTime": "09:00",
           "status": "PRESENT",
+          "checkInAt": "2025-08-05T09:02:00.000Z",
+          "checkOutAt": "2025-08-05T10:30:00.000Z",
           "method": "barcode",
           "note": null
         },
         {
           "id": "ca_clyyyyy",
-          "date": "2025-08-12T00:00:00.000Z",
+          "date": "2025-08-12",
+          "sessionTime": "09:00",
           "status": "LATE",
+          "checkInAt": "2025-08-12T09:15:00.000Z",
+          "checkOutAt": "2025-08-12T10:30:00.000Z",
           "method": "manual",
           "note": "Arrived 10 mins late"
         },
         {
           "id": "ca_clzzzzz",
-          "date": "2025-08-19T00:00:00.000Z",
+          "date": "2025-08-19",
+          "sessionTime": "09:00",
           "status": "ABSENT",
+          "checkInAt": null,
+          "checkOutAt": null,
           "method": null,
           "note": null
         }
@@ -77,8 +90,11 @@ Authorization: Bearer <student-jwt>
 | `classes[].class`              | object  | Class info: `id`, `name`, `subject`                     |
 | `classes[].records`            | array   | All attendance records for that class                    |
 | `records[].id`                 | string  | Record ID                                                |
-| `records[].date`               | ISO8601 | Date of the class session                                |
+| `records[].date`               | string  | Date of the class session (YYYY-MM-DD)                  |
+| `records[].sessionTime`        | string  | Session start time (HH:mm)                              |
 | `records[].status`             | string  | `PRESENT`, `LATE`, `ABSENT`, or `EXCUSED`               |
+| `records[].checkInAt`          | string  | ISO8601 datetime when student checked in (nullable)     |
+| `records[].checkOutAt`         | string  | ISO8601 datetime when student checked out (nullable)    |
 | `records[].method`             | string  | How it was marked: `barcode`, `institute_id`, `manual`, `phone`, `bulk`, etc. |
 | `records[].note`               | string  | Optional note from the admin                             |
 | `summary.total`                | integer | Total sessions recorded                                  |

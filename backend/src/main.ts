@@ -39,45 +39,45 @@ async function isPortInUse(port: number): Promise<boolean> {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const port = Number(process.env.PORT || 3000);
-
-  const portInUse = await isPortInUse(port);
-  if (portInUse) {
-    logger.warn(`Port ${port} is already in use. Another backend instance is already running.`);
-    return;
-  }
-
-  const app = await NestFactory.create(AppModule);
-
-  app.use(cookieParser());
-
-  app.enableCors({
-    origin: true, // Allow all origins (public registration endpoint requires this)
-    credentials: true,
-  });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-
-  app.useGlobalFilters(new HttpExceptionFilter());
-
-  app.setGlobalPrefix('api');
+  const port = Number(process.env.PORT || 8080);
 
   try {
-    await app.listen(port);
-    logger.log(`ThilinaDhananjaya LMS Backend running on http://localhost:${port}`);
+    const app = await NestFactory.create(AppModule);
+    logger.log('NestFactory app created successfully');
+
+    app.use(cookieParser());
+
+    app.enableCors({
+      origin: true, // Allow all origins (public registration endpoint requires this)
+      credentials: true,
+    });
+
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+
+    app.useGlobalFilters(new HttpExceptionFilter());
+
+    app.setGlobalPrefix('api');
+
+    await app.listen(port, '0.0.0.0');
+    logger.log(`✓ ThilinaDhananjaya LMS Backend running on http://0.0.0.0:${port}`);
   } catch (error: any) {
+    const logger = new Logger('Bootstrap');
     if (error?.code === 'EADDRINUSE') {
-      logger.warn(`Port ${port} is already in use. Another backend instance is already running.`);
-      await app.close();
-      return;
+      logger.error(`Port ${port} is already in use.`);
+      process.exit(1);
     }
-    throw error;
+    logger.error(`Failed to start app: ${error?.message || error}`, error?.stack);
+    process.exit(1);
   }
 }
+
 bootstrap();
+
+
+

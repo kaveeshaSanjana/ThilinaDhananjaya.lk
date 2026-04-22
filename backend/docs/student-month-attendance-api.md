@@ -1,5 +1,9 @@
 # Student — Month Recording Attendance API
 
+**Production URL:** `https://api.thilinadhananjaya.lk/api/attendance/my/month/...`
+
+**Development URL:** `http://localhost:3001/api/attendance/my/month/...`
+
 Get the authenticated student's attendance across **all recordings in a class month** in a single request.
 
 ---

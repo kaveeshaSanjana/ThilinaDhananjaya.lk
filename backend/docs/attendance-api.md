@@ -1,5 +1,9 @@
 # Attendance API
 
+**Production URL:** `https://api.thilinadhananjaya.lk/api/attendance/...`
+
+**Development URL:** `http://localhost:3001/api/attendance/...`
+
 Base path: `/attendance`
 
 All authenticated endpoints require a `Bearer` token in the `Authorization` header.

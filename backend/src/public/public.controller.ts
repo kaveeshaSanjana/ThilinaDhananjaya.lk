@@ -134,6 +134,10 @@ class PublicImportAttendanceByBarcodeDto {
 
   @IsOptional()
   @IsString()
+  classId?: string;
+
+  @IsOptional()
+  @IsString()
   @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status?: string;
 
@@ -162,6 +166,10 @@ class PublicImportAttendanceByInstituteIdDto {
   @IsString()
   @IsNotEmpty()
   instituteId: string;
+
+  @IsOptional()
+  @IsString()
+  classId?: string;
 
   @IsOptional()
   @IsString()
@@ -489,6 +497,7 @@ export class PublicController {
   async importAttendanceByBarcode(@Body() body: PublicImportAttendanceByBarcodeDto) {
     const result = await this.attendanceService.importPublicClassAttendanceBySessionBarcode({
       sessionId: body.sessionId,
+      classId: body.classId,
       barcode: body.barcodeId,
       status: body.status || 'PRESENT',
       sessionAt: body.sessionAt,
@@ -510,6 +519,7 @@ export class PublicController {
   async importAttendanceByInstituteId(@Body() body: PublicImportAttendanceByInstituteIdDto) {
     const result = await this.attendanceService.importPublicClassAttendanceBySessionInstituteId({
       sessionId: body.sessionId,
+      classId: body.classId,
       instituteId: body.instituteId,
       status: body.status || 'PRESENT',
       sessionAt: body.sessionAt,

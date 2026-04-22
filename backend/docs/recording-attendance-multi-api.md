@@ -1,5 +1,9 @@
 # Recording Attendance — Multi-Recording API
 
+**Production URL:** `https://api.thilinadhananjaya.lk/api/attendance/...`
+
+**Development URL:** `http://localhost:3001/api/attendance/...`
+
 Two endpoints for querying attendance across any number of selected recordings at once.
 
 ---
