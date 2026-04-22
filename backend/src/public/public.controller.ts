@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Headers, HttpCode, HttpStatus, NotFoundException } from '@nestjs/common';
+import \{ Controller, Post, Body, Headers, HttpCode, HttpStatus, NotFoundException \} from '@nestjs/common';
 import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsDateString, IsEnum, ValidateIf, IsIn, IsArray, ArrayMinSize, ValidateNested, Matches, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import * as bcrypt from 'bcrypt';
@@ -541,3 +541,13 @@ export class PublicController {
     };
   }
 }
+
+
+
+
+
+
+
+
+
+
