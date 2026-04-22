@@ -1,0 +1,80 @@
+{
+  "_comment": "Public API: Single Session Attendance Check",
+  "endpoint": "POST /api/public/attendance/session/check",
+  "description": "Check and record a single student's attendance with time validation against session time window.",
+  "examples": [
+    {
+      "name": "Student checked in on time",
+      "request": {
+        "sessionId": "cls_session_uuid_or_readable_id",
+        "instituteId": "TD-2026-00045",
+        "classId": "class_uuid_optional",
+        "checkInAt": "2026-04-22T10:15:00.000Z",
+        "checkOutAt": "2026-04-22T11:30:00.000Z",
+        "note": "Present and on time"
+      }
+    },
+    {
+      "name": "Student checked in early",
+      "request": {
+        "sessionId": "cls_session_uuid_or_readable_id",
+        "instituteId": "TD-2026-00046",
+        "checkInAt": "2026-04-22T09:45:00.000Z",
+        "note": "Arrived early"
+      }
+    },
+    {
+      "name": "Student checked in late (after session end)",
+      "request": {
+        "sessionId": "cls_session_uuid_or_readable_id",
+        "instituteId": "TD-2026-00047",
+        "checkInAt": "2026-04-22T11:45:00.000Z",
+        "note": "Late arrival"
+      }
+    }
+  ],
+  "response_example": {
+    "message": "Session attendance recorded successfully",
+    "session": {
+      "id": "cls_session_uuid",
+      "classId": "class_uuid",
+      "className": "Grade 10 Maths",
+      "date": "2026-04-22",
+      "sessionTime": "10:00",
+      "sessionEndTime": "11:00",
+      "sessionCode": "MORNING_BATCH",
+      "sessionAt": "2026-04-22T10:00:00.000Z"
+    },
+    "student": {
+      "userId": "user_uuid",
+      "fullName": "John Doe",
+      "instituteId": "TD-2026-00045",
+      "barcodeId": "BAR-00045"
+    },
+    "timeValidation": {
+      "isOnTime": true,
+      "isEarlyCheckIn": false,
+      "isLateCheckIn": false,
+      "warning": null
+    },
+    "attendance": {
+      "id": "attendance_uuid",
+      "status": "PRESENT",
+      "date": "2026-04-22",
+      "sessionTime": "10:00",
+      "checkInAt": "2026-04-22T10:15:00.000Z",
+      "checkOutAt": "2026-04-22T11:30:00.000Z",
+      "method": "public_session_check",
+      "note": "Present and on time",
+      "createdAt": "2026-04-22T10:16:00.000Z",
+      "updatedAt": "2026-04-22T10:16:00.000Z"
+    }
+  },
+  "notes": {
+    "time_validation": "Times are validated against the session time window (sessionTime to sessionEndTime)",
+    "isOnTime": "True if check-in is between session start and end time",
+    "isEarlyCheckIn": "True if check-in is before session start",
+    "isLateCheckIn": "True if check-in is after session end",
+    "warning_messages": "System generates warnings for early/late arrivals with minute differences"
+  }
+}

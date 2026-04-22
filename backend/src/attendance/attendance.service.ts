@@ -3035,4 +3035,337 @@ export class AttendanceService {
 
     return { months, students: studentPayments };
   }
+
+  /**
+   * Record session attendance with time validation.
+   * Checks if student check-in/check-out times are within the session time window.
+   */
+  async recordSessionAttendanceWithTimeCheck(data: {
+    sessionId: string;
+    classId?: string;
+    instituteId: string;
+    checkInAt: string;
+    checkOutAt?: string;
+    note?: string;
+  }) {
+    // Get session details
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId, data.classId);
+
+    // Get student by instituteId
+    const profile = await this.prisma.profile.findUnique({
+      where: { instituteId: data.instituteId },
+      select: {
+        userId: true,
+        fullName: true,
+        instituteId: true,
+        barcodeId: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException(`No student found for institute ID: ${data.instituteId}`);
+    }
+
+    // Verify student is enrolled
+    await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+    // Parse check-in and check-out times
+    const checkInDate = new Date(data.checkInAt);
+    if (Number.isNaN(checkInDate.getTime())) {
+      throw new BadRequestException('Invalid checkInAt datetime');
+    }
+
+    let checkOutDate: Date | null = null;
+    if (data.checkOutAt) {
+      checkOutDate = new Date(data.checkOutAt);
+      if (Number.isNaN(checkOutDate.getTime())) {
+        throw new BadRequestException('Invalid checkOutAt datetime');
+      }
+    }
+
+    // Validate time order
+    if (checkOutDate && checkOutDate.getTime() < checkInDate.getTime()) {
+      throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+    }
+
+    // Validate against session time window
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00`);
+    const sessionEndTime = session.sessionEndTime
+      ? new Date(`${session.date}T${session.sessionEndTime}:00`)
+      : null;
+
+    const timeCheckResult = this.validateTimeAgainstSession({
+      checkInAt: checkInDate,
+      checkOutAt: checkOutDate,
+      sessionStartTime,
+      sessionEndTime,
+    });
+
+    // Record attendance
+    const attendance = await this.doUpsertClassAttendance(profile.userId, {
+      classId: session.classId,
+      date: session.date,
+      sessionTime: session.sessionTime,
+      sessionCode: session.sessionCode || undefined,
+      sessionAt: checkInDate.toISOString(),
+      checkInAt: checkInDate.toISOString(),
+      checkOutAt: checkOutDate ? checkOutDate.toISOString() : undefined,
+      status: 'PRESENT',
+      note: `${data.note || ''}${timeCheckResult.warning ? ` [${timeCheckResult.warning}]` : ''}`.trim() || undefined,
+      method: 'public_session_check',
+    });
+
+    return {
+      session,
+      student: {
+        userId: profile.userId,
+        fullName: profile.fullName || null,
+        instituteId: profile.instituteId || null,
+        barcodeId: profile.barcodeId || null,
+      },
+      timeValidation: {
+        isOnTime: timeCheckResult.isOnTime,
+        isEarlyCheckIn: timeCheckResult.isEarlyCheckIn,
+        isLateCheckIn: timeCheckResult.isLateCheckIn,
+        warning: timeCheckResult.warning,
+      },
+      attendance: {
+        id: attendance.id,
+        status: attendance.status,
+        date: attendance.date.toISOString().split('T')[0],
+        sessionTime: attendance.sessionTime,
+        checkInAt: attendance.checkInAt ? attendance.checkInAt.toISOString() : null,
+        checkOutAt: attendance.checkOutAt ? attendance.checkOutAt.toISOString() : null,
+        method: attendance.method || null,
+        note: attendance.note || null,
+        createdAt: attendance.createdAt,
+        updatedAt: attendance.updatedAt,
+      },
+    };
+  }
+
+  /**
+   * Bulk record session attendance with time validation.
+   */
+  async recordBulkSessionAttendanceWithTimeCheck(data: {
+    sessionId: string;
+    classId: string;
+    records: Array<{
+      studentInstituteId: string;
+      checkInAt: string;
+      checkOutAt?: string;
+      note?: string;
+    }>;
+  }) {
+    const requestedClassId = (data.classId || '').trim();
+    if (!requestedClassId) {
+      throw new BadRequestException('classId is required');
+    }
+
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId, requestedClassId);
+
+    if (session.classId !== requestedClassId) {
+      throw new BadRequestException('sessionId does not belong to the provided classId');
+    }
+
+    const successful: Array<{
+      index: number;
+      studentInstituteId: string;
+      userId: string;
+      attendanceId: string;
+      status: string;
+      timeValidation: any;
+    }> = [];
+    const failed: Array<{
+      index: number;
+      studentInstituteId: string;
+      reason: string;
+    }> = [];
+
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00`);
+    const sessionEndTime = session.sessionEndTime
+      ? new Date(`${session.date}T${session.sessionEndTime}:00`)
+      : null;
+
+    for (let i = 0; i < data.records.length; i += 1) {
+      const row = data.records[i];
+      const index = i + 1;
+      const studentInstituteId = (row.studentInstituteId || '').trim();
+
+      if (!studentInstituteId) {
+        failed.push({
+          index,
+          studentInstituteId: '',
+          reason: 'studentInstituteId is required',
+        });
+        continue;
+      }
+
+      try {
+        // Parse times
+        const checkInAtRaw = (row.checkInAt || '').trim();
+        if (!checkInAtRaw) {
+          throw new BadRequestException('checkInAt is required');
+        }
+
+        const checkInDate = new Date(checkInAtRaw);
+        if (Number.isNaN(checkInDate.getTime())) {
+          throw new BadRequestException('Invalid checkInAt datetime');
+        }
+
+        let checkOutDate: Date | null = null;
+        if (row.checkOutAt) {
+          checkOutDate = new Date(row.checkOutAt);
+          if (Number.isNaN(checkOutDate.getTime())) {
+            throw new BadRequestException('Invalid checkOutAt datetime');
+          }
+        }
+
+        // Validate time order
+        if (checkOutDate && checkOutDate.getTime() < checkInDate.getTime()) {
+          throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+        }
+
+        // Validate against session
+        const timeCheckResult = this.validateTimeAgainstSession({
+          checkInAt: checkInDate,
+          checkOutAt: checkOutDate,
+          sessionStartTime,
+          sessionEndTime,
+        });
+
+        // Get student
+        const profile = await this.prisma.profile.findUnique({
+          where: { instituteId: studentInstituteId },
+          select: { userId: true },
+        });
+
+        if (!profile) {
+          throw new NotFoundException(`No student found for institute ID: ${studentInstituteId}`);
+        }
+
+        await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+        // Record attendance
+        const attendance = await this.doUpsertClassAttendance(profile.userId, {
+          classId: session.classId,
+          date: session.date,
+          sessionTime: session.sessionTime,
+          sessionCode: session.sessionCode || undefined,
+          sessionAt: checkInDate.toISOString(),
+          checkInAt: checkInDate.toISOString(),
+          checkOutAt: checkOutDate ? checkOutDate.toISOString() : undefined,
+          status: 'PRESENT',
+          note: `${row.note || ''}${timeCheckResult.warning ? ` [${timeCheckResult.warning}]` : ''}`.trim() || undefined,
+          method: 'public_session_check_bulk',
+        });
+
+        successful.push({
+          index,
+          studentInstituteId,
+          userId: profile.userId,
+          attendanceId: attendance.id,
+          status: attendance.status,
+          timeValidation: {
+            isOnTime: timeCheckResult.isOnTime,
+            isEarlyCheckIn: timeCheckResult.isEarlyCheckIn,
+            isLateCheckIn: timeCheckResult.isLateCheckIn,
+            warning: timeCheckResult.warning,
+          },
+        });
+      } catch (error) {
+        failed.push({
+          index,
+          studentInstituteId,
+          reason: error?.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      message: 'Bulk session attendance recorded',
+      session: {
+        id: session.id,
+        classId: session.classId,
+        className: session.className,
+        date: session.date,
+        sessionTime: session.sessionTime,
+        sessionEndTime: session.sessionEndTime,
+        sessionCode: session.sessionCode,
+        sessionAt: session.sessionAt,
+      },
+      summary: {
+        totalRecords: data.records.length,
+        successCount: successful.length,
+        failedCount: failed.length,
+      },
+      successful,
+      failed,
+    };
+  }
+
+  /**
+   * Private helper: Validate check-in/check-out times against session window.
+   */
+  private validateTimeAgainstSession(data: {
+    checkInAt: Date;
+    checkOutAt: Date | null;
+    sessionStartTime: Date;
+    sessionEndTime: Date | null;
+  }): {
+    isOnTime: boolean;
+    isEarlyCheckIn: boolean;
+    isLateCheckIn: boolean;
+    warning: string | null;
+  } {
+    const { checkInAt, checkOutAt, sessionStartTime, sessionEndTime } = data;
+
+    const checkInMs = checkInAt.getTime();
+    const sessionStartMs = sessionStartTime.getTime();
+    const sessionEndMs = sessionEndTime ? sessionEndTime.getTime() : null;
+
+    let isEarlyCheckIn = false;
+    let isLateCheckIn = false;
+    let isOnTime = false;
+    let warning: string | null = null;
+
+    // Check if early
+    if (checkInMs < sessionStartMs) {
+      isEarlyCheckIn = true;
+      const minutesBefore = Math.floor((sessionStartMs - checkInMs) / 60000);
+      warning = `Checked in ${minutesBefore} minutes early`;
+    }
+    // Check if on time (within session window)
+    else if (sessionEndMs && checkInMs <= sessionEndMs) {
+      isOnTime = true;
+    }
+    // Check if late
+    else if (sessionEndMs && checkInMs > sessionEndMs) {
+      isLateCheckIn = true;
+      const minutesAfter = Math.floor((checkInMs - sessionEndMs) / 60000);
+      warning = `Checked in ${minutesAfter} minutes after session ended`;
+    }
+    // If no session end time, consider on time if after session start
+    else if (!sessionEndMs && checkInMs >= sessionStartMs) {
+      isOnTime = true;
+    }
+
+    // Validate check-out time
+    if (checkOutAt) {
+      const checkOutMs = checkOutAt.getTime();
+      if (sessionEndMs && checkOutMs > sessionEndMs) {
+        const minutesAfter = Math.floor((checkOutMs - sessionEndMs) / 60000);
+        warning = warning
+          ? `${warning}; Checked out ${minutesAfter} minutes after session ended`
+          : `Checked out ${minutesAfter} minutes after session ended`;
+      }
+    }
+
+    return {
+      isOnTime,
+      isEarlyCheckIn,
+      isLateCheckIn,
+      warning,
+    };
+  }
 }
