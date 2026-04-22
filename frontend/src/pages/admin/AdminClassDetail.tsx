@@ -80,6 +80,7 @@ interface PhysicalMonitorSlot {
   key: string;
   date: string;
   sessionTime: string;
+  sessionEndTime?: string | null;
   sessionCode: string | null;
 }
 
@@ -105,6 +106,7 @@ interface PhysicalQuickSession {
   key: string;
   date: string;
   sessionTime: string;
+  sessionEndTime: string | null;
   sessionCode: string | null;
   sessionAt: string | null;
   readableId: string;
@@ -125,6 +127,8 @@ interface PhysicalSessionStudentRow {
   status: PhysicalCellStatus;
   attendanceId: string | null;
   markedAt: string | null;
+  checkInAt: string | null;
+  checkOutAt: string | null;
 }
 
 interface PhysicalWeekPreviewStudentRow {
@@ -195,12 +199,16 @@ function resolveClassPaymentOverallStatus(row: ClassPaymentStudentRow): ClassPay
   return 'PAID';
 }
 
-function formatPhysicalSlotLabel(slot: Pick<PhysicalMonitorSlot, 'date' | 'sessionTime' | 'sessionCode'>) {
+function formatPhysicalSlotLabel(slot: Pick<PhysicalMonitorSlot, 'date' | 'sessionTime' | 'sessionEndTime' | 'sessionCode'>) {
   const code = typeof slot.sessionCode === 'string' ? slot.sessionCode.trim() : '';
   if (code) return code;
 
-  const time = slot.sessionTime && slot.sessionTime !== '00:00' ? ` ${slot.sessionTime}` : '';
-  return `${slot.date}${time}`;
+  const range = slot.sessionTime && slot.sessionTime !== '00:00'
+    ? slot.sessionEndTime
+      ? ` ${slot.sessionTime}-${slot.sessionEndTime}`
+      : ` ${slot.sessionTime}`
+    : '';
+  return `${slot.date}${range}`;
 }
 
 function buildReadableSessionId(date: string, sessionTime: string, sessionCode: string | null) {
@@ -228,6 +236,9 @@ function normalizePhysicalQuickSessionItem(item: unknown): PhysicalQuickSession 
   const sessionTime = typeof row.sessionTime === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(row.sessionTime.trim())
     ? row.sessionTime.trim()
     : '00:00';
+  const sessionEndTime = typeof row.sessionEndTime === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(row.sessionEndTime.trim())
+    ? row.sessionEndTime.trim()
+    : null;
 
   const sessionCode = typeof row.sessionCode === 'string' && row.sessionCode.trim()
     ? row.sessionCode.trim()
@@ -257,7 +268,7 @@ function normalizePhysicalQuickSessionItem(item: unknown): PhysicalQuickSession 
 
   const label = typeof row.label === 'string' && row.label.trim()
     ? row.label.trim()
-    : formatPhysicalSlotLabel({ date, sessionTime, sessionCode });
+    : formatPhysicalSlotLabel({ date, sessionTime, sessionEndTime, sessionCode });
   const readableId = typeof row.readableId === 'string' && row.readableId.trim()
     ? row.readableId.trim()
     : buildReadableSessionId(date, sessionTime, sessionCode);
@@ -266,6 +277,7 @@ function normalizePhysicalQuickSessionItem(item: unknown): PhysicalQuickSession 
     key,
     date,
     sessionTime,
+    sessionEndTime,
     sessionCode,
     sessionAt,
     readableId,
@@ -1673,6 +1685,8 @@ export default function AdminClassDetail() {
         id: string;
         status: PhysicalCellStatus;
         sessionAt: string | null;
+        checkInAt: string | null;
+        checkOutAt: string | null;
         createdAt: string | null;
         updatedAt: string | null;
       }>();
@@ -1688,6 +1702,8 @@ export default function AdminClassDetail() {
             id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : '',
             status,
             sessionAt: typeof item?.sessionAt === 'string' && item.sessionAt.trim() ? item.sessionAt.trim() : null,
+            checkInAt: typeof item?.checkInAt === 'string' && item.checkInAt.trim() ? item.checkInAt.trim() : null,
+            checkOutAt: typeof item?.checkOutAt === 'string' && item.checkOutAt.trim() ? item.checkOutAt.trim() : null,
             createdAt: typeof item?.createdAt === 'string' && item.createdAt.trim() ? item.createdAt.trim() : null,
             updatedAt: typeof item?.updatedAt === 'string' && item.updatedAt.trim() ? item.updatedAt.trim() : null,
           });
@@ -1720,6 +1736,8 @@ export default function AdminClassDetail() {
             status,
             attendanceId: attendanceMeta?.id || null,
             markedAt,
+            checkInAt: attendanceMeta?.checkInAt || null,
+            checkOutAt: attendanceMeta?.checkOutAt || null,
           };
         })
         .filter((row: PhysicalSessionStudentRow | null): row is PhysicalSessionStudentRow => Boolean(row))
@@ -5878,6 +5896,11 @@ export default function AdminClassDetail() {
                   )}
                   {physicalQuickSelectedSession && (
                     <p className="text-[11px] text-slate-500 mt-0.5">
+                      Session range: <span className="font-semibold text-slate-700">{physicalQuickSelectedSession.sessionTime}{physicalQuickSelectedSession.sessionEndTime ? `-${physicalQuickSelectedSession.sessionEndTime}` : ''}</span>
+                    </p>
+                  )}
+                  {physicalQuickSelectedSession && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">
                       Update each student status and attendance time before closing this session.
                     </p>
                   )}
@@ -6027,6 +6050,9 @@ export default function AdminClassDetail() {
                               </p>
                               <p className="truncate text-[10px] text-slate-400">
                                 Marked time: {formatDateTimeLabel(student.markedAt)}
+                              </p>
+                              <p className="truncate text-[10px] text-slate-400">
+                                Check In: {formatDateTimeLabel(student.checkInAt)} | Check Out: {formatDateTimeLabel(student.checkOutAt)}
                               </p>
                             </div>
                           </div>

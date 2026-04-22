@@ -4,7 +4,7 @@ import { motion, useScroll, useSpring } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const DEFAULT_MAIN_APP_URL = "http://localhost:5173";
+const DEFAULT_MAIN_APP_URL = "http://localhost:8080";
 
 const resolveMainAppUrl = () => {
   const searchParams = new URLSearchParams(window.location.search);
@@ -27,7 +27,11 @@ const resolveMainAppUrl = () => {
     return fromEnv.replace(/\/$/, "");
   }
 
-  return DEFAULT_MAIN_APP_URL;
+  if (window.location.port === "8081") {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+
+  return window.location.origin.replace(/\/$/, "") || DEFAULT_MAIN_APP_URL;
 };
 
 const Navbar = () => {

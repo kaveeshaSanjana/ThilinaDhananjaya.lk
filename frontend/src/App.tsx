@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { InstituteProvider, useInstitute } from './context/InstituteContext';
@@ -41,6 +41,7 @@ import StudentMonthRecAttendance from './pages/StudentMonthRecAttendance';
 import MyClassAttendancePage from './pages/MyClassAttendancePage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import StudentProfilePage from './pages/StudentProfilePage';
+import MainLandingPage from './pages/MainLandingPage';
 
 import Layout from './components/Layout';
 import LandingStyleLoading from './components/LandingStyleLoading';
@@ -113,7 +114,6 @@ function MarkAttendanceExternalOnlyRedirect() {
 function LandingPageView() {
   const { user, loading } = useAuth();
   const { selected } = useInstitute();
-  const [iframeError, setIframeError] = useState(false);
 
   if (loading) {
     return <LandingStyleLoading />;
@@ -129,28 +129,8 @@ function LandingPageView() {
     }
   }
 
-  // For unauthenticated users, show the landing page in an iframe
-  return (
-    <div style={{ width: '100%', height: '100vh' }}>
-      <iframe
-        src="/landing-page.html"
-        onError={() => setIframeError(true)}
-        style={{
-          width: '100%',
-          height: '100%',
-          border: 'none',
-          margin: 0,
-          padding: 0
-        }}
-        title="Landing Page"
-      />
-      {iframeError && (
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <p>Landing page could not load. Please <a href="/login">login here</a>.</p>
-        </div>
-      )}
-    </div>
-  );
+  // For unauthenticated users, render the landing content directly in the same app.
+  return <MainLandingPage />;
 }
 
 function AppRoutes() {

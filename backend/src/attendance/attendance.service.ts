@@ -685,13 +685,43 @@ export class AttendanceService {
     return dateObj;
   }
 
-  private normalizeSessionTime(sessionTime?: string): string {
+  private normalizeSessionWindow(sessionTime?: string): { sessionTime: string; sessionEndTime: string | null } {
     const raw = (sessionTime || '').trim();
-    if (!raw) return '00:00';
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(raw)) {
-      throw new BadRequestException('sessionTime must be in HH:mm format');
+    if (!raw) return { sessionTime: '00:00', sessionEndTime: null };
+
+    const rangeMatch = /^([01]\d|2[0-3]):([0-5]\d)\s*-\s*([01]\d|2[0-3]):([0-5]\d)$/.exec(raw);
+    if (rangeMatch) {
+      const start = `${rangeMatch[1]}:${rangeMatch[2]}`;
+      const end = `${rangeMatch[3]}:${rangeMatch[4]}`;
+      const startMinutes = Number(rangeMatch[1]) * 60 + Number(rangeMatch[2]);
+      const endMinutes = Number(rangeMatch[3]) * 60 + Number(rangeMatch[4]);
+
+      if (endMinutes <= startMinutes) {
+        throw new BadRequestException('sessionTime end time must be later than start time');
+      }
+
+      // Persist start time as canonical slot key (schema stores HH:mm key).
+      return { sessionTime: start, sessionEndTime: end };
     }
-    return raw;
+
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(raw)) {
+      throw new BadRequestException('sessionTime must be in HH:mm or HH:mm-HH:mm format');
+    }
+
+    return { sessionTime: raw, sessionEndTime: null };
+  }
+
+  private normalizeSessionTime(sessionTime?: string): string {
+    return this.normalizeSessionWindow(sessionTime).sessionTime;
+  }
+
+  private normalizeSingleTime(raw?: string): string | null {
+    const value = (raw || '').trim();
+    if (!value) return null;
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
+      throw new BadRequestException('time must be in HH:mm format');
+    }
+    return value;
   }
 
   private normalizeSessionCode(sessionCode?: string): string | null {
@@ -701,10 +731,13 @@ export class AttendanceService {
 
   private normalizeClassAttendanceStatus(status?: string): string {
     const normalized = (status || 'PRESENT').trim().toUpperCase();
+    if (normalized === 'NOTMARKED') {
+      return 'ABSENT';
+    }
     if (normalized === 'PRESENT' || normalized === 'ABSENT' || normalized === 'LATE' || normalized === 'EXCUSED') {
       return normalized as string;
     }
-    throw new BadRequestException('status must be PRESENT, ABSENT, LATE, or EXCUSED');
+    throw new BadRequestException('status must be PRESENT, ABSENT, LATE, EXCUSED, or NOTMARKED');
   }
 
   private resolveSessionAt(date: string, sessionTime: string, sessionAt?: string): Date | null {
@@ -722,11 +755,42 @@ export class AttendanceService {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  private normalizeSessionMeta(data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string }) {
-    const sessionTime = this.normalizeSessionTime(data.sessionTime);
+  private normalizeSessionMeta(data: {
+    date: string;
+    sessionTime?: string;
+    sessionEndTime?: string;
+    sessionCode?: string;
+    sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
+  }) {
+    const normalizedWindow = this.normalizeSessionWindow(data.sessionTime);
+    const sessionTime = normalizedWindow.sessionTime;
+    const sessionEndTime = this.normalizeSingleTime(data.sessionEndTime) || normalizedWindow.sessionEndTime;
     const sessionCode = this.normalizeSessionCode(data.sessionCode);
-    const sessionAt = this.resolveSessionAt(data.date, sessionTime, data.sessionAt);
-    return { sessionTime, sessionCode, sessionAt };
+    const checkInAt = this.resolveSessionAt(data.date, sessionTime, data.checkInAt || data.sessionAt);
+
+    let checkOutAt: Date | null = null;
+    const rawCheckOutAt = (data.checkOutAt || '').trim();
+    if (rawCheckOutAt) {
+      const parsed = new Date(rawCheckOutAt);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('Invalid checkOutAt');
+      }
+      checkOutAt = parsed;
+    } else if (sessionEndTime) {
+      const parsed = new Date(`${data.date}T${sessionEndTime}:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        checkOutAt = parsed;
+      }
+    }
+
+    if (checkInAt && checkOutAt && checkOutAt.getTime() < checkInAt.getTime()) {
+      throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+    }
+
+    const sessionAt = checkInAt || this.resolveSessionAt(data.date, sessionTime, data.sessionAt);
+    return { sessionTime, sessionEndTime, sessionCode, sessionAt, checkInAt, checkOutAt };
   }
 
   private getIsoWeekLabel(dateIso: string): string {
@@ -773,6 +837,7 @@ export class AttendanceService {
     sessionId?: string | null;
     date: string;
     sessionTime: string;
+    sessionEndTime?: string | null;
     sessionCode: string | null;
     sessionAt: string | null;
     recordsCount: number;
@@ -780,7 +845,8 @@ export class AttendanceService {
     weekId?: string | null;
     weekName?: string | null;
   }) {
-    const timeSuffix = data.sessionTime === '00:00' ? '' : ` ${data.sessionTime}`;
+    const range = data.sessionEndTime ? `${data.sessionTime}-${data.sessionEndTime}` : data.sessionTime;
+    const timeSuffix = data.sessionTime === '00:00' ? '' : ` ${range}`;
     const labelCore = data.sessionCode || `${data.date}${timeSuffix}`;
 
     return {
@@ -788,6 +854,7 @@ export class AttendanceService {
       key: `${data.date}|${data.sessionTime}`,
       date: data.date,
       sessionTime: data.sessionTime,
+      sessionEndTime: data.sessionEndTime || null,
       sessionCode: data.sessionCode,
       sessionAt: data.sessionAt,
       label: data.sessionCode ? `${labelCore} (${data.date}${timeSuffix})` : labelCore,
@@ -807,15 +874,19 @@ export class AttendanceService {
       date: string;
       status: string;
       sessionTime?: string;
+      sessionEndTime?: string;
       sessionCode?: string;
       sessionAt?: string;
+      checkInAt?: string;
+      checkOutAt?: string;
       method?: string;
       note?: string;
       markedBy?: string;
     },
   ) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
+    const { sessionTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
+    const normalizedStatus = this.normalizeClassAttendanceStatus(data.status);
 
     return this.prisma.classAttendance.upsert({
       where: {
@@ -827,12 +898,14 @@ export class AttendanceService {
         },
       },
       update: {
-        status: data.status as any,
+        status: normalizedStatus as any,
         method: data.method || undefined,
         note: data.note || undefined,
         markedBy: data.markedBy || undefined,
         sessionCode: sessionCode || undefined,
         sessionAt: sessionAt || undefined,
+        checkInAt: checkInAt || undefined,
+        checkOutAt: checkOutAt || undefined,
       },
       create: {
         userId,
@@ -841,7 +914,9 @@ export class AttendanceService {
         sessionTime,
         sessionCode,
         sessionAt,
-        status: data.status as any,
+        checkInAt,
+        checkOutAt,
+        status: normalizedStatus as any,
         method: data.method || null,
         note: data.note || null,
         markedBy: data.markedBy || null,
@@ -860,6 +935,7 @@ export class AttendanceService {
         classId: true,
         date: true,
         sessionTime: true,
+        sessionEndTime: true,
         sessionCode: true,
         sessionAt: true,
         class: {
@@ -880,6 +956,7 @@ export class AttendanceService {
       className: session.class?.name || null,
       date: session.date.toISOString().split('T')[0],
       sessionTime: this.normalizeSessionTime(session.sessionTime),
+      sessionEndTime: this.normalizeSingleTime(session.sessionEndTime || undefined),
       sessionCode: (session.sessionCode || '').trim() || null,
       sessionAt: session.sessionAt ? session.sessionAt.toISOString() : null,
     };
@@ -906,6 +983,8 @@ export class AttendanceService {
     barcode: string;
     status: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     note?: string;
   }) {
     const [session, profile] = await Promise.all([
@@ -934,6 +1013,8 @@ export class AttendanceService {
       sessionTime: session.sessionTime,
       sessionCode: session.sessionCode || undefined,
       sessionAt: markedAt,
+      checkInAt: data.checkInAt,
+      checkOutAt: data.checkOutAt,
       status: data.status,
       note: data.note,
       method: 'public_import_barcode',
@@ -954,6 +1035,8 @@ export class AttendanceService {
         sessionTime: record.sessionTime,
         sessionCode: record.sessionCode || null,
         sessionAt: record.sessionAt ? record.sessionAt.toISOString() : null,
+        checkInAt: record.checkInAt ? record.checkInAt.toISOString() : null,
+        checkOutAt: record.checkOutAt ? record.checkOutAt.toISOString() : null,
         method: record.method || null,
         note: record.note || null,
         createdAt: record.createdAt,
@@ -1015,6 +1098,8 @@ export class AttendanceService {
         sessionTime: record.sessionTime,
         sessionCode: record.sessionCode || null,
         sessionAt: record.sessionAt ? record.sessionAt.toISOString() : null,
+        checkInAt: record.checkInAt ? record.checkInAt.toISOString() : null,
+        checkOutAt: record.checkOutAt ? record.checkOutAt.toISOString() : null,
         method: record.method || null,
         note: record.note || null,
         createdAt: record.createdAt,
@@ -1031,6 +1116,8 @@ export class AttendanceService {
       date?: string;
       checkInTime?: string;
       checkInAt?: string;
+      checkOutTime?: string;
+      checkOutAt?: string;
       status?: string;
       note?: string;
     }>;
@@ -1078,7 +1165,9 @@ export class AttendanceService {
         const status = this.normalizeClassAttendanceStatus(row.status);
 
         const checkInAtRaw = (row.checkInAt || '').trim();
+        const checkOutAtRaw = (row.checkOutAt || '').trim();
         let rowSessionAtIso = '';
+        let rowCheckOutAtIso = '';
 
         if (checkInAtRaw) {
           const parsed = new Date(checkInAtRaw);
@@ -1109,6 +1198,32 @@ export class AttendanceService {
           }
         }
 
+        if (checkOutAtRaw) {
+          const parsed = new Date(checkOutAtRaw);
+          if (Number.isNaN(parsed.getTime())) {
+            throw new BadRequestException('Invalid checkOutAt');
+          }
+          rowCheckOutAtIso = parsed.toISOString();
+        } else {
+          const rowDate = (row.date || session.date || '').trim() || session.date;
+          const rowCheckOutTimeRaw = (row.checkOutTime || '').trim();
+          const normalizedRowCheckOutTime = rowCheckOutTimeRaw
+            ? this.normalizeSessionTime(rowCheckOutTimeRaw)
+            : (session.sessionEndTime || null);
+
+          if (normalizedRowCheckOutTime) {
+            const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00`);
+            if (Number.isNaN(parsed.getTime())) {
+              throw new BadRequestException('Invalid checkOutTime');
+            }
+            rowCheckOutAtIso = parsed.toISOString();
+          }
+        }
+
+        if (rowSessionAtIso && rowCheckOutAtIso && new Date(rowCheckOutAtIso).getTime() < new Date(rowSessionAtIso).getTime()) {
+          throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+        }
+
         const profile = await this.prisma.profile.findUnique({
           where: { instituteId: studentInstituteId },
           select: {
@@ -1126,8 +1241,11 @@ export class AttendanceService {
           classId: session.classId,
           date: session.date,
           sessionTime: session.sessionTime,
+          sessionEndTime: session.sessionEndTime || undefined,
           sessionCode: session.sessionCode || undefined,
           sessionAt: rowSessionAtIso,
+          checkInAt: rowSessionAtIso,
+          checkOutAt: rowCheckOutAtIso || undefined,
           status,
           note: row.note,
           method: 'public_import_institute_id_bulk',
@@ -1139,7 +1257,7 @@ export class AttendanceService {
           userId: profile.userId,
           attendanceId: attendance.id,
           status: attendance.status,
-          sessionAt: attendance.sessionAt ? attendance.sessionAt.toISOString() : null,
+          sessionAt: attendance.checkInAt ? attendance.checkInAt.toISOString() : (attendance.sessionAt ? attendance.sessionAt.toISOString() : null),
         });
       } catch (error: any) {
         const message = error?.message;
@@ -1181,8 +1299,11 @@ export class AttendanceService {
     date: string;
     status: string;
     sessionTime?: string;
+    sessionEndTime?: string;
     sessionCode?: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     note?: string;
     markedBy?: string;
   }) {
@@ -1201,8 +1322,11 @@ export class AttendanceService {
     date: string;
     status: string;
     sessionTime?: string;
+    sessionEndTime?: string;
     sessionCode?: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     note?: string;
     markedBy?: string;
   }) {
@@ -1221,8 +1345,11 @@ export class AttendanceService {
     date: string;
     status: string;
     sessionTime?: string;
+    sessionEndTime?: string;
     sessionCode?: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     note?: string;
     markedBy?: string;
   }) {
@@ -1244,8 +1371,11 @@ export class AttendanceService {
     date: string;
     status: string;
     sessionTime?: string;
+    sessionEndTime?: string;
     sessionCode?: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     method?: string;
     note?: string;
     markedBy?: string;
@@ -1262,17 +1392,21 @@ export class AttendanceService {
     date: string;
     records: Array<{ userId: string; status: string; note?: string }>;
     sessionTime?: string;
+    sessionEndTime?: string;
     sessionCode?: string;
     sessionAt?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
     method?: string;
     markedBy?: string;
   }) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
+    const { sessionTime, sessionEndTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
 
     return this.prisma.$transaction(
-      data.records.map((rec) =>
-        this.prisma.classAttendance.upsert({
+      data.records.map((rec) => {
+        const normalizedStatus = this.normalizeClassAttendanceStatus(rec.status);
+        return this.prisma.classAttendance.upsert({
           where: {
             userId_classId_date_sessionTime: {
               userId: rec.userId,
@@ -1282,12 +1416,14 @@ export class AttendanceService {
             },
           },
           update: {
-            status: rec.status as any,
+            status: normalizedStatus as any,
             method: data.method || undefined,
             note: rec.note || undefined,
             markedBy: data.markedBy || undefined,
             sessionCode: sessionCode || undefined,
             sessionAt: sessionAt || undefined,
+            checkInAt: checkInAt || undefined,
+            checkOutAt: checkOutAt || undefined,
           },
           create: {
             userId: rec.userId,
@@ -1296,13 +1432,15 @@ export class AttendanceService {
             sessionTime,
             sessionCode,
             sessionAt,
-            status: rec.status as any,
+            checkInAt,
+            checkOutAt,
+            status: normalizedStatus as any,
             method: data.method || 'bulk',
             note: rec.note || null,
             markedBy: data.markedBy || null,
           },
-        }),
-      ),
+        });
+      }),
     );
   }
 
@@ -1440,6 +1578,8 @@ export class AttendanceService {
           sessionTime: true,
           sessionCode: true,
           sessionAt: true,
+          checkInAt: true,
+          checkOutAt: true,
         },
         orderBy: [{ date: 'asc' }, { sessionTime: 'asc' }],
       }),
@@ -1474,7 +1614,7 @@ export class AttendanceService {
           date: ds,
           sessionTime,
           sessionCode,
-          sessionAt: rec.sessionAt ? rec.sessionAt.toISOString() : null,
+          sessionAt: rec.checkInAt ? rec.checkInAt.toISOString() : (rec.sessionAt ? rec.sessionAt.toISOString() : null),
           week,
           label: `${displayCore} (${ds}${timeSuffix})`,
         });
@@ -1551,11 +1691,11 @@ export class AttendanceService {
    */
   async createClassAttendanceSession(
     classId: string,
-    data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string },
+    data: { date: string; sessionTime?: string; sessionEndTime?: string; sessionCode?: string; sessionAt?: string; checkInAt?: string; checkOutAt?: string },
     createdBy?: string,
   ) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const { sessionTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
+    const { sessionTime, sessionEndTime, sessionCode, sessionAt } = this.normalizeSessionMeta(data);
 
     const session = await this.prisma.classAttendanceSession.upsert({
       where: {
@@ -1566,6 +1706,7 @@ export class AttendanceService {
         },
       },
       update: {
+        sessionEndTime: sessionEndTime || undefined,
         sessionCode: sessionCode || undefined,
         sessionAt: sessionAt || undefined,
         createdBy: createdBy || undefined,
@@ -1574,6 +1715,7 @@ export class AttendanceService {
         classId,
         date: dateObj,
         sessionTime,
+        sessionEndTime,
         sessionCode,
         sessionAt,
         createdBy: createdBy || null,
@@ -1592,6 +1734,7 @@ export class AttendanceService {
       sessionId: session.id,
       date: session.date.toISOString().split('T')[0],
       sessionTime,
+      sessionEndTime: session.sessionEndTime || null,
       sessionCode: session.sessionCode || null,
       sessionAt: session.sessionAt ? session.sessionAt.toISOString() : null,
       recordsCount,
@@ -1616,6 +1759,7 @@ export class AttendanceService {
           id: true,
           date: true,
           sessionTime: true,
+          sessionEndTime: true,
           sessionCode: true,
           sessionAt: true,
           weekId: true,
@@ -1654,6 +1798,7 @@ export class AttendanceService {
       key: string;
       date: string;
       sessionTime: string;
+      sessionEndTime: string | null;
       sessionCode: string | null;
       sessionAt: string | null;
       label: string;
@@ -1670,11 +1815,13 @@ export class AttendanceService {
         : '00:00';
       const sessionCode = (session.sessionCode || '').trim() || null;
       const sessionAt = session.sessionAt ? session.sessionAt.toISOString() : null;
+      const sessionEndTime = this.normalizeSingleTime(session.sessionEndTime || undefined);
 
       const row = this.buildClassAttendanceSessionRow({
         sessionId: session.id,
         date,
         sessionTime,
+        sessionEndTime,
         sessionCode,
         sessionAt,
         recordsCount: 0,
@@ -1691,6 +1838,7 @@ export class AttendanceService {
         ? record.sessionTime
         : '00:00';
       const key = `${date}|${sessionTime}`;
+      const sessionEndTime = this.normalizeSingleTime(undefined);
       const sessionCode = (record.sessionCode || '').trim() || null;
       const sessionAt = record.sessionAt ? record.sessionAt.toISOString() : null;
 
@@ -1700,6 +1848,7 @@ export class AttendanceService {
           sessionId: null,
           date,
           sessionTime,
+          sessionEndTime,
           sessionCode,
           sessionAt,
           recordsCount: 1,
@@ -1714,8 +1863,12 @@ export class AttendanceService {
       existing.recordsCount += 1;
       if (!existing.sessionCode && sessionCode) {
         existing.sessionCode = sessionCode;
-        const timeSuffix = existing.sessionTime === '00:00' ? '' : ` ${existing.sessionTime}`;
+        const displayTime = existing.sessionEndTime ? `${existing.sessionTime}-${existing.sessionEndTime}` : existing.sessionTime;
+        const timeSuffix = existing.sessionTime === '00:00' ? '' : ` ${displayTime}`;
         existing.label = `${sessionCode} (${existing.date}${timeSuffix})`;
+      }
+      if (!existing.sessionEndTime && sessionEndTime) {
+        existing.sessionEndTime = sessionEndTime;
       }
       if (!existing.sessionAt && sessionAt) {
         existing.sessionAt = sessionAt;
@@ -1764,6 +1917,7 @@ export class AttendanceService {
           id: true,
           date: true,
           sessionTime: true,
+          sessionEndTime: true,
           sessionCode: true,
           sessionAt: true,
           weekId: true,
@@ -1803,6 +1957,7 @@ export class AttendanceService {
 
     if (!existingSession && !requestedWeekId) {
       const attendanceSessionCode = (attendanceMeta?.sessionCode || '').trim() || null;
+      const attendanceSessionEndTime = null;
       const attendanceSessionAt = attendanceMeta?.sessionAt
         ? attendanceMeta.sessionAt.toISOString()
         : null;
@@ -1811,6 +1966,7 @@ export class AttendanceService {
         sessionId: null,
         date: parsedSession.date,
         sessionTime: parsedSession.sessionTime,
+        sessionEndTime: attendanceSessionEndTime,
         sessionCode: attendanceSessionCode,
         sessionAt: attendanceSessionAt,
         recordsCount,
@@ -1821,6 +1977,7 @@ export class AttendanceService {
     }
 
     const attendanceSessionCode = (attendanceMeta?.sessionCode || '').trim() || null;
+    const attendanceSessionEndTime = null;
     const attendanceSessionAt = attendanceMeta?.sessionAt || null;
 
     const session = await this.prisma.classAttendanceSession.upsert({
@@ -1840,6 +1997,7 @@ export class AttendanceService {
         weekId: requestedWeekId,
         date: parsedSession.dateObj,
         sessionTime: parsedSession.sessionTime,
+        sessionEndTime: attendanceSessionEndTime,
         sessionCode: attendanceSessionCode,
         sessionAt: attendanceSessionAt,
         createdBy: updatedBy || null,
@@ -1848,6 +2006,7 @@ export class AttendanceService {
         id: true,
         date: true,
         sessionTime: true,
+        sessionEndTime: true,
         sessionCode: true,
         sessionAt: true,
         weekId: true,
@@ -1872,6 +2031,7 @@ export class AttendanceService {
       sessionTime: /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
         ? session.sessionTime
         : parsedSession.sessionTime,
+      sessionEndTime: this.normalizeSingleTime(session.sessionEndTime || undefined) || attendanceSessionEndTime,
       sessionCode,
       sessionAt,
       recordsCount,
@@ -1972,6 +2132,7 @@ export class AttendanceService {
               weekId: week.id,
               date: session.dateObj,
               sessionTime: session.sessionTime,
+              sessionEndTime: null,
               sessionCode: null,
               sessionAt: null,
               createdBy: createdBy || null,
@@ -2014,6 +2175,7 @@ export class AttendanceService {
               id: true,
               date: true,
               sessionTime: true,
+              sessionEndTime: true,
               sessionCode: true,
               sessionAt: true,
             },
@@ -2052,6 +2214,7 @@ export class AttendanceService {
         const sessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(session.sessionTime || '')
           ? session.sessionTime
           : '00:00';
+        const sessionEndTime = this.normalizeSingleTime(session.sessionEndTime || undefined);
         const sessionCode = (session.sessionCode || '').trim() || null;
         const sessionAt = session.sessionAt ? session.sessionAt.toISOString() : null;
         const recordsCount = countBySessionKey.get(`${date}|${sessionTime}`) || 0;
@@ -2060,6 +2223,7 @@ export class AttendanceService {
           sessionId: session.id,
           date,
           sessionTime,
+          sessionEndTime,
           sessionCode,
           sessionAt,
           recordsCount,
@@ -2169,13 +2333,11 @@ export class AttendanceService {
    */
   async closeClassSession(
     classId: string,
-    data: { date: string; sessionTime?: string; sessionCode?: string; sessionAt?: string },
+    data: { date: string; sessionTime?: string; sessionEndTime?: string; sessionCode?: string; sessionAt?: string; checkInAt?: string; checkOutAt?: string },
     markedBy: string,
   ) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const sessionTime = this.normalizeSessionTime(data.sessionTime);
-    const sessionCode = this.normalizeSessionCode(data.sessionCode);
-    const sessionAt = this.resolveSessionAt(data.date, sessionTime, data.sessionAt);
+    const { sessionTime, sessionEndTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
 
     const [enrollments, existing] = await Promise.all([
       this.prisma.enrollment.findMany({
@@ -2215,8 +2377,11 @@ export class AttendanceService {
         classId,
         date: dateObj,
         sessionTime,
+        sessionEndTime,
         sessionCode: sessionCode || 'AUTO_CLOSE',
         sessionAt: sessionAt || null,
+        checkInAt: checkInAt || null,
+        checkOutAt: checkOutAt || null,
         status: 'ABSENT' as any,
         method: 'auto-close-session',
         markedBy,
@@ -2432,6 +2597,8 @@ export class AttendanceService {
         sessionTime: rec.sessionTime,
         sessionCode: rec.sessionCode,
         sessionAt: rec.sessionAt,
+        checkInAt: rec.checkInAt,
+        checkOutAt: rec.checkOutAt,
         status: rec.status,
         method: rec.method,
         note: rec.note,

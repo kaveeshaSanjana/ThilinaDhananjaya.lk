@@ -1,0 +1,9 @@
+﻿{
+  "email": "student@test.com",
+  "password": "student123",
+  "fullName": "Test Student",
+  "instituteUserId": "STUDENT001",
+  "barcodeId": "STUDENT001",
+  "phone": "0771234568",
+  "classId": "29344d2c-b454-4f2d-90ae-ca1019356da1"
+}

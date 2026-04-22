@@ -1,7 +1,7 @@
 import { IsString, IsNotEmpty, IsInt, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, IsIn, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
-const ATTENDANCE_TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const ATTENDANCE_TIME_REGEX = /^(([01]\d|2[0-3]):([0-5]\d))(\s*-\s*([01]\d|2[0-3]):([0-5]\d))?$/;
 
 export class MarkAttendanceDto {
   @IsString()
@@ -96,7 +96,7 @@ export class MarkClassAttendanceDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -108,8 +108,16 @@ export class MarkClassAttendanceDto {
   @IsDateString()
   sessionAt?: string;
 
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status: string;
 
   @IsOptional()
@@ -127,7 +135,7 @@ export class BulkClassAttendanceItemDto {
   userId: string;
 
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status: string;
 
   @IsOptional()
@@ -146,7 +154,7 @@ export class BulkClassAttendanceDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -157,6 +165,14 @@ export class BulkClassAttendanceDto {
   @IsOptional()
   @IsDateString()
   sessionAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -185,7 +201,7 @@ export class MarkByBarcodeDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -197,8 +213,16 @@ export class MarkByBarcodeDto {
   @IsDateString()
   sessionAt?: string;
 
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status: string;
 
   @IsOptional()
@@ -221,7 +245,7 @@ export class MarkByInstituteIdDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -233,8 +257,16 @@ export class MarkByInstituteIdDto {
   @IsDateString()
   sessionAt?: string;
 
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status: string;
 
   @IsOptional()
@@ -257,7 +289,7 @@ export class MarkByPhoneDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -269,8 +301,16 @@ export class MarkByPhoneDto {
   @IsDateString()
   sessionAt?: string;
 
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status: string;
 
   @IsOptional()
@@ -285,7 +325,7 @@ export class CloseClassAttendanceSessionDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -296,6 +336,14 @@ export class CloseClassAttendanceSessionDto {
   @IsOptional()
   @IsDateString()
   sessionAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
 }
 
 export class CreateClassAttendanceSessionDto {
@@ -305,7 +353,7 @@ export class CreateClassAttendanceSessionDto {
 
   @IsOptional()
   @IsString()
-  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm format' })
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'sessionTime must be in HH:mm or HH:mm-HH:mm format' })
   sessionTime?: string;
 
   @IsOptional()
@@ -316,6 +364,14 @@ export class CreateClassAttendanceSessionDto {
   @IsOptional()
   @IsDateString()
   sessionAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
 }
 
 export class CreateClassAttendanceWeekDto {

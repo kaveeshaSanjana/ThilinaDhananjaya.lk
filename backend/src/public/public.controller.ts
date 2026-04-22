@@ -134,12 +134,20 @@ class PublicImportAttendanceByBarcodeDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status?: string;
 
   @IsOptional()
   @IsDateString()
   sessionAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkInAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
 
   @IsOptional()
   @IsString()
@@ -157,7 +165,7 @@ class PublicImportAttendanceByInstituteIdDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status?: string;
 
   @IsOptional()
@@ -190,7 +198,16 @@ class PublicBulkImportAttendanceByInstituteIdItemDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  @Matches(ATTENDANCE_TIME_REGEX, { message: 'checkOutTime must be in HH:mm format' })
+  checkOutTime?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'NOTMARKED'])
   status?: string;
 
   @IsOptional()

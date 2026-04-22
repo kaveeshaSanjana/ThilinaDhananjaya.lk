@@ -6,7 +6,10 @@ import api from '../lib/api';
 interface AttendanceRecord {
   id: string;
   date: string;
-  time?: string | null;
+  sessionTime?: string | null;
+  sessionEndTime?: string | null;
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
   status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED';
   method: string | null;
   note: string | null;
@@ -57,9 +60,30 @@ function fmtMonth(iso: string) {
 function fmtTime(timeStr: string) {
   // Accepts HH:MM:SS or HH:MM
   const [h, m] = timeStr.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return '—';
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function fmtDateTime(iso: string | null | undefined) {
+  if (!iso) return '—';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '—';
+  return dt.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getSessionLabel(rec: AttendanceRecord) {
+  const start = rec.sessionTime && rec.sessionTime !== '00:00' ? rec.sessionTime : '';
+  const end = rec.sessionEndTime || '';
+  if (!start) return '—';
+  return end ? `${fmtTime(start)} - ${fmtTime(end)}` : fmtTime(start);
 }
 
 function getMonthKey(iso: string) {
@@ -176,14 +200,18 @@ function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
                   </div>
 
                   {(() => {
-                    const hasTime = group.records.some(r => r.time);
+                    const hasSession = group.records.some(r => Boolean(r.sessionTime && r.sessionTime !== '00:00'));
+                    const hasCheckIn = group.records.some(r => Boolean(r.checkInAt));
+                    const hasCheckOut = group.records.some(r => Boolean(r.checkOutAt));
                     return (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="bg-[hsl(var(--muted)/0.25)]">
                               <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Date</th>
-                              {hasTime && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Time</th>}
+                              {hasSession && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Session</th>}
+                              {hasCheckIn && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Check In</th>}
+                              {hasCheckOut && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Check Out</th>}
                               <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Status</th>
                               <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Method</th>
                               <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Note</th>
@@ -195,9 +223,19 @@ function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
                               return (
                                 <tr key={rec.id} className="hover:bg-[hsl(var(--muted)/0.3)] transition">
                                   <td className="px-5 py-3 text-sm font-medium text-[hsl(var(--foreground))] whitespace-nowrap">{fmtDate(rec.date)}</td>
-                                  {hasTime && (
+                                  {hasSession && (
                                     <td className="px-5 py-3 text-sm font-semibold text-[hsl(var(--foreground))] whitespace-nowrap">
-                                      {rec.time ? fmtTime(rec.time) : '—'}
+                                      {getSessionLabel(rec)}
+                                    </td>
+                                  )}
+                                  {hasCheckIn && (
+                                    <td className="px-5 py-3 text-xs text-[hsl(var(--foreground))] whitespace-nowrap">
+                                      {fmtDateTime(rec.checkInAt)}
+                                    </td>
+                                  )}
+                                  {hasCheckOut && (
+                                    <td className="px-5 py-3 text-xs text-[hsl(var(--foreground))] whitespace-nowrap">
+                                      {fmtDateTime(rec.checkOutAt)}
                                     </td>
                                   )}
                                   <td className="px-5 py-3">

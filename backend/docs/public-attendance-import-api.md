@@ -36,9 +36,11 @@ Content-Type: application/json
 
 ### Optional Fields
 
-- `status`: `PRESENT | ABSENT | LATE | EXCUSED` (default: `PRESENT`)
+- `status`: `PRESENT | ABSENT | LATE | EXCUSED | NOTMARKED` (default: `PRESENT`)
 - `sessionAt`: ISO datetime. If omitted, current server time is used.
 - `note`: string
+
+`NOTMARKED` is accepted and normalized to `ABSENT` when stored.
 
 ---
 
@@ -69,9 +71,11 @@ Content-Type: application/json
 
 ### Optional Fields
 
-- `status`: `PRESENT | ABSENT | LATE | EXCUSED` (default: `PRESENT`)
+- `status`: `PRESENT | ABSENT | LATE | EXCUSED | NOTMARKED` (default: `PRESENT`)
 - `sessionAt`: ISO datetime. If omitted, current server time is used.
 - `note`: string
+
+`NOTMARKED` is accepted and normalized to `ABSENT` when stored.
 
 ---
 
@@ -127,11 +131,59 @@ Content-Type: application/json
 
 ### Optional Per-Record Fields
 
-- `records[].status`: `PRESENT | ABSENT | LATE | EXCUSED` (default: `PRESENT`)
+- `records[].status`: `PRESENT | ABSENT | LATE | EXCUSED | NOTMARKED` (default: `PRESENT`)
 - `records[].date`: `YYYY-MM-DD` (must match the session date)
 - `records[].checkInTime`: `HH:mm`
 - `records[].checkInAt`: ISO datetime
 - `records[].note`: string
+
+`NOTMARKED` is accepted and normalized to `ABSENT` when stored.
+
+---
+
+## 4. Bulk Example (Your Payload Pattern)
+
+```json
+{
+  "sessionId": "your_session_id",
+  "classId": "your_class_id",
+  "records": [
+    {
+      "studentInstituteId": "INS-00123",
+      "date": "2026-04-22",
+      "checkInTime": "10:15",
+      "status": "PRESENT"
+    },
+    {
+      "studentInstituteId": "INS-00123",
+      "date": "2026-04-22",
+      "status": "NOTMARKED"
+    },
+    {
+      "studentInstituteId": "INS-00123",
+      "date": "2026-04-22",
+      "status": "ABSENT"
+    }
+  ]
+}
+```
+
+### How This Is Applied
+
+- Attendance is upserted by unique key: `userId + classId + date + sessionTime`
+- If the same student appears multiple times for the same session in one request, later rows overwrite earlier rows
+- In the example above, the final stored status will be `ABSENT`
+
+---
+
+## 5. Bulk Processing Rules
+
+- `sessionId` must exist
+- `classId` must match that session
+- `records[].date` (if provided) must equal session date
+- Student must exist by `studentInstituteId`
+- Student must be enrolled in the session class
+- Invalid rows are reported in `failed[]`; valid rows continue in the same request
 
 ### Bulk Response (Enhanced Summary)
 
@@ -221,7 +273,7 @@ This response gives exact counts and failed student IDs with reasons.
 - `400` if student is not enrolled in that session's class.
 - `400` if `sessionId` does not belong to `classId` in bulk import.
 - `400` if a bulk record `date` does not match session date.
-- `400` for invalid payload values (invalid status/date format/etc).
+- `400` for invalid payload values (invalid status/date/time format/etc).
 
 ---
 

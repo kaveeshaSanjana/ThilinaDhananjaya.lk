@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
   const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:3001'
 
   return {
+    base: '/',
     plugins: [
       react(),
       babel({ presets: [reactCompilerPreset()] }),
@@ -21,7 +22,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5173,
+      port: 8080,
       strictPort: true,
       proxy: {
         '/api': {

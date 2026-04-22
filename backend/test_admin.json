@@ -1,0 +1,8 @@
+﻿{
+  "email": "admin@test.com",
+  "password": "admin123",
+  "fullName": "Test Admin",
+  "instituteUserId": "ADMIN001",
+  "barcodeId": "ADMIN001",
+  "phone": "0771234567"
+}

@@ -1,0 +1,11 @@
+﻿{
+  "userId": "15e816ff-f01f-47d6-9d66-7031d1304fd5",
+  "classId": "29344d2c-b454-4f2d-90ae-ca1019356da1",
+  "date": "2026-04-22",
+  "sessionTime": "09:00",
+  "checkInAt": "2026-04-22T09:15:00.000Z",
+  "checkOutAt": "2026-04-22T10:25:00.000Z",
+  "status": "PRESENT",
+  "method": "manual",
+  "note": "Student arrived on time and stayed for full session"
+}

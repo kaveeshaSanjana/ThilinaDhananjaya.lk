@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm run dev:app\" \"npm run dev:landing\"",
-    "dev:app": "node ./scripts/free-port.mjs 5173 && vite --port 5173 --strictPort",
-    "dev:landing": "node ./scripts/free-port.mjs 8080 && npm --prefix landing run dev -- --port 8080 --strictPort",
+    "dev": "npm run dev:app",
+    "dev:app": "node ./scripts/free-port.mjs 8080 && vite --port 8080 --strictPort",
+    "dev:landing": "node ./scripts/free-port.mjs 8081 && npm --prefix landing run dev -- --port 8081 --strictPort",
     "build": "npm run build:cloudfront",
     "build:app": "vite build",
     "build:cloudfront": "npm --prefix landing run build:embed && vite build && node ./scripts/merge-landing-dist.mjs",
