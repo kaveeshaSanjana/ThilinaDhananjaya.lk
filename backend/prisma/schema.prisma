@@ -472,7 +472,6 @@ model ClassAttendance {
   classId   String
   date      DateTime            @db.Date    // The date of the class
   sessionTime String            @default("00:00") @db.VarChar(5) // HH:mm
-  sessionEndTime String?        @db.VarChar(5) // Optional HH:mm session end time
   sessionCode String?           @db.VarChar(120)  // Optional custom slot code, e.g. cls002sub1
   sessionAt DateTime?           // Optional exact date-time of the attendance session
   checkInAt DateTime?           // Optional explicit student check-in datetime

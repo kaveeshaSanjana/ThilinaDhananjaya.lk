@@ -7,7 +7,6 @@ interface AttendanceRecord {
   id: string;
   date: string;
   sessionTime?: string | null;
-  sessionEndTime?: string | null;
   checkInAt?: string | null;
   checkOutAt?: string | null;
   status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED';
@@ -81,9 +80,8 @@ function fmtDateTime(iso: string | null | undefined) {
 
 function getSessionLabel(rec: AttendanceRecord) {
   const start = rec.sessionTime && rec.sessionTime !== '00:00' ? rec.sessionTime : '';
-  const end = rec.sessionEndTime || '';
   if (!start) return '—';
-  return end ? `${fmtTime(start)} - ${fmtTime(end)}` : fmtTime(start);
+  return fmtTime(start);
 }
 
 function getMonthKey(iso: string) {
