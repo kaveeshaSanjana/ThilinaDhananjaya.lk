@@ -20,7 +20,7 @@ interface RecentScanItem {
 }
 
 interface ScannerApi {
-  videoRef: RefObject<HTMLVideoElement>;
+  videoRef: RefObject<HTMLVideoElement | null>;
   active: boolean;
   error: string;
   startCamera: () => Promise<void>;
@@ -181,7 +181,7 @@ function useQrScanner(onScan: (raw: string) => void): ScannerApi {
       if (event.key.length === 1) {
         keyBufferRef.current += event.key;
         if (keyTimerRef.current) window.clearTimeout(keyTimerRef.current);
-        keyTimerRef.current = window.setTimeout(() => {
+        keyTimerRef.current = setTimeout(() => {
           keyBufferRef.current = '';
         }, 220);
       }

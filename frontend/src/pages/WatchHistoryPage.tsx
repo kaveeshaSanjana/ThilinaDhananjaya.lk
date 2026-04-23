@@ -94,7 +94,7 @@ export default function WatchHistoryPage() {
 
             {/* Sessions for this date */}
             <div className="divide-y divide-[hsl(var(--border))]">
-              {daySessions.map((s: any) => (
+              {(daySessions as any[]).map((s: any) => (
                 <div key={s.id} className="p-4 sm:p-5 hover:bg-[hsl(var(--muted)/0.3)] transition">
                   <div className="flex items-start gap-4">
                     {/* Thumbnail */}

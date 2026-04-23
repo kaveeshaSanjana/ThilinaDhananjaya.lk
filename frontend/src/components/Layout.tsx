@@ -16,15 +16,15 @@ function NavItem({ to, icon, label, badge, onClick, exact }: { to: string; icon:
     : pathname === to || (to !== '/' && to !== '/admin' && pathname.startsWith(to)) || (to === '/admin' && pathname === '/admin');
   return (
     <Link to={to} onClick={onClick}
-      className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+      className={`group flex items-center gap-3 px-3 py-2.5 rounded-2xl text-[13px] font-semibold transition-all duration-200 border-2 ${
         active
-          ? 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]'
-          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'
+          ? 'bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))] [border-bottom-width:5px] [border-bottom-color:hsl(var(--primary-dark))] shadow-[0_6px_18px_-8px_hsl(var(--primary)/0.45)]'
+          : 'border-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary)/0.08)] hover:text-[hsl(var(--primary))]'
       }`}>
-      <span className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${active ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground)/0.6)] group-hover:text-[hsl(var(--foreground))]'}`}>{icon}</span>
+      <span className={`w-[18px] h-[18px] flex-shrink-0 ${active ? 'text-white' : 'text-[hsl(var(--muted-foreground)/0.7)] group-hover:text-[hsl(var(--primary))]'}`}>{icon}</span>
       <span className="flex-1">{label}</span>
       {badge != null && badge > 0 && (
-        <span className="px-1.5 py-0.5 rounded-md bg-[hsl(var(--danger))] text-[10px] font-bold text-white min-w-[18px] text-center">{badge}</span>
+        <span className="px-1.5 py-0.5 rounded-md bg-[hsl(var(--destructive))] text-[10px] font-bold text-white min-w-[18px] text-center shadow-md">{badge}</span>
       )}
     </Link>
   );
@@ -369,10 +369,11 @@ export default function Layout() {
               <>
                 <NavItem to={getInstitutePath(scopedInstituteId, '/payments/submit')} icon={icons.upload} label="Upload Slip" />
                 <NavItem to={getInstitutePath(scopedInstituteId, '/payments/my')} icon={icons.pay} label="My Payments" />
+                <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/class-payments`)} icon={icons.pay} label="Class Payments" exact />
               </>
             )}
             {user?.role === 'ADMIN' && (
-              <NavItem to={`${getInstituteAdminPath(adminInstituteId, '/slips')}?tab=physical&classId=${monthDetailClassId}&monthId=${monthDetailMonthId}`} icon={icons.slips} label="Class Payments" />
+              <NavItem to={getInstitutePath(scopedInstituteId, `/classes/${monthDetailClassId}/months/${monthDetailMonthId}/class-payments`)} icon={icons.slips} label="Class Payments" exact />
             )}
           </SideSection>
           </>
@@ -395,6 +396,7 @@ export default function Layout() {
                 <SideSection label="Payments">
                   <NavItem to={getInstitutePath(scopedInstituteId, '/payments/submit')} icon={icons.upload} label="Upload Slip" />
                   <NavItem to={getInstitutePath(scopedInstituteId, '/payments/my')} icon={icons.pay} label="My Payments" />
+                  <NavItem to={getInstitutePath(scopedInstituteId, '/class-payments')} icon={icons.pay} label="Class Payments" />
                 </SideSection>
                 <SideSection label="Activity">
                   <NavItem to={getInstitutePath(scopedInstituteId, '/watch-history')} icon={icons.recordings} label="Watch History" />
@@ -450,7 +452,7 @@ export default function Layout() {
           </div>
         </Link>
         <button onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[hsl(var(--border))] text-[13px] font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--danger)/0.08)] hover:text-[hsl(var(--danger))] hover:border-[hsl(var(--danger)/0.2)] transition-all duration-200 bg-[hsl(var(--card))]">
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-[hsl(var(--border))] [border-bottom-width:4px] text-[13px] font-bold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--danger)/0.1)] hover:text-[hsl(var(--danger))] hover:border-[hsl(var(--danger)/0.35)] hover:[border-bottom-color:hsl(var(--danger))] hover:shadow-[0_6px_18px_-8px_hsl(var(--danger)/0.5)] active:translate-y-[1px] active:[border-bottom-width:2px] transition-all duration-200 bg-[hsl(var(--card))]">
           <span className="w-4 h-4 flex-shrink-0">{icons.logout}</span>
           Logout
         </button>
@@ -461,7 +463,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))] transition-colors duration-300">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-[255px] xl:w-[270px] bg-[hsl(var(--card))] flex-shrink-0 shadow-lg border-r border-[hsl(var(--border))]">
+      <aside className="hidden lg:flex flex-col w-[255px] xl:w-[270px] bg-[hsl(var(--card))] flex-shrink-0 border-r border-[hsl(var(--border))]">
         <SidebarContent />
       </aside>
 
@@ -478,34 +480,42 @@ export default function Layout() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="bg-[hsl(var(--card)/0.85)] backdrop-blur-xl min-h-14 flex items-center justify-between px-3 sm:px-6 py-2 flex-shrink-0 shadow-sm z-10 border-b border-[hsl(var(--border))] transition-colors duration-300">
+        <header className="bg-[hsl(var(--card))] min-h-14 flex items-center justify-between px-3 sm:px-6 py-2 flex-shrink-0 z-10 border-b border-[hsl(var(--border))] transition-colors duration-300">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition">
+              className="lg:hidden p-2 -ml-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.08)] rounded-xl transition-all duration-200">
               <span className="w-5 h-5 block">{icons.menu}</span>
             </button>
             <button onClick={() => navigate(-1)}
-              className="p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition"
+              className="p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.08)] rounded-xl transition-all duration-200"
               aria-label="Go back" title="Go back">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <div className="hidden sm:block min-w-0">
-              <p className="text-[13px] font-semibold text-[hsl(var(--foreground))]">{greeting}, {user.profile?.fullName?.split(' ')[0] || 'User'}!</p>
-              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">{time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+            <div className="hidden sm:flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-[hsl(var(--primary)/0.1)] flex items-center justify-center ring-1 ring-[hsl(var(--primary)/0.2)]">
+                <span className="text-base">{hour < 12 ? '☀️' : hour < 17 ? '🌤️' : '🌙'}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-[hsl(var(--foreground))] leading-tight">
+                  {greeting}, <span className="text-[hsl(var(--primary))]">{user.profile?.fullName?.split(' ')[0] || 'User'}</span>!
+                </p>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] font-medium">{time.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button className="relative p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] rounded-xl transition lg:hidden">
+            <button className="relative p-2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.08)] rounded-xl transition lg:hidden">
               <span className="w-5 h-5 block">{icons.bell}</span>
             </button>
             <Link to={user.role === 'ADMIN' ? adminBasePath : getInstitutePath(scopedInstituteId, '/dashboard')}
-              className="w-8 h-8 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow hover:ring-[hsl(var(--primary)/0.3)] transition-all cursor-pointer overflow-hidden">
+              className="relative w-9 h-9 rounded-full bg-[hsl(var(--primary))] flex items-center justify-center ring-2 ring-[hsl(var(--card))] shadow-[0_4px_14px_-2px_hsl(var(--primary)/0.4)] hover:shadow-[0_6px_20px_-2px_hsl(var(--primary)/0.5)] transition-all duration-200 cursor-pointer overflow-hidden">
               {userAvatarUrl ? (
                 <img src={userAvatarUrl} alt={user.profile?.fullName || user.email} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-white text-xs font-bold">{initials}</span>
               )}
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[hsl(var(--success))] ring-2 ring-[hsl(var(--card))]" />
             </Link>
           </div>
         </header>

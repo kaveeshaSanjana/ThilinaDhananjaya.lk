@@ -1,62 +1,372 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap');
 @import "tailwindcss";
 
+/* ============================================================
+   TACTILE BLOCK INTERFACE — vibrant primary palette,
+   thick-bottom-border surfaces, hover-lift. Applied across
+   every authenticated page via shared tokens & ui primitives.
+   ============================================================ */
+
 :root {
-  --primary: 221 83% 53%;
+  --primary: 222 100% 50%;
   --primary-foreground: 0 0% 100%;
-  --primary-glow: 217 91% 62%;
-  --secondary: 210 60% 95%;
-  --secondary-foreground: 213 80% 40%;
-  --accent: 160 72% 38%;
-  --accent-foreground: 0 0% 100%;
-  --background: 210 40% 98%;
+  --primary-glow: 217 100% 62%;
+  --primary-dark: 222 100% 30%;
+
+  --secondary: 222 30% 96%;
+  --secondary-foreground: 222 47% 11%;
+
+  --accent: 47 100% 50%;
+  --accent-foreground: 222 47% 11%;
+  --accent-dark: 47 100% 40%;
+
+  --success: 158 100% 41%;
+  --success-foreground: 0 0% 100%;
+  --success-dark: 158 100% 30%;
+
+  --destructive: 348 100% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-dark: 348 100% 40%;
+
+  --warning: 38 100% 50%;
+  --danger: 348 100% 60%;
+
+  --background: 220 25% 97%;
   --foreground: 222 47% 11%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214 32% 91%;
-  --ring: 221 83% 53%;
-  --success: 142 71% 45%;
-  --warning: 38 92% 50%;
-  --danger: 0 84% 60%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --muted: 222 14% 95%;
+  --muted-foreground: 215 16% 42%;
+
+  --border: 220 13% 88%;
+  --border-strong: 220 9% 75%;
+  --input: 220 13% 88%;
+  --ring: 222 100% 50%;
+
+  --radius: 1rem;
+
   --hero-gradient: linear-gradient(135deg, hsl(210 60% 98%) 0%, hsl(213 80% 94%) 40%, hsl(200 70% 90%) 100%);
   --hero-gradient-end: hsl(200 70% 90%);
-  --font-heading: 'Playfair Display', serif;
-  --font-body: 'Poppins', sans-serif;
+  --font-heading: 'Lexend', sans-serif;
+  --font-body: 'Lexend', sans-serif;
 }
 
 .dark {
-  --primary: 217 91% 62%;
+  --primary: 222 100% 62%;
   --primary-foreground: 0 0% 100%;
-  --primary-glow: 214 100% 70%;
-  --secondary: 217 33% 17%;
+  --primary-glow: 217 100% 70%;
+  --primary-dark: 222 100% 35%;
+  --secondary: 222 33% 18%;
   --secondary-foreground: 210 40% 98%;
-  --accent: 160 72% 45%;
-  --accent-foreground: 0 0% 100%;
-  --background: 222 47% 6%;
+  --accent: 47 100% 55%;
+  --accent-foreground: 222 47% 11%;
+  --accent-dark: 47 100% 40%;
+  --success: 158 80% 50%;
+  --success-foreground: 0 0% 100%;
+  --success-dark: 158 80% 30%;
+  --destructive: 348 100% 65%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-dark: 348 100% 40%;
+  --background: 222 30% 7%;
   --foreground: 210 40% 96%;
-  --card: 222 47% 10%;
+  --card: 222 30% 11%;
   --card-foreground: 210 40% 96%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 60%;
-  --destructive: 0 84% 65%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 33% 20%;
-  --ring: 217 91% 62%;
-  --success: 142 71% 50%;
-  --warning: 38 92% 55%;
-  --danger: 0 84% 65%;
+  --popover: 222 30% 11%;
+  --popover-foreground: 210 40% 96%;
+  --muted: 222 25% 16%;
+  --muted-foreground: 215 20% 65%;
+  --border: 222 25% 22%;
+  --border-strong: 222 25% 30%;
+  --input: 222 25% 22%;
+  --ring: 222 100% 62%;
+  --warning: 38 100% 55%;
+  --danger: 348 100% 65%;
 }
 
 * {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Lexend', sans-serif;
+  letter-spacing: -0.015em;
+  font-weight: 700;
+}
+
+/* Tactile primitive helpers — balanced tactile (softer, airier) */
+.tactile-surface {
+  background: hsl(var(--card));
+  border: 1.5px solid hsl(var(--border));
+  border-bottom-width: 5px;
+  border-radius: 1.25rem;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+}
+.tactile-surface:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -16px hsl(var(--primary) / 0.18); }
+.tactile-surface-flat { background: hsl(var(--card)); border: 1.5px solid hsl(var(--border)); border-radius: 1.25rem; }
+.tactile-btn { border-bottom-width: 4px; transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1); }
+.tactile-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+.tactile-icon-tile { display: inline-flex; align-items: center; justify-content: center; border-radius: 1rem; font-weight: 700; color: white; box-shadow: 0 4px 0 0 hsl(var(--primary-dark)); }
+
+/* ============================================================
+   GLOBAL PAGE MODERNIZATION — applies balanced tactile look to
+   every authenticated page without rewriting each file.
+   Targets common patterns used across student & admin pages.
+   ============================================================ */
+
+/* Modernize raw white card containers used across pages */
+main .bg-white,
+main .bg-\[hsl\(var\(--card\)\)\] {
+  border-radius: 1.25rem !important;
+}
+
+/* Lift any rounded card-like container on hover for tactility */
+main [class*="rounded-2xl"].border,
+main [class*="rounded-xl"].border,
+main [class*="rounded-3xl"].border {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+}
+main [class*="rounded-2xl"].border:hover,
+main [class*="rounded-3xl"].border:hover {
+  box-shadow: 0 16px 40px -20px hsl(var(--primary) / 0.22), 0 2px 8px -4px hsl(var(--foreground) / 0.06);
+}
+
+/* Buttons inside pages: tactile press feel even for raw <button> elements */
+main button:not([class*="rounded-full"]):not(.no-tactile):not([class*="bg-transparent"]) {
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+main button:not([class*="rounded-full"]):not(.no-tactile):active {
+  transform: translateY(1px);
+}
+
+/* Headings inside main get refined Lexend with tighter tracking */
+main h1 {
+  font-size: clamp(1.6rem, 2.4vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: hsl(var(--foreground));
+}
+main h2 { font-weight: 700; letter-spacing: -0.018em; }
+main h3 { font-weight: 700; letter-spacing: -0.015em; }
+
+/* Modern page section header utility */
+.page-header-bar {
+  position: relative;
+  padding-left: 0.9rem;
+}
+.page-header-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 4px;
+  border-radius: 999px;
+  background: hsl(var(--primary));
+}
+
+/* Tables: modernize default appearance */
+main table {
+  border-radius: 1rem;
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+main thead th {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsl(var(--muted-foreground));
+  background: linear-gradient(180deg, hsl(var(--muted) / 0.85), hsl(var(--muted) / 0.55));
+  padding-top: 0.95rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 1.5px solid hsl(var(--border));
+}
+main thead th:first-child { border-top-left-radius: 1rem; }
+main thead th:last-child { border-top-right-radius: 1rem; }
+main tbody tr {
+  transition: background-color 0.18s ease, box-shadow 0.2s ease;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+main tbody tr:last-child { border-bottom: none; }
+main tbody tr:hover {
+  background: hsl(var(--primary) / 0.05);
+  box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
+main tbody td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+}
+
+/* Inputs/selects globally — chunkier tactile feel */
+main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+main select,
+main textarea {
+  border-radius: 0.85rem !important;
+  border-width: 1.5px !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+main input:focus:not([type="checkbox"]):not([type="radio"]),
+main select:focus,
+main textarea:focus {
+  border-color: hsl(var(--primary)) !important;
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.12) !important;
+  outline: none !important;
+}
+
+/* Modernize page-level "section" wrappers */
+main .bg-white.rounded-xl,
+main .bg-white.rounded-2xl,
+main .bg-white.rounded-3xl {
+  border: 1.5px solid hsl(var(--border)) !important;
+  border-bottom-width: 4px !important;
+  border-radius: 1.25rem !important;
+}
+
+/* ============================================================
+   GLOBAL BUTTON MODERNIZATION — eye-catching tactile lift,
+   single primary color theme.
+   ============================================================ */
+
+/* Primary action buttons (raw <button> with primary bg) */
+main button.bg-primary,
+main button[class*="bg-[hsl(var(--primary))]"],
+main a[class*="bg-primary"]:not([class*="bg-primary/"]) {
+  border-radius: 0.85rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  border: 1.5px solid hsl(var(--primary)) !important;
+  border-bottom-width: 4px !important;
+  border-bottom-color: hsl(var(--primary-dark)) !important;
+  box-shadow: 0 6px 18px -8px hsl(var(--primary) / 0.5);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, filter 0.2s ease !important;
+}
+main button.bg-primary:hover,
+main button[class*="bg-[hsl(var(--primary))]"]:hover,
+main a[class*="bg-primary"]:not([class*="bg-primary/"]):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 10px 26px -10px hsl(var(--primary) / 0.65);
+}
+main button.bg-primary:active,
+main button[class*="bg-[hsl(var(--primary))]"]:active {
+  transform: translateY(1px) !important;
+  border-bottom-width: 2px !important;
+}
+
+/* All raw page buttons get a subtle lift on hover */
+main button:not([class*="rounded-full"]):not(.no-tactile):not([class*="bg-transparent"]):not([disabled]):hover {
+  transform: translateY(-1px);
+}
+
+/* Outline / secondary buttons */
+main button[class*="border"]:not([class*="bg-primary"]):not([class*="bg-[hsl(var(--primary))]"]):not([class*="rounded-full"]):not(.no-tactile) {
+  border-bottom-width: 4px !important;
+  border-radius: 0.85rem !important;
+}
+main button[class*="border"]:not([class*="bg-primary"]):not([class*="bg-[hsl(var(--primary))]"]):not([class*="rounded-full"]):not(.no-tactile):hover {
+  border-color: hsl(var(--primary) / 0.5) !important;
+  border-bottom-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary)) !important;
+  box-shadow: 0 8px 20px -10px hsl(var(--primary) / 0.35);
+}
+
+/* Icon-only round buttons keep a softer treatment */
+main button[class*="rounded-full"]:not(.no-tactile):hover {
+  transform: scale(1.06);
+}
+
+/* ============================================================
+   GLOBAL TABLE DETAILS — modern badges, status pills, chips
+   ============================================================ */
+
+/* Subtle zebra striping inside main tables */
+main tbody tr:nth-child(even):not(:hover) {
+  background: hsl(var(--muted) / 0.25);
+}
+
+/* First/last column padding for breathable look */
+main table th:first-child,
+main table td:first-child { padding-left: 1.1rem; }
+main table th:last-child,
+main table td:last-child { padding-right: 1.1rem; }
+
+/* Generic small "pill" / "tag" / "chip" badges inside tables and lists */
+main span[class*="rounded-full"][class*="text-xs"],
+main span[class*="rounded-full"][class*="text-[11px]"],
+main span[class*="rounded-full"][class*="text-[10px]"],
+main span[class*="rounded-md"][class*="text-xs"] {
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+  padding: 0.25rem 0.65rem !important;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+main span[class*="rounded-full"][class*="text-xs"]:hover,
+main span[class*="rounded-md"][class*="text-xs"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -4px hsl(var(--foreground) / 0.15);
+}
+
+/* Action icon buttons inside tables (edit / delete / view) */
+main td button:not([class*="rounded-full"]),
+main td a[class*="inline-flex"] {
+  border-radius: 0.6rem !important;
+}
+main td button[class*="text-red"]:hover,
+main td button[class*="bg-red"]:hover {
+  color: hsl(var(--destructive)) !important;
+  background: hsl(var(--destructive) / 0.08) !important;
+}
+
+/* Table card wrapper — rounded outer container */
+main .overflow-x-auto,
+main .overflow-auto {
+  border-radius: 1rem;
+}
+
+/* Detail-row "key: value" pairs (common pattern: dt/dd or label spans) */
+main dl > div,
+main .detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.75rem;
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border) / 0.6);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+main dl > div:hover,
+main .detail-row:hover {
+  background: hsl(var(--primary) / 0.05);
+  border-color: hsl(var(--primary) / 0.25);
+}
+main dl > div + div,
+main .detail-row + .detail-row {
+  margin-top: 0.4rem;
+}
+main dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+main dd {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  text-align: right;
 }
 
 .landing-shell {
@@ -239,7 +549,7 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Site-wide atmosphere layer */
+/* Site-wide atmosphere layer — subtle single-tone */
 body::before {
   content: "";
   position: fixed;
@@ -247,9 +557,8 @@ body::before {
   pointer-events: none;
   z-index: -1;
   background:
-    radial-gradient(1100px 520px at 12% -8%, hsl(var(--primary) / 0.08), transparent 60%),
-    radial-gradient(900px 460px at 92% 8%, hsl(var(--accent) / 0.1), transparent 58%),
-    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 100%);
+    radial-gradient(900px 480px at 10% -10%, hsl(var(--primary) / 0.06), transparent 60%),
+    radial-gradient(700px 400px at 95% 100%, hsl(var(--primary) / 0.05), transparent 60%);
 }
 
 /* Legacy utility remap: gives old pages a modern tokenized look without touching every file */

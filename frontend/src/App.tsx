@@ -13,6 +13,7 @@ import ClassDetailPage from './pages/ClassDetailPage';
 import RecordingPlayerPage from './pages/RecordingPlayerPage';
 import PaymentSubmitPage from './pages/PaymentSubmitPage';
 import MyPaymentsPage from './pages/MyPaymentsPage';
+import ClassMonthPaymentsPage from './pages/ClassMonthPaymentsPage';
 import WatchHistoryPage from './pages/WatchHistoryPage';
 import LiveJoinPage from './pages/LiveJoinPage';
 import LectureLiveJoinPage from './pages/LectureLiveJoinPage';
@@ -176,6 +177,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/live-lessons" element={<ProtectedRoute><ClassMonthLiveLessonsPage /></ProtectedRoute>} />
         <Route path="classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
         <Route path="institute/:instituteId/classes/:classId/months/:monthId/media" element={<ClassMonthMediaPage />} />
+        <Route path="classes/:classId/months/:monthId/class-payments" element={<ProtectedRoute><ClassMonthPaymentsPage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/classes/:classId/months/:monthId/class-payments" element={<ProtectedRoute><ClassMonthPaymentsPage /></ProtectedRoute>} />
         <Route path="classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
         <Route path="institute/:instituteId/classes/:classId/physical-attendance" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
         <Route path="classes/:classId/physical-attendance/qr" element={<ProtectedRoute role="ADMIN"><MarkAttendanceExternalOnlyRedirect /></ProtectedRoute>} />
@@ -186,6 +189,8 @@ function AppRoutes() {
         <Route path="institute/:instituteId/payments/submit" element={<ProtectedRoute><PaymentSubmitPage /></ProtectedRoute>} />
         <Route path="payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/payments/my" element={<ProtectedRoute><MyPaymentsPage /></ProtectedRoute>} />
+        <Route path="class-payments" element={<ProtectedRoute><ClassMonthPaymentsPage /></ProtectedRoute>} />
+        <Route path="institute/:instituteId/class-payments" element={<ProtectedRoute><ClassMonthPaymentsPage /></ProtectedRoute>} />
         <Route path="watch-history" element={<ProtectedRoute><WatchHistoryPage /></ProtectedRoute>} />
         <Route path="institute/:instituteId/watch-history" element={<ProtectedRoute><WatchHistoryPage /></ProtectedRoute>} />
         <Route path="my-class-attendance" element={<ProtectedRoute role="STUDENT"><MyClassAttendancePage /></ProtectedRoute>} />

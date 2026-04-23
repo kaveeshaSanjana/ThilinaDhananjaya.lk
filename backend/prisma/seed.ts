@@ -112,7 +112,7 @@ async function main() {
     { email: 'hasitha@gmail.com',  iid: 'TD-2026-S006', name: 'Hasitha Bandara',       phone: '0789988776', school: 'Dharmaraja College', gender: 'MALE',   status: 'ACTIVE'   },
   ];
 
-  const extraUsers: { id: string; email: string }[] = [];
+  const extraUsers: { id: string; email: string | null }[] = [];
   for (const s of extraStudentsData) {
     const u = await prisma.user.create({
       data: {
@@ -137,7 +137,7 @@ async function main() {
   console.log(`Additional students created: ${extraUsers.length}`);
 
   // Convenience array: [primaryStudent, ...extraUsers]
-  const allStudents: { id: string; email: string }[] = [primaryStudent, ...extraUsers];
+  const allStudents: { id: string; email: string | null }[] = [primaryStudent, ...extraUsers];
 
   // â”€â”€â”€ Classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const mathClass = await prisma.class.create({
@@ -478,7 +478,7 @@ async function main() {
 
   // â”€â”€â”€ Payment Slips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // April payments: primaryStudent=VERIFIED, kavindu=VERIFIED, nethmi=PENDING, dilshan=REJECTED, sanduni=none, hasitha=PENDING
-  const aprPayments: { student: { id: string; email: string }; status: 'VERIFIED' | 'PENDING' | 'REJECTED'; paidDate?: Date }[] = [
+  const aprPayments: { student: { id: string; email: string | null }; status: 'VERIFIED' | 'PENDING' | 'REJECTED'; paidDate?: Date }[] = [
     { student: allStudents[0], status: 'VERIFIED', paidDate: ago(60 * 24 * 5) },  // student@td.lk
     { student: allStudents[1], status: 'VERIFIED', paidDate: ago(60 * 24 * 4) },  // kavindu
     { student: allStudents[2], status: 'PENDING' },                                // nethmi
