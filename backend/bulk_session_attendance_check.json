@@ -1,0 +1,123 @@
+{
+  "_comment": "Public API: Bulk Session Attendance Check",
+  "endpoint": "POST /api/public/attendance/session/bulk-check",
+  "description": "Record multiple students' attendance for a session with time validation. All students must be enrolled in the class.",
+  "example_request": {
+    "sessionId": "cls_session_uuid_or_SES-20260422-1000",
+    "classId": "class_uuid",
+    "records": [
+      {
+        "studentInstituteId": "TD-2026-00045",
+        "checkInAt": "2026-04-22T10:12:00.000Z",
+        "checkOutAt": "2026-04-22T11:00:00.000Z",
+        "note": "Present"
+      },
+      {
+        "studentInstituteId": "TD-2026-00046",
+        "checkInAt": "2026-04-22T10:30:00.000Z",
+        "checkOutAt": "2026-04-22T11:15:00.000Z",
+        "note": "Arrived late"
+      },
+      {
+        "studentInstituteId": "TD-2026-00047",
+        "checkInAt": "2026-04-22T09:50:00.000Z",
+        "note": "Arrived early, left before checkout"
+      }
+    ]
+  },
+  "response_example": {
+    "message": "Bulk session attendance recorded successfully",
+    "session": {
+      "id": "cls_session_uuid",
+      "classId": "class_uuid",
+      "className": "Grade 10 Maths",
+      "date": "2026-04-22",
+      "sessionTime": "10:00",
+      "sessionEndTime": "11:00",
+      "sessionCode": "MORNING_BATCH",
+      "sessionAt": "2026-04-22T10:00:00.000Z"
+    },
+    "summary": {
+      "totalRecords": 3,
+      "successCount": 3,
+      "failedCount": 0
+    },
+    "successful": [
+      {
+        "index": 1,
+        "studentInstituteId": "TD-2026-00045",
+        "userId": "user_uuid_1",
+        "attendanceId": "attendance_uuid_1",
+        "status": "PRESENT",
+        "timeValidation": {
+          "isOnTime": true,
+          "isEarlyCheckIn": false,
+          "isLateCheckIn": false,
+          "warning": null
+        }
+      },
+      {
+        "index": 2,
+        "studentInstituteId": "TD-2026-00046",
+        "userId": "user_uuid_2",
+        "attendanceId": "attendance_uuid_2",
+        "status": "PRESENT",
+        "timeValidation": {
+          "isOnTime": true,
+          "isEarlyCheckIn": false,
+          "isLateCheckIn": false,
+          "warning": null
+        }
+      },
+      {
+        "index": 3,
+        "studentInstituteId": "TD-2026-00047",
+        "userId": "user_uuid_3",
+        "attendanceId": "attendance_uuid_3",
+        "status": "PRESENT",
+        "timeValidation": {
+          "isOnTime": false,
+          "isEarlyCheckIn": true,
+          "isLateCheckIn": false,
+          "warning": "Checked in 10 minutes early"
+        }
+      }
+    ],
+    "failed": []
+  },
+  "features": {
+    "time_validation": "Automatically validates each student's check-in/check-out against session time window",
+    "session_lookup": "Looks up session by sessionId (UUID or readable format SES-YYYYMMDD-HHMM)",
+    "enrollment_check": "Verifies all students are enrolled in the class",
+    "bulk_processing": "Continues processing even if individual records fail",
+    "warning_messages": "Generates warnings for early/late arrivals with time differences",
+    "partial_success": "Returns successful and failed records separately"
+  },
+  "error_examples": [
+    {
+      "index": 1,
+      "studentInstituteId": "TD-2026-99999",
+      "reason": "No student found for institute ID: TD-2026-99999"
+    },
+    {
+      "index": 2,
+      "studentInstituteId": "TD-2026-00046",
+      "reason": "Student is not enrolled in this class"
+    },
+    {
+      "index": 3,
+      "studentInstituteId": "TD-2026-00047",
+      "reason": "checkOutAt must be later than or equal to checkInAt"
+    }
+  ],
+  "session_id_formats": {
+    "uuid": "Direct UUID of the session: a123b456-c789-d000-e111-f222g333h444",
+    "readable": "Readable format SES-YYYYMMDD-HHMM: SES-20260422-1000",
+    "readable_with_code": "With session code: SES-20260422-1000-MORNING_BATCH"
+  },
+  "time_formats": {
+    "checkInAt": "ISO 8601 datetime in UTC: 2026-04-22T10:12:00.000Z",
+    "checkOutAt": "ISO 8601 datetime in UTC (optional): 2026-04-22T11:00:00.000Z",
+    "note": "Optional text field for additional notes"
+  }
+}

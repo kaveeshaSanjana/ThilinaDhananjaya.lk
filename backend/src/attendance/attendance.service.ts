@@ -624,10 +624,25 @@ export class AttendanceService {
       where: { recording: { month: { classId } } },
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
-        recording: { select: { title: true, month: { select: { name: true } } } },
+        recording: { select: { id: true, title: true, duration: true, isLive: true, month: { select: { name: true } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 500,
+    });
+  }
+
+  async getLiveSessionsByClass(classId: string) {
+    return this.prisma.attendance.findMany({
+      where: { recording: { month: { classId } }, eventName: 'LIVE_JOIN' },
+      select: {
+        userId: true,
+        liveJoinedAt: true,
+        createdAt: true,
+        recording: {
+          select: { id: true, title: true, duration: true, isLive: true, liveStartedAt: true, month: { select: { name: true } } },
+        },
+      },
+      orderBy: { liveJoinedAt: 'desc' },
     });
   }
 
@@ -740,10 +755,18 @@ export class AttendanceService {
     throw new BadRequestException('status must be PRESENT, ABSENT, LATE, EXCUSED, or NOTMARKED');
   }
 
+  // Treat datetime strings without a timezone offset as Sri Lanka local time (UTC+5:30).
+  // Devices and manual inputs submit naive strings like "2026-04-23T02:00:00"; without this
+  // Node.js interprets them as UTC, causing a +5:30 shift on the frontend display.
+  private parseSriLankaDateTime(str: string): Date {
+    const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(str.trim());
+    return new Date(hasOffset ? str : `${str}+05:30`);
+  }
+
   private resolveSessionAt(date: string, sessionTime: string, sessionAt?: string): Date | null {
     const raw = (sessionAt || '').trim();
     if (raw) {
-      const parsed = new Date(raw);
+      const parsed = this.parseSriLankaDateTime(raw);
       if (Number.isNaN(parsed.getTime())) {
         throw new BadRequestException('Invalid sessionAt');
       }
@@ -751,7 +774,7 @@ export class AttendanceService {
     }
 
     if (sessionTime === '00:00') return null;
-    const parsed = new Date(`${date}T${sessionTime}:00`);
+    const parsed = new Date(`${date}T${sessionTime}:00+05:30`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
@@ -779,7 +802,7 @@ export class AttendanceService {
       }
       checkOutAt = parsed;
     } else if (sessionEndTime) {
-      const parsed = new Date(`${data.date}T${sessionEndTime}:00`);
+      const parsed = new Date(`${data.date}T${sessionEndTime}:00+05:30`);
       if (!Number.isNaN(parsed.getTime())) {
         checkOutAt = parsed;
       }
@@ -885,7 +908,7 @@ export class AttendanceService {
     },
   ) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const { sessionTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
+    const { sessionTime, sessionEndTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
     const normalizedStatus = this.normalizeClassAttendanceStatus(data.status);
 
     return this.prisma.classAttendance.upsert({
@@ -902,6 +925,7 @@ export class AttendanceService {
         method: data.method || undefined,
         note: data.note || undefined,
         markedBy: data.markedBy || undefined,
+        sessionEndTime: sessionEndTime || undefined,
         sessionCode: sessionCode || undefined,
         sessionAt: sessionAt || undefined,
         checkInAt: checkInAt || undefined,
@@ -912,6 +936,7 @@ export class AttendanceService {
         classId: data.classId,
         date: dateObj,
         sessionTime,
+        sessionEndTime,
         sessionCode,
         sessionAt,
         checkInAt,
@@ -1247,8 +1272,7 @@ export class AttendanceService {
           if (rowCheckInTime === '00:00') {
             rowSessionAtIso = new Date().toISOString();
           } else {
-            // Store checkInTime as-is without timezone conversion
-            const parsed = new Date(`${rowDate}T${rowCheckInTime}:00`);
+            const parsed = new Date(`${rowDate}T${rowCheckInTime}:00+05:30`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkInTime');
             }
@@ -1270,8 +1294,7 @@ export class AttendanceService {
             : (session.sessionEndTime || null);
 
           if (normalizedRowCheckOutTime) {
-            // Store checkOutTime as-is without timezone conversion
-            const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00`);
+            const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00+05:30`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkOutTime');
             }
@@ -1479,6 +1502,7 @@ export class AttendanceService {
             method: data.method || undefined,
             note: rec.note || undefined,
             markedBy: data.markedBy || undefined,
+            sessionEndTime: sessionEndTime || undefined,
             sessionCode: sessionCode || undefined,
             sessionAt: sessionAt || undefined,
             checkInAt: checkInAt || undefined,
@@ -1489,6 +1513,7 @@ export class AttendanceService {
             classId: data.classId,
             date: dateObj,
             sessionTime,
+            sessionEndTime,
             sessionCode,
             sessionAt,
             checkInAt,
@@ -2101,6 +2126,85 @@ export class AttendanceService {
   }
 
   /**
+   * Update session name (sessionCode), start time, and/or end time for a session.
+   * If sessionTime changes, all related ClassAttendance records are updated too.
+   */
+  async updateClassAttendanceSessionMeta(
+    classId: string,
+    sessionKey: string,
+    data: { sessionCode?: string; sessionTime?: string; sessionEndTime?: string },
+  ) {
+    const parsed = this.parseClassAttendanceSessionKey(sessionKey);
+
+    const existingSession = await this.prisma.classAttendanceSession.findUnique({
+      where: {
+        classId_date_sessionTime: {
+          classId,
+          date: parsed.dateObj,
+          sessionTime: parsed.sessionTime,
+        },
+      },
+      select: {
+        id: true, date: true, sessionTime: true, sessionEndTime: true,
+        sessionCode: true, sessionAt: true, weekId: true, week: { select: { name: true } },
+      },
+    });
+
+    if (!existingSession) {
+      throw new NotFoundException('Session not found');
+    }
+
+    const newSessionTime = data.sessionTime
+      ? this.normalizeSessionTime(data.sessionTime)
+      : existingSession.sessionTime;
+    const newSessionEndTime = data.sessionEndTime !== undefined
+      ? (this.normalizeSingleTime(data.sessionEndTime) || null)
+      : (this.normalizeSingleTime(existingSession.sessionEndTime || undefined) || null);
+    const newSessionCode = data.sessionCode !== undefined
+      ? (data.sessionCode.trim() || null)
+      : ((existingSession.sessionCode || '').trim() || null);
+
+    if (newSessionTime !== existingSession.sessionTime) {
+      // Cascade time change to all attendance records
+      await this.prisma.classAttendance.updateMany({
+        where: { classId, date: parsed.dateObj, sessionTime: existingSession.sessionTime },
+        data: { sessionTime: newSessionTime },
+      });
+    }
+
+    const updated = await this.prisma.classAttendanceSession.update({
+      where: { id: existingSession.id },
+      data: {
+        sessionTime: newSessionTime,
+        sessionEndTime: newSessionEndTime,
+        sessionCode: newSessionCode,
+      },
+      select: {
+        id: true, date: true, sessionTime: true, sessionEndTime: true,
+        sessionCode: true, sessionAt: true, weekId: true, week: { select: { name: true } },
+      },
+    });
+
+    const date = updated.date.toISOString().split('T')[0];
+    const recordsCount = await this.prisma.classAttendance.count({
+      where: { classId, date: updated.date, sessionTime: updated.sessionTime },
+    });
+
+    return this.buildClassAttendanceSessionRow({
+      sessionId: updated.id,
+      date,
+      sessionTime: updated.sessionTime,
+      sessionEndTime: this.normalizeSingleTime(updated.sessionEndTime || undefined) || null,
+      sessionCode: (updated.sessionCode || '').trim() || null,
+      sessionAt: updated.sessionAt ? updated.sessionAt.toISOString() : null,
+      recordsCount,
+      source: recordsCount > 0 ? 'BOTH' : 'CREATED',
+      weekId: updated.weekId || null,
+      weekName: updated.week?.name || null,
+    });
+  }
+
+  /**
    * Create a persisted attendance week and optionally link selected class sessions to it.
    */
   async createClassAttendanceWeek(
@@ -2641,6 +2745,36 @@ export class AttendanceService {
       orderBy: { date: 'desc' },
     });
 
+    // Batch-load week names from ClassAttendanceSession for all unique (classId,date,sessionTime) combos
+    const sessionKeys = new Map<string, { classId: string; date: Date; sessionTime: string }>();
+    for (const rec of records) {
+      const key = `${rec.classId}|${rec.date.toISOString().split('T')[0]}|${rec.sessionTime}`;
+      if (!sessionKeys.has(key)) {
+        sessionKeys.set(key, { classId: rec.classId, date: rec.date, sessionTime: rec.sessionTime });
+      }
+    }
+
+    const weekNameMap = new Map<string, string | null>();
+    if (sessionKeys.size > 0) {
+      const sessions = await this.prisma.classAttendanceSession.findMany({
+        where: {
+          OR: Array.from(sessionKeys.values()).map((s) => ({
+            classId: s.classId,
+            date: s.date,
+            sessionTime: s.sessionTime,
+          })),
+        },
+        select: {
+          classId: true, date: true, sessionTime: true,
+          week: { select: { name: true } },
+        },
+      });
+      for (const s of sessions) {
+        const key = `${s.classId}|${s.date.toISOString().split('T')[0]}|${s.sessionTime}`;
+        weekNameMap.set(key, s.week?.name || null);
+      }
+    }
+
     // Group records by class
     const classMap = new Map<string, { class: { id: string; name: string; subject: string | null }; records: any[]; summary: any }>();
 
@@ -2649,6 +2783,7 @@ export class AttendanceService {
       if (!classMap.has(cid)) {
         classMap.set(cid, { class: rec.class, records: [], summary: { total: 0, present: 0, late: 0, absent: 0, excused: 0 } });
       }
+      const weekKey = `${rec.classId}|${rec.date.toISOString().split('T')[0]}|${rec.sessionTime}`;
       const entry = classMap.get(cid)!;
       entry.records.push({
         id: rec.id,
@@ -2661,6 +2796,7 @@ export class AttendanceService {
         status: rec.status,
         method: rec.method,
         note: rec.note,
+        weekName: weekNameMap.get(weekKey) || null,
       });
       entry.summary.total++;
       if (rec.status === 'PRESENT') entry.summary.present++;
@@ -3034,5 +3170,338 @@ export class AttendanceService {
     });
 
     return { months, students: studentPayments };
+  }
+
+  /**
+   * Record session attendance with time validation.
+   * Checks if student check-in/check-out times are within the session time window.
+   */
+  async recordSessionAttendanceWithTimeCheck(data: {
+    sessionId: string;
+    classId?: string;
+    instituteId: string;
+    checkInAt: string;
+    checkOutAt?: string;
+    note?: string;
+  }) {
+    // Get session details
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId, data.classId);
+
+    // Get student by instituteId
+    const profile = await this.prisma.profile.findUnique({
+      where: { instituteId: data.instituteId },
+      select: {
+        userId: true,
+        fullName: true,
+        instituteId: true,
+        barcodeId: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException(`No student found for institute ID: ${data.instituteId}`);
+    }
+
+    // Verify student is enrolled
+    await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+    // Parse check-in and check-out times (treat naive strings as Sri Lanka local time)
+    const checkInDate = this.parseSriLankaDateTime(data.checkInAt);
+    if (Number.isNaN(checkInDate.getTime())) {
+      throw new BadRequestException('Invalid checkInAt datetime');
+    }
+
+    let checkOutDate: Date | null = null;
+    if (data.checkOutAt) {
+      checkOutDate = this.parseSriLankaDateTime(data.checkOutAt);
+      if (Number.isNaN(checkOutDate.getTime())) {
+        throw new BadRequestException('Invalid checkOutAt datetime');
+      }
+    }
+
+    // Validate time order
+    if (checkOutDate && checkOutDate.getTime() < checkInDate.getTime()) {
+      throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+    }
+
+    // Validate against session time window
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00+05:30`);
+    const sessionEndTime = session.sessionEndTime
+      ? new Date(`${session.date}T${session.sessionEndTime}:00+05:30`)
+      : null;
+
+    const timeCheckResult = this.validateTimeAgainstSession({
+      checkInAt: checkInDate,
+      checkOutAt: checkOutDate,
+      sessionStartTime,
+      sessionEndTime,
+    });
+
+    // Record attendance
+    const attendance = await this.doUpsertClassAttendance(profile.userId, {
+      classId: session.classId,
+      date: session.date,
+      sessionTime: session.sessionTime,
+      sessionCode: session.sessionCode || undefined,
+      sessionAt: checkInDate.toISOString(),
+      checkInAt: checkInDate.toISOString(),
+      checkOutAt: checkOutDate ? checkOutDate.toISOString() : undefined,
+      status: 'PRESENT',
+      note: `${data.note || ''}${timeCheckResult.warning ? ` [${timeCheckResult.warning}]` : ''}`.trim() || undefined,
+      method: 'public_session_check',
+    });
+
+    return {
+      session,
+      student: {
+        userId: profile.userId,
+        fullName: profile.fullName || null,
+        instituteId: profile.instituteId || null,
+        barcodeId: profile.barcodeId || null,
+      },
+      timeValidation: {
+        isOnTime: timeCheckResult.isOnTime,
+        isEarlyCheckIn: timeCheckResult.isEarlyCheckIn,
+        isLateCheckIn: timeCheckResult.isLateCheckIn,
+        warning: timeCheckResult.warning,
+      },
+      attendance: {
+        id: attendance.id,
+        status: attendance.status,
+        date: attendance.date.toISOString().split('T')[0],
+        sessionTime: attendance.sessionTime,
+        checkInAt: attendance.checkInAt ? attendance.checkInAt.toISOString() : null,
+        checkOutAt: attendance.checkOutAt ? attendance.checkOutAt.toISOString() : null,
+        method: attendance.method || null,
+        note: attendance.note || null,
+        createdAt: attendance.createdAt,
+        updatedAt: attendance.updatedAt,
+      },
+    };
+  }
+
+  /**
+   * Bulk record session attendance with time validation.
+   */
+  async recordBulkSessionAttendanceWithTimeCheck(data: {
+    sessionId: string;
+    classId: string;
+    records: Array<{
+      studentInstituteId: string;
+      checkInAt: string;
+      checkOutAt?: string;
+      note?: string;
+    }>;
+  }) {
+    const requestedClassId = (data.classId || '').trim();
+    if (!requestedClassId) {
+      throw new BadRequestException('classId is required');
+    }
+
+    const session = await this.getClassAttendanceSessionForPublicImport(data.sessionId, requestedClassId);
+
+    if (session.classId !== requestedClassId) {
+      throw new BadRequestException('sessionId does not belong to the provided classId');
+    }
+
+    const successful: Array<{
+      index: number;
+      studentInstituteId: string;
+      userId: string;
+      attendanceId: string;
+      status: string;
+      timeValidation: any;
+    }> = [];
+    const failed: Array<{
+      index: number;
+      studentInstituteId: string;
+      reason: string;
+    }> = [];
+
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00+05:30`);
+    const sessionEndTime = session.sessionEndTime
+      ? new Date(`${session.date}T${session.sessionEndTime}:00+05:30`)
+      : null;
+
+    for (let i = 0; i < data.records.length; i += 1) {
+      const row = data.records[i];
+      const index = i + 1;
+      const studentInstituteId = (row.studentInstituteId || '').trim();
+
+      if (!studentInstituteId) {
+        failed.push({
+          index,
+          studentInstituteId: '',
+          reason: 'studentInstituteId is required',
+        });
+        continue;
+      }
+
+      try {
+        // Parse times
+        const checkInAtRaw = (row.checkInAt || '').trim();
+        if (!checkInAtRaw) {
+          throw new BadRequestException('checkInAt is required');
+        }
+
+        const checkInDate = this.parseSriLankaDateTime(checkInAtRaw);
+        if (Number.isNaN(checkInDate.getTime())) {
+          throw new BadRequestException('Invalid checkInAt datetime');
+        }
+
+        let checkOutDate: Date | null = null;
+        if (row.checkOutAt) {
+          checkOutDate = this.parseSriLankaDateTime(row.checkOutAt);
+          if (Number.isNaN(checkOutDate.getTime())) {
+            throw new BadRequestException('Invalid checkOutAt datetime');
+          }
+        }
+
+        // Validate time order
+        if (checkOutDate && checkOutDate.getTime() < checkInDate.getTime()) {
+          throw new BadRequestException('checkOutAt must be later than or equal to checkInAt');
+        }
+
+        // Validate against session
+        const timeCheckResult = this.validateTimeAgainstSession({
+          checkInAt: checkInDate,
+          checkOutAt: checkOutDate,
+          sessionStartTime,
+          sessionEndTime,
+        });
+
+        // Get student
+        const profile = await this.prisma.profile.findUnique({
+          where: { instituteId: studentInstituteId },
+          select: { userId: true },
+        });
+
+        if (!profile) {
+          throw new NotFoundException(`No student found for institute ID: ${studentInstituteId}`);
+        }
+
+        await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
+
+        // Record attendance
+        const attendance = await this.doUpsertClassAttendance(profile.userId, {
+          classId: session.classId,
+          date: session.date,
+          sessionTime: session.sessionTime,
+          sessionCode: session.sessionCode || undefined,
+          sessionAt: checkInDate.toISOString(),
+          checkInAt: checkInDate.toISOString(),
+          checkOutAt: checkOutDate ? checkOutDate.toISOString() : undefined,
+          status: 'PRESENT',
+          note: `${row.note || ''}${timeCheckResult.warning ? ` [${timeCheckResult.warning}]` : ''}`.trim() || undefined,
+          method: 'public_session_check_bulk',
+        });
+
+        successful.push({
+          index,
+          studentInstituteId,
+          userId: profile.userId,
+          attendanceId: attendance.id,
+          status: attendance.status,
+          timeValidation: {
+            isOnTime: timeCheckResult.isOnTime,
+            isEarlyCheckIn: timeCheckResult.isEarlyCheckIn,
+            isLateCheckIn: timeCheckResult.isLateCheckIn,
+            warning: timeCheckResult.warning,
+          },
+        });
+      } catch (error) {
+        failed.push({
+          index,
+          studentInstituteId,
+          reason: error?.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      message: 'Bulk session attendance recorded',
+      session: {
+        id: session.id,
+        classId: session.classId,
+        className: session.className,
+        date: session.date,
+        sessionTime: session.sessionTime,
+        sessionEndTime: session.sessionEndTime,
+        sessionCode: session.sessionCode,
+        sessionAt: session.sessionAt,
+      },
+      summary: {
+        totalRecords: data.records.length,
+        successCount: successful.length,
+        failedCount: failed.length,
+      },
+      successful,
+      failed,
+    };
+  }
+
+  /**
+   * Private helper: Validate check-in/check-out times against session window.
+   */
+  private validateTimeAgainstSession(data: {
+    checkInAt: Date;
+    checkOutAt: Date | null;
+    sessionStartTime: Date;
+    sessionEndTime: Date | null;
+  }): {
+    isOnTime: boolean;
+    isEarlyCheckIn: boolean;
+    isLateCheckIn: boolean;
+    warning: string | null;
+  } {
+    const { checkInAt, checkOutAt, sessionStartTime, sessionEndTime } = data;
+
+    const checkInMs = checkInAt.getTime();
+    const sessionStartMs = sessionStartTime.getTime();
+    const sessionEndMs = sessionEndTime ? sessionEndTime.getTime() : null;
+
+    let isEarlyCheckIn = false;
+    let isLateCheckIn = false;
+    let isOnTime = false;
+    let warning: string | null = null;
+
+    // Check if early
+    if (checkInMs < sessionStartMs) {
+      isEarlyCheckIn = true;
+      const minutesBefore = Math.floor((sessionStartMs - checkInMs) / 60000);
+      warning = `Checked in ${minutesBefore} minutes early`;
+    }
+    // Check if on time (within session window)
+    else if (sessionEndMs && checkInMs <= sessionEndMs) {
+      isOnTime = true;
+    }
+    // Check if late
+    else if (sessionEndMs && checkInMs > sessionEndMs) {
+      isLateCheckIn = true;
+      const minutesAfter = Math.floor((checkInMs - sessionEndMs) / 60000);
+      warning = `Checked in ${minutesAfter} minutes after session ended`;
+    }
+    // If no session end time, consider on time if after session start
+    else if (!sessionEndMs && checkInMs >= sessionStartMs) {
+      isOnTime = true;
+    }
+
+    // Validate check-out time
+    if (checkOutAt) {
+      const checkOutMs = checkOutAt.getTime();
+      if (sessionEndMs && checkOutMs > sessionEndMs) {
+        const minutesAfter = Math.floor((checkOutMs - sessionEndMs) / 60000);
+        warning = warning
+          ? `${warning}; Checked out ${minutesAfter} minutes after session ended`
+          : `Checked out ${minutesAfter} minutes after session ended`;
+      }
+    }
+
+    return {
+      isOnTime,
+      isEarlyCheckIn,
+      isLateCheckIn,
+      warning,
+    };
   }
 }

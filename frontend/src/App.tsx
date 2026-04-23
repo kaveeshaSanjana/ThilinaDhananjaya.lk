@@ -116,22 +116,13 @@ function LandingPageView() {
   const { user, loading } = useAuth();
   const { selected } = useInstitute();
 
-  if (loading) {
-    return <LandingStyleLoading />;
-  }
+  if (loading) return <LandingStyleLoading />;
 
-  // If user is authenticated, redirect to appropriate dashboard
-  if (user) {
-    if (user.role === 'ADMIN' && selected) {
-      return <Navigate to={getInstituteAdminPath(selected.id)} replace />;
-    }
-    if (user.role === 'STUDENT') {
-      return <Navigate to="/dashboard" replace />;
-    }
-  }
+  if (user?.role === 'ADMIN' && selected) return <Navigate to={getInstituteAdminPath(selected.id)} replace />;
+  if (user?.role === 'STUDENT') return <Navigate to="/dashboard" replace />;
 
-  // For unauthenticated users, render the landing content directly in the same app.
-  return <MainLandingPage />;
+  // Landing site is served separately at /; redirect LMS-internal "/" to /login
+  return <Navigate to="/login" replace />;
 }
 
 function AppRoutes() {
@@ -147,9 +138,9 @@ function AppRoutes() {
       
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
-      <Route path="/landing" element={<Navigate to="/" replace />} />
-      <Route path="/landing-site" element={<Navigate to="/" replace />} />
-      <Route path="/landing-site/*" element={<Navigate to="/" replace />} />
+      <Route path="/landing" element={<Navigate to="/login" replace />} />
+      <Route path="/landing-site" element={<Navigate to="/login" replace />} />
+      <Route path="/landing-site/*" element={<Navigate to="/login" replace />} />
 
       {/* Fullscreen recording player — outside Layout (ANYONE recordings work without login) */}
       <Route path="recording/:id" element={<RecordingPlayerPage />} />
@@ -220,7 +211,7 @@ function AppRoutes() {
       </Route>
 
       {/* Catch-all for unmatched routes */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }

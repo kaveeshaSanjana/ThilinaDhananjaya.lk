@@ -38,6 +38,13 @@ export class ClassesController {
     return this.classesService.findOne(id);
   }
 
+  /** Authenticated: check if user has access to an ENROLLED_ONLY class */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/check-access')
+  checkClassAccess(@Param('id') id: string, @Request() req: any) {
+    return this.classesService.checkClassAccess(id, req.user.sub);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')

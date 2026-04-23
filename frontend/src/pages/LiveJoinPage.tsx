@@ -190,11 +190,15 @@ export default function LiveJoinPage() {
           <div className="space-y-4">
             {user && (
               <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm">
-                  {(user as any).email?.[0]?.toUpperCase() || 'U'}
-                </div>
+                {(user as any).profile?.avatarUrl ? (
+                  <img src={(user as any).profile.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                )}
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{(user as any).email}</p>
+                  <p className="text-sm font-semibold text-slate-800 truncate">{(user as any).profile?.fullName || (user as any).email}</p>
                   <p className="text-xs text-slate-400">Logged in</p>
                 </div>
               </div>

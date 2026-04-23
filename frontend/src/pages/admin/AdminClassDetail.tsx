@@ -360,6 +360,7 @@ function formatDateTimeLabel(value: string | null | undefined): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -514,10 +515,19 @@ export default function AdminClassDetail() {
     useCustomFee: false,
     customFee: '',
   });
+  const [detailModalEnr, setDetailModalEnr] = useState<any>(null);
+  const [detailForm, setDetailForm] = useState({ fullName: '', phone: '', instituteId: '', school: '', guardianName: '', guardianPhone: '' });
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [paymentViewEnr, setPaymentViewEnr] = useState<any>(null);
+  const [paymentViewData, setPaymentViewData] = useState<any[]>([]);
+  const [paymentViewLoading, setPaymentViewLoading] = useState(false);
+
   const [selectedReportUserIds, setSelectedReportUserIds] = useState<string[]>([]);
   const [reportIncludePayments, setReportIncludePayments] = useState(true);
   const [reportIncludePhysicalAttendance, setReportIncludePhysicalAttendance] = useState(true);
   const [reportIncludeRecordingAttendance, setReportIncludeRecordingAttendance] = useState(true);
+  const [reportIncludeLiveAttendance, setReportIncludeLiveAttendance] = useState(true);
   const [reportRecordingMode, setReportRecordingMode] = useState<RecordingReportMode>('SUMMARY');
   const [reporting, setReporting] = useState(false);
   const [reportProgress, setReportProgress] = useState('');
@@ -562,6 +572,7 @@ export default function AdminClassDetail() {
   const [physicalSessionFormOpen, setPhysicalSessionFormOpen] = useState(false);
   const [physicalNewSessionDate, setPhysicalNewSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [physicalNewSessionTime, setPhysicalNewSessionTime] = useState('00:00');
+  const [physicalNewSessionEndTime, setPhysicalNewSessionEndTime] = useState('');
   const [physicalNewSessionName, setPhysicalNewSessionName] = useState('');
   const [physicalCreatingSession, setPhysicalCreatingSession] = useState(false);
   const [physicalCreateSessionError, setPhysicalCreateSessionError] = useState('');
@@ -594,6 +605,16 @@ export default function AdminClassDetail() {
   const [physicalPaymentExportError, setPhysicalPaymentExportError] = useState('');
   const [physicalPaymentStatusFilter, setPhysicalPaymentStatusFilter] = useState<ClassPaymentStatusFilter>(initialPaymentStatusFilter);
   const [physicalPaymentSearchText, setPhysicalPaymentSearchText] = useState(initialPaymentSearchText);
+  
+  // Edit session states
+  const [editingSessionKey, setEditingSessionKey] = useState('');
+  const [editingSessionNameValue, setEditingSessionNameValue] = useState('');
+  const [editingSessionTimeValue, setEditingSessionTimeValue] = useState('');
+  const [editingSessionEndTimeValue, setEditingSessionEndTimeValue] = useState('');
+  const [savingEditingSessionKey, setSavingEditingSessionKey] = useState('');
+  const [editingWeekId, setEditingWeekId] = useState('');
+  const [editingWeekNameValue, setEditingWeekNameValue] = useState('');
+  const [savingEditingWeekId, setSavingEditingWeekId] = useState('');
 
   const loadClass = () => api.get(`/classes/${id}`).then(r => setCls(r.data)).catch(() => {});
   const loadMonths = () => api.get(`/classes/${id}/months`).then(r => setMonths(r.data)).catch(() => {});
@@ -1150,6 +1171,7 @@ export default function AdminClassDetail() {
       setPhysicalGroupSelectedSlots([]);
       setPhysicalGroupError('');
       setPhysicalWeeksError('');
+      setPhysicalWeekBuilderOpen(false);
     } catch (error: any) {
       const message = error?.response?.data?.message;
       if (Array.isArray(message)) {
@@ -1535,6 +1557,12 @@ export default function AdminClassDetail() {
     const normalizedSessionTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(physicalNewSessionTime)
       ? physicalNewSessionTime
       : '00:00';
+    const normalizedEndTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(physicalNewSessionEndTime)
+      ? physicalNewSessionEndTime
+      : '';
+    const sessionTimePayload = normalizedEndTime
+      ? `${normalizedSessionTime}-${normalizedEndTime}`
+      : normalizedSessionTime;
 
     setPhysicalCreatingSession(true);
     setPhysicalCreateSessionError('');
@@ -1543,7 +1571,7 @@ export default function AdminClassDetail() {
     try {
       const response = await api.post(`/attendance/class-attendance/class/${id}/sessions`, {
         date,
-        sessionTime: normalizedSessionTime,
+        sessionTime: sessionTimePayload,
         sessionCode: physicalNewSessionName.trim() || undefined,
       });
 
@@ -1568,6 +1596,7 @@ export default function AdminClassDetail() {
       setPhysicalSessionFormOpen(false);
       setPhysicalNewSessionName('');
       setPhysicalNewSessionTime(createdSession.sessionTime || '00:00');
+      setPhysicalNewSessionEndTime('');
       setPhysicalSessionCloseMessage('');
       setPhysicalCreateSessionSuccess(`Session created: ${formatPhysicalSlotLabel(createdSession)}`);
     } catch (error: any) {
@@ -1579,6 +1608,87 @@ export default function AdminClassDetail() {
       }
     } finally {
       setPhysicalCreatingSession(false);
+    }
+  };
+
+  const handleEditSessionName = (session: PhysicalQuickSession) => {
+    setEditingSessionKey(session.key);
+    setEditingSessionNameValue(session.sessionCode || '');
+    setEditingSessionTimeValue(session.sessionTime !== '00:00' ? session.sessionTime : '');
+    setEditingSessionEndTimeValue(session.sessionEndTime || '');
+  };
+
+  const handleSaveSessionName = async () => {
+    if (!editingSessionKey || !id) return;
+    setSavingEditingSessionKey(editingSessionKey);
+    setPhysicalGroupError('');
+
+    const encodedKey = encodeURIComponent(editingSessionKey);
+    try {
+      const body: Record<string, string> = {
+        sessionCode: editingSessionNameValue.trim(),
+      };
+      if (editingSessionTimeValue) body.sessionTime = editingSessionTimeValue;
+      if (editingSessionEndTimeValue) body.sessionEndTime = editingSessionEndTimeValue;
+
+      const response = await api.patch(`/attendance/class-attendance/class/${id}/sessions/${encodedKey}`, body);
+      const updatedSession = normalizePhysicalQuickSessionItem(response.data);
+
+      if (!updatedSession) {
+        throw new Error('Invalid session payload');
+      }
+
+      setPhysicalQuickSessions((prev) => prev.map((item) => (
+        item.key === editingSessionKey
+          ? { ...item, ...updatedSession }
+          : item
+      )));
+
+      setEditingSessionKey('');
+      setEditingSessionNameValue('');
+      setEditingSessionTimeValue('');
+      setEditingSessionEndTimeValue('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to update session.');
+    } finally {
+      setSavingEditingSessionKey('');
+    }
+  };
+
+  const handleEditWeekName = (group: PhysicalReportGroup) => {
+    setEditingWeekId(group.id);
+    setEditingWeekNameValue(group.name);
+  };
+
+  const handleSaveWeekName = async () => {
+    if (!editingWeekId || !id) return;
+    setSavingEditingWeekId(editingWeekId);
+    setPhysicalGroupError('');
+
+    try {
+      const response = await api.patch(`/attendance/class-attendance/class/${id}/weeks/${editingWeekId}`, {
+        name: editingWeekNameValue.trim(),
+      });
+      const updatedGroup = normalizePhysicalWeekGroupItem(response.data);
+
+      if (!updatedGroup) {
+        throw new Error('Invalid week group payload');
+      }
+
+      setPhysicalReportGroups((prev) => prev.map((item) => (
+        item.id === editingWeekId
+          ? { ...item, ...updatedGroup }
+          : item
+      )));
+
+      setEditingWeekId('');
+      setEditingWeekNameValue('');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setPhysicalGroupError(typeof message === 'string' ? message : 'Failed to update week name.');
+    } finally {
+      setSavingEditingWeekId('');
     }
   };
 
@@ -2992,6 +3102,58 @@ export default function AdminClassDetail() {
     }
   };
 
+  const openDetailModal = (enr: any) => {
+    const p = enr.user?.profile || {};
+    setDetailForm({
+      fullName: p.fullName || '',
+      phone: p.phone || '',
+      instituteId: p.instituteId || '',
+      school: p.school || '',
+      guardianName: p.guardianName || '',
+      guardianPhone: p.guardianPhone || '',
+    });
+    setDetailError('');
+    setDetailModalEnr(enr);
+  };
+
+  const handleSaveDetail = async () => {
+    if (!detailModalEnr?.userId) return;
+    setDetailSaving(true);
+    setDetailError('');
+    try {
+      await api.patch(`/users/students/${detailModalEnr.userId}/profile`, {
+        fullName: detailForm.fullName || undefined,
+        phone: detailForm.phone || undefined,
+        instituteId: detailForm.instituteId || undefined,
+        school: detailForm.school || undefined,
+        guardianName: detailForm.guardianName || undefined,
+        guardianPhone: detailForm.guardianPhone || undefined,
+      });
+      setDetailModalEnr(null);
+      loadEnrollments();
+    } catch (err: any) {
+      setDetailError(err.response?.data?.message || 'Failed to update student details.');
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const openPaymentView = async (enr: any) => {
+    setPaymentViewEnr(enr);
+    setPaymentViewData([]);
+    setPaymentViewLoading(true);
+    try {
+      const res = await api.get(`/attendance/class-attendance/class/${id}/payments`);
+      const rows: any[] = Array.isArray(res.data) ? res.data : (res.data?.students ?? []);
+      const studentRow = rows.find((r: any) => r.userId === enr.userId || r.user?.id === enr.userId);
+      setPaymentViewData(studentRow?.months || []);
+    } catch {
+      setPaymentViewData([]);
+    } finally {
+      setPaymentViewLoading(false);
+    }
+  };
+
   const enrolledIds = useMemo(
     () => new Set(enrollments.map((e: any) => e.userId)),
     [enrollments],
@@ -3091,7 +3253,10 @@ export default function AdminClassDetail() {
       paymentsByUser: new Map<string, any>(),
       physicalSlots: [] as any[],
       physicalByUser: new Map<string, any>(),
+      slotKeyToWeekName: new Map<string, string>(),
+      weekGroupOrder: [] as string[],
       recordingSessions: [] as any[],
+      liveSessionsByUser: new Map<string, any[]>(),
       warnings: [] as string[],
     };
 
@@ -3140,6 +3305,35 @@ export default function AdminClassDetail() {
           }
         })(),
       );
+
+      // Fetch week groups fresh so the report always has up-to-date week assignments
+      jobs.push(
+        (async () => {
+          try {
+            const weeksResponse = await api.get(`/attendance/class-attendance/class/${id}/weeks`);
+            const groups = Array.isArray(weeksResponse.data)
+              ? weeksResponse.data
+                  .map((item: unknown) => normalizePhysicalWeekGroupItem(item))
+                  .filter((item: PhysicalReportGroup | null): item is PhysicalReportGroup => Boolean(item))
+                  .sort((a, b) => {
+                    const lo = typeof a.orderNo === 'number' ? a.orderNo : Number.MAX_SAFE_INTEGER;
+                    const ro = typeof b.orderNo === 'number' ? b.orderNo : Number.MAX_SAFE_INTEGER;
+                    if (lo !== ro) return lo - ro;
+                    return a.name.localeCompare(b.name);
+                  })
+              : [];
+
+            shared.weekGroupOrder = groups.map((g) => g.name);
+            for (const group of groups) {
+              for (const slotKey of group.slotKeys) {
+                shared.slotKeyToWeekName.set(slotKey, group.name);
+              }
+            }
+          } catch {
+            // Non-fatal: report generates without week column if this fails
+          }
+        })(),
+      );
     }
 
     if (reportIncludeRecordingAttendance) {
@@ -3155,6 +3349,24 @@ export default function AdminClassDetail() {
       );
     }
 
+    if (reportIncludeLiveAttendance) {
+      jobs.push(
+        (async () => {
+          try {
+            const response = await api.get(`/attendance/live-sessions/class/${id}`);
+            const rows = Array.isArray(response.data) ? response.data : [];
+            for (const row of rows) {
+              if (!row?.userId) continue;
+              if (!shared.liveSessionsByUser.has(row.userId)) shared.liveSessionsByUser.set(row.userId, []);
+              shared.liveSessionsByUser.get(row.userId)!.push(row);
+            }
+          } catch {
+            // Non-fatal — live section renders empty if fetch fails
+          }
+        })(),
+      );
+    }
+
     await Promise.all(jobs);
     return shared;
   };
@@ -3163,7 +3375,10 @@ export default function AdminClassDetail() {
     paymentsByUser: Map<string, any>;
     physicalSlots: any[];
     physicalByUser: Map<string, any>;
+    slotKeyToWeekName: Map<string, string>;
+    weekGroupOrder: string[];
     recordingSessions: any[];
+    liveSessionsByUser: Map<string, any[]>;
   }) => {
     const profile = enr.user?.profile || {};
     const paymentRow = shared.paymentsByUser.get(enr.userId);
@@ -3171,6 +3386,7 @@ export default function AdminClassDetail() {
 
     const physicalRow = shared.physicalByUser.get(enr.userId);
     const physicalStatuses = physicalRow?.statuses || {};
+
     const physicalRows = shared.physicalSlots
       .map((slot: any) => {
         const status = physicalStatuses[slot.key];
@@ -3187,9 +3403,10 @@ export default function AdminClassDetail() {
           session: sessionLabel,
           sessionTime: slot.sessionTime || '00:00',
           status,
+          weekName: shared.slotKeyToWeekName.get(slot.key) ?? null,
         };
       })
-      .filter(Boolean) as Array<{ date: string; session: string; sessionTime: string; status: string }>;
+      .filter(Boolean) as Array<{ date: string; session: string; sessionTime: string; status: string; weekName: string | null }>;
 
     const studentSessions = shared.recordingSessions
       .filter((row: any) => row.userId === enr.userId)
@@ -3205,6 +3422,7 @@ export default function AdminClassDetail() {
       month: string;
       sessions: number;
       watchedSec: number;
+      sessionTimeSec: number;
       lastWatchedAt: string | null;
     }>();
 
@@ -3217,6 +3435,7 @@ export default function AdminClassDetail() {
           month: session.recording?.month?.name || '-',
           sessions: 0,
           watchedSec: 0,
+          sessionTimeSec: 0,
           lastWatchedAt: null,
         });
       }
@@ -3224,7 +3443,10 @@ export default function AdminClassDetail() {
       const row = recordingSummaryMap.get(recordingId)!;
       row.sessions += 1;
       row.watchedSec += session.totalWatchedSec || 0;
-
+      if (session.startedAt && session.endedAt) {
+        const elapsed = Math.max(0, new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime());
+        row.sessionTimeSec += Math.round(elapsed / 1000);
+      }
       const startedAt = session.startedAt ? new Date(session.startedAt).getTime() : 0;
       const lastWatchedAt = row.lastWatchedAt ? new Date(row.lastWatchedAt).getTime() : 0;
       if (startedAt > lastWatchedAt) row.lastWatchedAt = session.startedAt || null;
@@ -3237,7 +3459,29 @@ export default function AdminClassDetail() {
         month: recording.month?.name || '-',
         sessions: existing?.sessions || 0,
         watchedSec: existing?.watchedSec || 0,
+        sessionTimeSec: existing?.sessionTimeSec || 0,
+        videoDuration: typeof recording.duration === 'number' && recording.duration > 0 ? recording.duration : null,
         lastWatchedAt: existing?.lastWatchedAt || null,
+      };
+    });
+
+    // Build live class rows — one row per recording (Joined / Not Joined per student)
+    const studentLiveSessions = shared.liveSessionsByUser.get(enr.userId) || [];
+    const liveJoinedByRecordingId = new Map<string, any>();
+    for (const ls of studentLiveSessions) {
+      const recId = ls.recording?.id || ls.recordingId;
+      if (recId && !liveJoinedByRecordingId.has(recId)) liveJoinedByRecordingId.set(recId, ls);
+    }
+    const liveRecordings = recordings.filter((r: any) => r.isLive || r.liveStartedAt || liveJoinedByRecordingId.has(r.id));
+    const liveRows = liveRecordings.map((recording: any) => {
+      const joined = liveJoinedByRecordingId.get(recording.id);
+      return {
+        title: recording.title || '-',
+        liveDate: recording.liveStartedAt
+          ? new Date(recording.liveStartedAt).toISOString().split('T')[0]
+          : null,
+        status: joined ? 'JOINED' : 'NOT_JOINED',
+        joinedAt: joined?.liveJoinedAt || null,
       };
     });
 
@@ -3261,6 +3505,7 @@ export default function AdminClassDetail() {
         includePayments: reportIncludePayments,
         includePhysicalAttendance: reportIncludePhysicalAttendance,
         includeRecordingAttendance: reportIncludeRecordingAttendance,
+        includeLiveAttendance: reportIncludeLiveAttendance,
         recordingMode: reportRecordingMode,
       },
       payments: {
@@ -3284,6 +3529,8 @@ export default function AdminClassDetail() {
           percentage: physicalRow?.percentage || 0,
         },
         rows: physicalRows,
+        weekGroupOrder: shared.weekGroupOrder
+          .filter((name) => physicalRows.some((r) => r.weekName === name)),
       },
       recordingAttendance: {
         summaryRows: recordingSummaryRows,
@@ -3295,12 +3542,13 @@ export default function AdminClassDetail() {
           status: session.status || '-',
         })),
       },
+      liveAttendance: { rows: liveRows },
     };
   };
 
   const exportSingleStudentReport = async (enr: any) => {
     if (!id) return;
-    if (!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance) {
+    if (!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && !reportIncludeLiveAttendance) {
       setReportError('Select at least one report section before exporting.');
       return;
     }
@@ -3336,7 +3584,7 @@ export default function AdminClassDetail() {
 
   const exportBatchStudentReports = async (scope: 'selected' | 'filtered') => {
     if (!id) return;
-    if (!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance) {
+    if (!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && !reportIncludeLiveAttendance) {
       setReportError('Select at least one report section before exporting.');
       return;
     }
@@ -3792,6 +4040,20 @@ export default function AdminClassDetail() {
               Report PDF
             </button>
           )}
+          <button
+            onClick={() => openDetailModal(enr)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-sky-50 text-sky-600 text-xs font-semibold hover:bg-sky-100 transition"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414a2 2 0 01.586-1.414z" /></svg>
+            Details
+          </button>
+          <button
+            onClick={() => void openPaymentView(enr)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-600 text-xs font-semibold hover:bg-amber-100 transition"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+            Payments
+          </button>
           <button
             onClick={() => openPricingModal(enr)}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold hover:bg-indigo-100 transition"
@@ -5041,6 +5303,19 @@ export default function AdminClassDetail() {
                 </div>
               )}
 
+              <label className={`flex items-start gap-2 cursor-pointer rounded-xl p-2 transition ${reportIncludeLiveAttendance ? 'bg-red-50 text-red-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <input
+                  type="checkbox"
+                  checked={reportIncludeLiveAttendance}
+                  onChange={(event) => setReportIncludeLiveAttendance(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <span>
+                  Include live class attendance
+                  <span className="block text-[11px] text-slate-500 mt-0.5">Live class join status per recording</span>
+                </span>
+              </label>
+
               <div className="rounded-2xl border border-blue-200 bg-white/95 p-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -5084,7 +5359,7 @@ export default function AdminClassDetail() {
               </div>
 
               <div className="space-y-2">
-                {!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && (
+                {!reportIncludePayments && !reportIncludePhysicalAttendance && !reportIncludeRecordingAttendance && !reportIncludeLiveAttendance && (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
                     Select at least one report section before exporting.
                   </div>
@@ -5258,6 +5533,111 @@ export default function AdminClassDetail() {
             </div>,
             document.body,
           )}
+
+          {detailModalEnr && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setDetailModalEnr(null)}>
+              <div className="min-h-full flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-800">Student Details</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">{detailModalEnr.user?.profile?.fullName || detailModalEnr.user?.email || 'Student'}</p>
+                    </div>
+                    <button onClick={() => setDetailModalEnr(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {[
+                      { label: 'Full Name', key: 'fullName', placeholder: 'e.g. John Doe' },
+                      { label: 'Phone', key: 'phone', placeholder: 'e.g. 0712345678' },
+                      { label: 'Institute ID', key: 'instituteId', placeholder: 'e.g. STD001' },
+                      { label: 'School', key: 'school', placeholder: 'e.g. Royal College' },
+                      { label: 'Guardian Name', key: 'guardianName', placeholder: 'e.g. Jane Doe' },
+                      { label: 'Guardian Phone', key: 'guardianPhone', placeholder: 'e.g. 0712345678' },
+                    ].map(({ label, key, placeholder }) => (
+                      <div key={key}>
+                        <label className="text-xs font-semibold text-slate-500">{label}</label>
+                        <input
+                          type="text"
+                          value={detailForm[key as keyof typeof detailForm]}
+                          onChange={(e) => setDetailForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={placeholder}
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                        />
+                      </div>
+                    ))}
+                    {detailError && (
+                      <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{detailError}</div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => setDetailModalEnr(null)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+                      <button type="button" disabled={detailSaving} onClick={() => void handleSaveDetail()} className="flex-1 rounded-xl bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50">
+                        {detailSaving ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+
+          {paymentViewEnr && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto" onClick={() => setPaymentViewEnr(null)}>
+              <div className="min-h-full flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-800">Payment History</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">{paymentViewEnr.user?.profile?.fullName || paymentViewEnr.user?.email || 'Student'}</p>
+                    </div>
+                    <button onClick={() => setPaymentViewEnr(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="p-5">
+                    {paymentViewLoading ? (
+                      <div className="flex items-center justify-center py-10 text-slate-400 text-sm">Loading payments...</div>
+                    ) : paymentViewData.length === 0 ? (
+                      <div className="flex items-center justify-center py-10 text-slate-400 text-sm">No payment records found.</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-100">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 text-xs text-slate-500">
+                              <th className="px-3 py-2.5 text-left font-semibold">Month</th>
+                              <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                              <th className="px-3 py-2.5 text-center font-semibold">Status</th>
+                              <th className="px-3 py-2.5 text-left font-semibold">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {paymentViewData.map((m: any, i: number) => (
+                              <tr key={i} className="hover:bg-slate-50/60">
+                                <td className="px-3 py-2.5 text-slate-700 font-medium">{m.monthName || m.name || '-'}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{typeof m.amount === 'number' ? formatMoney(m.amount) : (m.amount ?? '-')}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' : m.status === 'PARTIAL' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'}`}>
+                                    {m.status || '-'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 text-slate-400 text-xs">{m.paidAt ? new Date(m.paidAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <div className="mt-4 flex justify-end">
+                      <button type="button" onClick={() => setPaymentViewEnr(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Close</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
         </div>
       )}
 
@@ -5277,13 +5657,13 @@ export default function AdminClassDetail() {
                   <button
                     type="button"
                     onClick={() => {
-                      setPhysicalSessionFormOpen((prev) => !prev);
+                      setPhysicalSessionFormOpen(true);
                       setPhysicalCreateSessionError('');
                       setPhysicalCreateSessionSuccess('');
                     }}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
                   >
-                    {physicalSessionFormOpen ? 'Cancel Session Create' : 'Create Session'}
+                    Create Session
                   </button>
                   <Link
                     to={markAttendanceScannerPath}
@@ -5316,62 +5696,92 @@ export default function AdminClassDetail() {
             <div className={tab === 'attendance' ? 'space-y-3' : 'hidden'}>
 
             {physicalSessionFormOpen && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3">
-                <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Create Session (Standalone)</p>
-                <p className="text-[11px] text-violet-700/80">
-                  This creates a class session only. Attendance can be imported or marked later.
-                </p>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-violet-700">Create Session</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Attendance can be marked or imported later.</p>
+                    </div>
+                    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-100">Standalone</span>
+                  </div>
 
-                <div className="grid gap-2 md:grid-cols-[160px_140px_minmax(0,1fr)_auto]">
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Date
-                    <input
-                      type="date"
-                      value={physicalNewSessionDate}
-                      onChange={(event) => setPhysicalNewSessionDate(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                  <div className="px-5 py-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Date
+                        <input
+                          type="date"
+                          value={physicalNewSessionDate}
+                          onChange={(event) => setPhysicalNewSessionDate(event.target.value)}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Time
-                    <input
-                      type="time"
-                      value={physicalNewSessionTime}
-                      onChange={(event) => setPhysicalNewSessionTime(event.target.value || '00:00')}
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Session Name <span className="font-normal text-slate-400">(optional)</span>
+                        <input
+                          type="text"
+                          value={physicalNewSessionName}
+                          onChange={(event) => setPhysicalNewSessionName(event.target.value)}
+                          placeholder="e.g. Week 04 – Group A"
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <label className="text-[11px] font-semibold text-violet-700">
-                    Name
-                    <input
-                      type="text"
-                      value={physicalNewSessionName}
-                      onChange={(event) => setPhysicalNewSessionName(event.target.value)}
-                      placeholder="e.g. Week 04 - Group A"
-                      className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2.5 py-2 text-xs text-slate-700"
-                    />
-                  </label>
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Start Time
+                        <input
+                          type="time"
+                          value={physicalNewSessionTime}
+                          onChange={(event) => setPhysicalNewSessionTime(event.target.value || '00:00')}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
 
-                  <div className="flex items-end">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        End Time <span className="font-normal text-slate-400">(optional)</span>
+                        <input
+                          type="time"
+                          value={physicalNewSessionEndTime}
+                          onChange={(event) => setPhysicalNewSessionEndTime(event.target.value)}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        />
+                      </label>
+                    </div>
+
+                    {physicalNewSessionEndTime && physicalNewSessionTime > physicalNewSessionEndTime && (
+                      <p className="text-[11px] text-amber-600 font-medium">⚠ End time should be after start time.</p>
+                    )}
+                    {physicalCreateSessionError && (
+                      <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs font-medium text-red-600">{physicalCreateSessionError}</p>
+                    )}
+                    {physicalCreateSessionSuccess && (
+                      <p className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs font-medium text-emerald-700">{physicalCreateSessionSuccess}</p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhysicalSessionFormOpen(false);
+                        setPhysicalCreateSessionError('');
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleCreatePhysicalSession()}
                       disabled={physicalCreatingSession}
-                      className="rounded-lg border border-violet-300 bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                      className="rounded-lg border border-violet-300 bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                     >
-                      {physicalCreatingSession ? 'Creating...' : 'Save Session'}
+                      {physicalCreatingSession ? 'Creating…' : 'Save Session'}
                     </button>
                   </div>
                 </div>
-
-                {physicalCreateSessionError && (
-                  <p className="text-xs font-medium text-red-600">{physicalCreateSessionError}</p>
-                )}
-                {physicalCreateSessionSuccess && (
-                  <p className="text-xs font-medium text-emerald-700">{physicalCreateSessionSuccess}</p>
-                )}
               </div>
             )}
 
@@ -5417,7 +5827,13 @@ export default function AdminClassDetail() {
                             <div className="min-w-0">
                               <p className="truncate text-xs font-semibold text-slate-800">{sessionName}</p>
                               <p className="mt-0.5 text-[11px] text-slate-500">
-                                {session.date}{session.sessionTime !== '00:00' ? ` ${session.sessionTime}` : ''} | Count: {session.recordsCount}
+                                {session.date}
+                                {session.sessionTime !== '00:00' && (
+                                  <span className="ml-1 inline-flex rounded bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+                                    {session.sessionEndTime ? `${session.sessionTime} – ${session.sessionEndTime}` : session.sessionTime}
+                                  </span>
+                                )}
+                                <span className="ml-1 text-slate-400">· {session.recordsCount} students</span>
                               </p>
                               <p className="mt-0.5 text-[11px] text-slate-500">
                                 Session ID: <span className="font-mono text-slate-700">{session.readableId}</span>
@@ -5484,93 +5900,128 @@ export default function AdminClassDetail() {
                     })}
                   </div>
 
-                  <div className="hidden rounded-lg border border-slate-200 bg-white md:block">
+                  <div className="hidden md:block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                     <table className="w-full text-xs">
-                      <thead className="bg-slate-100 text-slate-600">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-semibold">Select</th>
-                          <th className="px-3 py-2 text-left font-semibold">Date</th>
-                          <th className="px-3 py-2 text-left font-semibold">Count</th>
-                          <th className="px-3 py-2 text-left font-semibold">Name</th>
-                          <th className="px-3 py-2 text-left font-semibold">Week Assign</th>
-                          <th className="px-3 py-2 text-left font-semibold">Session ID</th>
-                          <th className="px-3 py-2 text-left font-semibold">Mark Attendance</th>
-                          <th className="px-3 py-2 text-left font-semibold">Preview</th>
+                      <thead>
+                        <tr className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white">
+                          <th className="px-4 py-2.5 text-left font-semibold tracking-wide text-[11px]">Date</th>
+                          <th className="px-4 py-2.5 text-left font-semibold tracking-wide text-[11px]">Time</th>
+                          <th className="px-4 py-2.5 text-left font-semibold tracking-wide text-[11px]">Name</th>
+                          <th className="px-4 py-2.5 text-center font-semibold tracking-wide text-[11px]">Count</th>
+                          <th className="px-4 py-2.5 text-left font-semibold tracking-wide text-[11px]">Week</th>
+                          <th className="px-4 py-2.5 text-left font-semibold tracking-wide text-[11px]">Session ID</th>
+                          <th className="px-4 py-2.5 text-center font-semibold tracking-wide text-[11px]">Actions</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {physicalQuickSessions.map((session) => {
+                      <tbody className="divide-y divide-slate-100">
+                        {physicalQuickSessions.map((session, idx) => {
                           const selected = session.key === physicalQuickSessionKey;
                           const sessionName = session.sessionCode || formatPhysicalSlotLabel(session);
                           const linkedWeekName = session.weekName || physicalAssignedWeekBySessionKey.get(session.key) || '';
                           const assigningWeek = physicalAssigningWeekSessionKey === session.key;
                           const selectedWeekId = session.weekId || '';
+                          const timeLabel = session.sessionTime !== '00:00'
+                            ? session.sessionEndTime
+                              ? `${session.sessionTime} – ${session.sessionEndTime}`
+                              : session.sessionTime
+                            : '—';
 
                           return (
-                            <tr key={session.key} className={selected ? 'bg-indigo-50/70' : 'bg-white'}>
-                              <td className="px-3 py-2 align-middle">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectPhysicalQuickSession(session)}
-                                  className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
-                                    selected
-                                      ? 'border-indigo-300 bg-indigo-600 text-white'
-                                      : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
-                                  }`}
-                                >
-                                  {selected ? 'Selected' : 'Select'}
-                                </button>
+                            <tr
+                              key={session.key}
+                              className={`transition-colors ${selected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-indigo-50/40`}
+                            >
+                              {/* Date */}
+                              <td className="px-4 py-2.5 align-middle">
+                                <span className="font-semibold text-slate-700">{session.date}</span>
                               </td>
-                              <td className="px-3 py-2 align-middle font-medium text-slate-700">{session.date}</td>
-                              <td className="px-3 py-2 align-middle text-slate-700">{session.recordsCount}</td>
-                              <td className="px-3 py-2 align-middle text-slate-700">{sessionName}</td>
-                              <td className="px-3 py-2 align-middle text-slate-700">
-                                <div className="flex items-center gap-2">
+
+                              {/* Time */}
+                              <td className="px-4 py-2.5 align-middle">
+                                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${session.sessionTime !== '00:00' ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'text-slate-400'}`}>
+                                  {timeLabel}
+                                </span>
+                              </td>
+
+                              {/* Name + edit */}
+                              <td className="px-4 py-2.5 align-middle max-w-[160px]">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="truncate text-slate-700">{sessionName}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditSessionName(session)}
+                                    title="Edit session"
+                                    className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  </button>
+                                </div>
+                              </td>
+
+                              {/* Count */}
+                              <td className="px-4 py-2.5 align-middle text-center">
+                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600">
+                                  {session.recordsCount}
+                                </span>
+                              </td>
+
+                              {/* Week assign */}
+                              <td className="px-4 py-2.5 align-middle">
+                                <div className="flex items-center gap-1.5">
                                   <select
                                     value={selectedWeekId}
-                                    onChange={(event) => {
-                                      void handleAssignPhysicalSessionWeek(session, event.target.value);
-                                    }}
+                                    onChange={(event) => { void handleAssignPhysicalSessionWeek(session, event.target.value); }}
                                     disabled={assigningWeek || physicalSavingWeekGroup || physicalDeletingWeekId.length > 0}
-                                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:bg-slate-100"
+                                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:bg-slate-100 min-w-[90px]"
                                   >
                                     <option value="">No Week</option>
                                     {physicalReportGroups.map((group) => (
-                                      <option key={`${session.key}-${group.id}`} value={group.id}>
-                                        {group.name}
-                                      </option>
+                                      <option key={`${session.key}-${group.id}`} value={group.id}>{group.name}</option>
                                     ))}
                                   </select>
                                   {assigningWeek ? (
-                                    <span className="text-[10px] font-semibold text-indigo-600">Saving...</span>
+                                    <span className="text-[10px] font-semibold text-indigo-500">Saving…</span>
                                   ) : linkedWeekName ? (
-                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap">
-                                      {linkedWeekName}
-                                    </span>
+                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap">✓ {linkedWeekName}</span>
                                   ) : null}
                                 </div>
                               </td>
-                              <td className="px-3 py-2 align-middle">
-                                <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-700">
+
+                              {/* Session ID */}
+                              <td className="px-4 py-2.5 align-middle">
+                                <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                                   {session.readableId}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 align-middle">
-                                <Link
-                                  to={getMarkAttendancePathForSession(session)}
-                                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-                                >
-                                  Mark Attendance
-                                </Link>
-                              </td>
-                              <td className="px-3 py-2 align-middle">
-                                <button
-                                  type="button"
-                                  onClick={() => handlePreviewPhysicalSession(session)}
-                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
-                                >
-                                  Preview Here
-                                </button>
+
+                              {/* Actions */}
+                              <td className="px-4 py-2.5 align-middle">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSelectPhysicalQuickSession(session)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+                                      selected
+                                        ? 'border-indigo-300 bg-indigo-600 text-white'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
+                                    }`}
+                                  >
+                                    {selected ? '✓ Selected' : 'Select'}
+                                  </button>
+                                  <Link
+                                    to={getMarkAttendancePathForSession(session)}
+                                    className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition"
+                                  >
+                                    Mark
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePreviewPhysicalSession(session)}
+                                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+                                  >
+                                    Preview
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -5578,6 +6029,84 @@ export default function AdminClassDetail() {
                       </tbody>
                     </table>
                   </div>
+
+                  {editingSessionKey && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl ring-1 ring-black/10 overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-4">
+                          <h3 className="text-sm font-bold text-white">Edit Session</h3>
+                          <p className="text-[11px] text-indigo-200 mt-0.5">Update name, start time, and end time</p>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                          {/* Session Name */}
+                          <div>
+                            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Session Name</label>
+                            <input
+                              type="text"
+                              value={editingSessionNameValue}
+                              onChange={(event) => setEditingSessionNameValue(event.target.value)}
+                              placeholder="e.g. Week 01 – Group A"
+                              autoFocus
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            />
+                          </div>
+
+                          {/* Time fields */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Start Time</label>
+                              <input
+                                type="time"
+                                value={editingSessionTimeValue}
+                                onChange={(e) => setEditingSessionTimeValue(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">End Time</label>
+                              <input
+                                type="time"
+                                value={editingSessionEndTimeValue}
+                                onChange={(e) => setEditingSessionEndTimeValue(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                              />
+                            </div>
+                          </div>
+
+                          {editingSessionTimeValue && editingSessionEndTimeValue && editingSessionEndTimeValue <= editingSessionTimeValue && (
+                            <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                              End time should be after start time.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSessionKey('');
+                              setEditingSessionNameValue('');
+                              setEditingSessionTimeValue('');
+                              setEditingSessionEndTimeValue('');
+                            }}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveSessionName()}
+                            disabled={savingEditingSessionKey.length > 0}
+                            className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                          >
+                            {savingEditingSessionKey ? 'Saving…' : 'Save Changes'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5619,12 +6148,12 @@ export default function AdminClassDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPhysicalWeekBuilderOpen((prev) => !prev);
+                    setPhysicalWeekBuilderOpen(true);
                     setPhysicalGroupError('');
                   }}
                   className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                 >
-                  {physicalWeekBuilderOpen ? 'Close Group Builder' : 'Create Group'}
+                  Create Group
                 </button>
                 <p className="text-[11px] text-slate-500">
                   Weeks appear below. Select only the weeks you need for week-wise report.
@@ -5680,7 +6209,7 @@ export default function AdminClassDetail() {
                       return (
                         <span
                           key={group.id}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                             selected
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                               : 'border-slate-200 bg-slate-50 text-slate-500'
@@ -5694,6 +6223,26 @@ export default function AdminClassDetail() {
                           >
                             {selected ? 'Selected: ' : ''}{group.name} ({group.slotKeys.length})
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditWeekName(group)}
+                            title="Edit group name"
+                            className={`text-slate-400 hover:text-slate-600 transition ${selected ? 'text-emerald-400 hover:text-emerald-600' : ''}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removePhysicalReportGroup(group.id)}
+                            disabled={physicalDeletingWeekId === group.id}
+                            title="Delete group"
+                            className="text-slate-300 hover:text-red-500 transition disabled:opacity-40"
+                          >
+                            {physicalDeletingWeekId === group.id
+                              ? <span className="text-[9px] font-semibold text-red-400">…</span>
+                              : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            }
+                          </button>
                           {selected && (
                             <button
                               type="button"
@@ -5701,7 +6250,7 @@ export default function AdminClassDetail() {
                               className="text-slate-500/80 hover:text-slate-700"
                               aria-label={`Unselect ${group.name} from report`}
                             >
-                              x
+                              ×
                             </button>
                           )}
                         </span>
@@ -5711,55 +6260,84 @@ export default function AdminClassDetail() {
                 )}
               </div>
 
-              {physicalWeekBuilderOpen && (
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                    <label className="text-[11px] font-semibold text-slate-500">
-                      Week Name
+              {editingWeekId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <h3 className="text-sm font-semibold text-amber-700">Edit Group Name</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Rename this week group.</p>
+                    </div>
+                    <div className="px-5 py-4">
                       <input
                         type="text"
-                        value={physicalGroupName}
-                        onChange={(event) => setPhysicalGroupName(event.target.value)}
-                        placeholder={`Week ${physicalReportGroups.length + 1}`}
-                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+                        value={editingWeekNameValue}
+                        onChange={(event) => setEditingWeekNameValue(event.target.value)}
+                        placeholder="Enter group name"
+                        autoFocus
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
                       />
-                    </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                      <button
+                        type="button"
+                        onClick={() => { setEditingWeekId(''); setEditingWeekNameValue(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveWeekName()}
+                        disabled={savingEditingWeekId.length > 0 || !editingWeekNameValue.trim()}
+                        className="rounded-lg border border-emerald-200 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {savingEditingWeekId ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                    <div className="flex items-end">
+              {physicalWeekBuilderOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                      <h3 className="text-sm font-semibold text-indigo-700">Create Week Group</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Name the group, then assign sessions from the session table.
+                      </p>
+                    </div>
+                    <div className="px-5 py-4">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+                        Group Name
+                        <input
+                          type="text"
+                          value={physicalGroupName}
+                          onChange={(event) => setPhysicalGroupName(event.target.value)}
+                          placeholder={`Week ${physicalReportGroups.length + 1}`}
+                          autoFocus
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                      <button
+                        type="button"
+                        onClick={() => { setPhysicalWeekBuilderOpen(false); setPhysicalGroupName(''); setPhysicalGroupError(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
                       <button
                         type="button"
                         onClick={() => void addPhysicalReportGroup()}
                         disabled={physicalSavingWeekGroup}
-                        className="rounded-lg border border-indigo-200 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                        className="rounded-lg border border-indigo-200 bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                       >
-                        {physicalSavingWeekGroup ? 'Creating...' : 'Create Week'}
+                        {physicalSavingWeekGroup ? 'Creating…' : 'Create Group'}
                       </button>
                     </div>
                   </div>
-                  <p className="text-[11px] text-indigo-800/80">
-                    After creating a week, go to <span className="font-semibold">Attendance Sessions (Class Level)</span> and use the <span className="font-semibold">Week Assign</span> dropdown in each row.
-                  </p>
-
-                  {physicalReportGroups.length > 0 && (
-                    <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 space-y-2">
-                      <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide">
-                        Delete Week Group (will unassign linked sessions)
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {physicalReportGroups.map((group) => (
-                          <button
-                            key={`delete-week-${group.id}`}
-                            type="button"
-                            onClick={() => void removePhysicalReportGroup(group.id)}
-                            disabled={physicalDeletingWeekId === group.id}
-                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            {physicalDeletingWeekId === group.id ? 'Deleting...' : `Delete ${group.name}`}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 

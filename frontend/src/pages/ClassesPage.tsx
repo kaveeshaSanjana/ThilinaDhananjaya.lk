@@ -6,11 +6,15 @@ import api from '../lib/api';
 import { getInstitutePath } from '../lib/instituteRoutes';
 
 const statusConfig: Record<string, { label: string; class: string }> = {
-  PUBLIC: { label: 'Public', class: 'badge-public' },
-  PRIVATE: { label: 'Private', class: 'badge-private' },
-  STUDENT_ONLY: { label: 'Students', class: 'badge-student' },
-  PAID_STUDENT_ONLY: { label: 'Paid', class: 'badge-paid' },
-  ACTIVE: { label: 'Active', class: 'badge-public' },
+  PUBLIC:           { label: 'Public',        class: 'badge-public' },
+  ANYONE:           { label: 'Public',        class: 'badge-public' },
+  STUDENTS_ONLY:    { label: 'Students',      class: 'badge-student' },
+  ENROLLED_ONLY:    { label: 'Enrolled Only', class: 'bg-amber-100 text-amber-700 border border-amber-300' },
+  PAID_ONLY:        { label: 'Paid',          class: 'badge-paid' },
+  PRIVATE:          { label: 'Private',       class: 'badge-private' },
+  STUDENT_ONLY:     { label: 'Students',      class: 'badge-student' },
+  PAID_STUDENT_ONLY:{ label: 'Paid',          class: 'badge-paid' },
+  ACTIVE:           { label: 'Active',        class: 'badge-public' },
 };
 
 const gradients = [
@@ -34,8 +38,8 @@ export default function ClassesPage() {
   useEffect(() => {
     api.get('/classes').then(r => {
       const visible = (r.data || []).filter((c: any) => {
-        if (user) return !['INACTIVE'].includes(c.status);
-        return !['INACTIVE', 'PRIVATE'].includes(c.status);
+        if (user) return !['INACTIVE', 'PRIVATE'].includes(c.status);
+        return !['INACTIVE', 'PRIVATE', 'STUDENTS_ONLY', 'ENROLLED_ONLY', 'PAID_ONLY'].includes(c.status);
       });
       setClasses(visible);
     }).catch(() => {}).finally(() => setLoading(false));

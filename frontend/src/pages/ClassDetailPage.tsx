@@ -16,7 +16,7 @@ function fmtDateFull(d: string | Date) {
 }
 
 function statusRank(status: string): number {
-  const ranks: Record<string, number> = { ANYONE: 0, STUDENTS_ONLY: 1, PAID_ONLY: 2, PRIVATE: 3, INACTIVE: 4 };
+  const ranks: Record<string, number> = { ANYONE: 0, STUDENTS_ONLY: 1, ENROLLED_ONLY: 1, PAID_ONLY: 2, PRIVATE: 3, INACTIVE: 4 };
   return ranks[status] ?? 4;
 }
 
@@ -28,7 +28,7 @@ const VIDEO_TYPE_CFG: Record<string, { label: string; color: string; icon: strin
 };
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
+const VISIBILITY_OPTIONS = ['ANYONE', 'STUDENTS_ONLY', 'ENROLLED_ONLY', 'PAID_ONLY', 'PRIVATE', 'INACTIVE'];
 
 const monthGradients = [
   'from-blue-500 to-indigo-600',
@@ -226,6 +226,9 @@ export default function ClassDetailPage() {
   const [monthSaving, setMonthSaving] = useState(false);
   const [monthError, setMonthError] = useState('');
 
+  // Enrollment access gate for ENROLLED_ONLY classes
+  const [isEnrolled, setIsEnrolled] = useState<boolean | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -247,6 +250,17 @@ export default function ClassDetailPage() {
     };
     fetchData();
   }, [id, token]);
+
+  // Check enrollment when class is ENROLLED_ONLY and user is logged in
+  useEffect(() => {
+    if (!classData || !id) return;
+    if (classData.status !== 'ENROLLED_ONLY') { setIsEnrolled(null); return; }
+    if (user?.role === 'ADMIN') { setIsEnrolled(true); return; }
+    if (!token) { setIsEnrolled(false); return; }
+    api.get(`/classes/${id}/check-access`)
+      .then(r => setIsEnrolled(r.data.enrolled))
+      .catch(() => setIsEnrolled(false));
+  }, [classData, id, user, token]);
 
   const reloadMonths = async () => {
     try {
@@ -337,6 +351,54 @@ export default function ClassDetailPage() {
   );
 
   const classStatus = classData?.status || 'ANYONE';
+
+  // ENROLLED_ONLY gate: check in progress
+  if (classStatus === 'ENROLLED_ONLY' && isEnrolled === null && token) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 rounded-full border-[3px] border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  // ENROLLED_ONLY gate: not logged in
+  if (classStatus === 'ENROLLED_ONLY' && !token) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center bg-white rounded-2xl border border-slate-100 p-12 shadow-sm">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-bold text-slate-800 mb-2">Enrolled Students Only</h2>
+        <p className="text-slate-500 text-sm mb-6">This class is restricted to enrolled students. Please sign in to access it.</p>
+        <button onClick={() => navigate('/login')} className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:opacity-90 transition">
+          Sign In
+        </button>
+        <Link to="/classes" className="mt-4 block text-sm text-slate-400 hover:text-slate-600 transition">Back to classes</Link>
+      </div>
+    );
+  }
+
+  // ENROLLED_ONLY gate: logged in but not enrolled
+  if (classStatus === 'ENROLLED_ONLY' && isEnrolled === false) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center bg-white rounded-2xl border border-slate-100 p-12 shadow-sm">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-bold text-slate-800 mb-2">Not Enrolled in This Class</h2>
+        <p className="text-slate-500 text-sm mb-2">This class is only accessible to enrolled students.</p>
+        <p className="text-slate-400 text-xs mb-6">Please contact your instructor to get enrolled.</p>
+        <Link to="/classes" className="inline-flex items-center gap-1.5 text-sm text-blue-600 font-semibold hover:text-blue-700">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back to classes
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-6 animate-fade-in">

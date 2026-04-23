@@ -395,3 +395,19 @@ export class UpdateClassAttendanceSessionWeekDto {
   @IsNotEmpty()
   weekId?: string;
 }
+
+export class UpdateClassAttendanceSessionMetaDto {
+  @IsOptional()
+  @IsString()
+  sessionCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'sessionTime must be HH:mm' })
+  sessionTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'sessionEndTime must be HH:mm' })
+  sessionEndTime?: string;
+}

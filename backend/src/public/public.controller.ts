@@ -239,6 +239,64 @@ class PublicBulkImportAttendanceByInstituteIdDto {
   records: PublicBulkImportAttendanceByInstituteIdItemDto[];
 }
 
+class PublicSessionAttendanceCheckDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  instituteId: string;
+
+  @IsOptional()
+  @IsString()
+  classId?: string;
+
+  @IsDateString()
+  checkInAt: string; // ISO datetime of student check-in
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string; // ISO datetime of student check-out
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+class PublicBulkSessionAttendanceCheckDto {
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  classId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => PublicSessionAttendanceCheckItemDto)
+  records: PublicSessionAttendanceCheckItemDto[];
+}
+
+class PublicSessionAttendanceCheckItemDto {
+  @IsString()
+  @IsNotEmpty()
+  studentInstituteId: string;
+
+  @IsDateString()
+  checkInAt: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOutAt?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 class PublicBulkRegisterStudentDto {
   @IsArray()
   @ArrayMinSize(1)
@@ -547,6 +605,53 @@ export class PublicController {
 
     return {
       message: 'Bulk attendance import processed',
+      ...result,
+    };
+  }
+
+  /**
+   * Public endpoint for session attendance checking:
+   * Check and record a single student's attendance with time validation.
+   * Validates that check-in/check-out times are within or match the session time window.
+   */
+  @Post('attendance/session/check')
+  @HttpCode(HttpStatus.OK)
+  async checkSessionAttendance(@Body() body: PublicSessionAttendanceCheckDto) {
+    const result = await this.attendanceService.recordSessionAttendanceWithTimeCheck({
+      sessionId: body.sessionId,
+      classId: body.classId,
+      instituteId: body.instituteId,
+      checkInAt: body.checkInAt,
+      checkOutAt: body.checkOutAt,
+      note: body.note,
+    });
+
+    return {
+      message: 'Session attendance recorded successfully',
+      ...result,
+    };
+  }
+
+  /**
+   * Public endpoint for bulk session attendance checking:
+   * Record multiple students' attendance for a session with time validation.
+   */
+  @Post('attendance/session/bulk-check')
+  @HttpCode(HttpStatus.OK)
+  async checkBulkSessionAttendance(@Body() body: PublicBulkSessionAttendanceCheckDto) {
+    const result = await this.attendanceService.recordBulkSessionAttendanceWithTimeCheck({
+      sessionId: body.sessionId,
+      classId: body.classId,
+      records: body.records.map(r => ({
+        studentInstituteId: r.studentInstituteId,
+        checkInAt: r.checkInAt,
+        checkOutAt: r.checkOutAt,
+        note: r.note,
+      })),
+    });
+
+    return {
+      message: 'Bulk session attendance recorded successfully',
       ...result,
     };
   }

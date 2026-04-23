@@ -1,110 +1,46 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, renameSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const scriptDir = dirname(scriptPath);
-const frontendRoot = resolve(scriptDir, '..');
-const landingDist = resolve(frontendRoot, 'landing', 'dist');
-const targetDir = resolve(frontendRoot, 'dist');
-const landingFolder = resolve(targetDir, 'landing');
-const landingSiteFolder = resolve(targetDir, 'landing-site');
-
-function normalizeToRelativeAssets(htmlContent) {
-  return htmlContent
-    .replace(/<base[^>]*>/gi, '')
-    .replace(/src="\/(landing-site|landing)\/assets\//g, 'src="./assets/')
-    .replace(/href="\/(landing-site|landing)\/assets\//g, 'href="./assets/')
-    .replace(/src="\/assets\//g, 'src="./assets/')
-    .replace(/href="\/assets\//g, 'href="./assets/')
-    .replace(/src="assets\//g, 'src="./assets/')
-    .replace(/href="assets\//g, 'href="./assets/');
-}
-
-function normalizeToRootAssets(htmlContent) {
-  return htmlContent
-    .replace(/<base[^>]*>/gi, '')
-    .replace(/src="\.(\/)?assets\//g, 'src="/assets/')
-    .replace(/href="\.(\/)?assets\//g, 'href="/assets/')
-    .replace(/src="\/(landing-site|landing)\/assets\//g, 'src="/assets/')
-    .replace(/href="\/(landing-site|landing)\/assets\//g, 'href="/assets/')
-    .replace(/src="assets\//g, 'src="/assets/')
-    .replace(/href="assets\//g, 'href="/assets/');
-}
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const root = resolve(scriptDir, '..');
+const landingDist = resolve(root, 'landing', 'dist');
+const appDist = resolve(root, 'dist');
 
 if (!existsSync(landingDist)) {
-  throw new Error(`Standalone landing build not found at: ${landingDist}`);
+  throw new Error(`Landing build not found at: ${landingDist}\nRun: npm --prefix landing run build:embed`);
 }
 
-console.log('Landing dist path:', landingDist);
-console.log('Target dir path:', targetDir);
-console.log('Landing folder path:', landingFolder);
-console.log('Landing site folder path:', landingSiteFolder);
+// 1. Rename LMS index.html → app.html so nginx can serve them independently
+const appIndex = resolve(appDist, 'index.html');
+const appHtml  = resolve(appDist, 'app.html');
+if (!existsSync(appIndex)) throw new Error(`LMS build not found at: ${appIndex}`);
+renameSync(appIndex, appHtml);
+console.log('✓ Renamed dist/index.html → dist/app.html (LMS entry point)');
 
-// Create landing folder structures for compatibility URLs
-mkdirSync(landingFolder, { recursive: true });
-mkdirSync(landingSiteFolder, { recursive: true });
-
-// Copy landing assets to /dist/landing/assets
+// 2. Merge landing assets into dist/assets/ (hashed filenames never collide)
 const landingAssets = resolve(landingDist, 'assets');
-const landingTargetAssets = resolve(landingFolder, 'assets');
-const landingSiteTargetAssets = resolve(landingSiteFolder, 'assets');
 if (existsSync(landingAssets)) {
-  mkdirSync(landingTargetAssets, { recursive: true });
-  mkdirSync(landingSiteTargetAssets, { recursive: true });
-  cpSync(landingAssets, landingTargetAssets, { recursive: true });
-  cpSync(landingAssets, landingSiteTargetAssets, { recursive: true });
-  console.log('✓ Copied landing assets to /dist/landing/assets');
-  console.log('✓ Copied landing assets to /dist/landing-site/assets');
+  const dest = resolve(appDist, 'assets');
+  mkdirSync(dest, { recursive: true });
+  cpSync(landingAssets, dest, { recursive: true });
+  console.log('✓ Merged landing assets → dist/assets/');
 }
 
-// Also merge landing assets to /dist/assets for app
-const targetAssets = resolve(targetDir, 'assets');
-if (existsSync(landingAssets)) {
-  mkdirSync(targetAssets, { recursive: true });
-  cpSync(landingAssets, targetAssets, { recursive: true });
-  console.log('✓ Merged landing assets to /dist/assets');
-}
-
-// Copy landing index.html to /dist/landing/index.html
+// 3. Copy landing index.html → dist/index.html (served at /)
 const landingIndex = resolve(landingDist, 'index.html');
-const landingIndexDest = resolve(landingFolder, 'index.html');
-const landingSiteIndexDest = resolve(landingSiteFolder, 'index.html');
-if (existsSync(landingIndex)) {
-  const htmlContent = normalizeToRelativeAssets(readFileSync(landingIndex, 'utf-8'))
-    .replace(/href="\/favicon/g, 'href="/favicon');
-  
-  writeFileSync(landingIndexDest, htmlContent);
-  writeFileSync(landingSiteIndexDest, htmlContent);
-  console.log('✓ Copied and updated landing index.html to /dist/landing/');
-  console.log('✓ Copied and updated landing index.html to /dist/landing-site/');
-}
+const destIndex    = resolve(appDist, 'index.html');
+writeFileSync(destIndex, readFileSync(landingIndex, 'utf-8'));
+console.log('✓ Copied landing index.html → dist/index.html');
 
-// Also keep a copy as landing-page.html at root for iframe
-const targetLandingPage = resolve(targetDir, 'landing-page.html');
-if (existsSync(landingIndex)) {
-  const htmlContent = normalizeToRootAssets(readFileSync(landingIndex, 'utf-8'));
-  
-  writeFileSync(targetLandingPage, htmlContent);
-  console.log('✓ Created landing-page.html with /assets/ paths');
+// 4. Copy public files (favicon etc.) next to landing index
+const publicDir = resolve(root, 'public');
+for (const file of ['favicon.ico', 'robots.txt', 'icons.svg', 'placeholder.svg']) {
+  const src = resolve(publicDir, file);
+  if (existsSync(src)) cpSync(src, resolve(appDist, file));
 }
+console.log('✓ Synced public files to dist/');
 
-// Copy public files to landing folder
-const publicDir = resolve(frontendRoot, 'public');
-if (existsSync(publicDir)) {
-  const publicFiles = ['favicon.ico', 'robots.txt', 'icons.svg', 'placeholder.svg'];
-  for (const file of publicFiles) {
-    const srcFile = resolve(publicDir, file);
-    if (existsSync(srcFile)) {
-      cpSync(srcFile, resolve(landingFolder, file));
-      cpSync(srcFile, resolve(landingSiteFolder, file));
-    }
-  }
-  console.log('✓ Synced public files to /dist/landing/ and /dist/landing-site/');
-}
-
-console.log(`✓ Build complete! Landing accessible at:`)
-console.log(`  - / (through app route rendering /landing-page.html)`)
-console.log(`  - /landing-page.html (root static landing HTML)`)
-console.log(`  - /landing/ and /landing-site/ (compatibility paths)`)
-console.log(`  - /assets/ (merged assets for main app)`);
+console.log('\nBuild complete:');
+console.log('  /             → dist/index.html  (landing site)');
+console.log('  /login, etc.  → dist/app.html    (LMS SPA)');
