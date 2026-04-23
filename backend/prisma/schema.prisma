@@ -40,6 +40,7 @@ enum MonthStatus {
 enum ClassStatus {
   ANYONE
   STUDENTS_ONLY
+  ENROLLED_ONLY
   PAID_ONLY
   PRIVATE
   INACTIVE

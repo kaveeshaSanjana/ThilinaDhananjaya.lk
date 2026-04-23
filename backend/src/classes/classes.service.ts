@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+
 @Injectable()
 export class ClassesService {
   constructor(private prisma: PrismaService) {}
@@ -43,6 +44,19 @@ export class ClassesService {
 
   async deleteClass(id: string) {
     return this.prisma.class.delete({ where: { id } });
+  }
+
+  /** Check if a user is enrolled in an ENROLLED_ONLY class */
+  async checkClassAccess(classId: string, userId: string): Promise<{ enrolled: boolean }> {
+    const cls = await this.prisma.class.findUnique({ where: { id: classId }, select: { status: true } });
+    if (!cls) throw new NotFoundException('Class not found');
+    if (cls.status !== 'ENROLLED_ONLY') return { enrolled: true };
+
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { userId_classId: { userId, classId } },
+      select: { id: true },
+    });
+    return { enrolled: !!enrollment };
   }
 
   /** Get all recordings for a class (aggregated from all months) */
