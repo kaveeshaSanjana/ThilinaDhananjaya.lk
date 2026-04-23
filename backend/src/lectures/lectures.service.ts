@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { randomBytes } from 'crypto';
 
-type LectureStatus = 'ANYONE' | 'STUDENTS_ONLY' | 'PAID_ONLY' | 'PRIVATE' | 'INACTIVE';
+type LectureStatus = 'ANYONE' | 'STUDENTS_ONLY' | 'ENROLLED_ONLY' | 'PAID_ONLY' | 'PRIVATE' | 'INACTIVE';
 type LectureMode = 'ONLINE' | 'OFFLINE';
 
 @Injectable()
@@ -92,7 +92,7 @@ export class LecturesService {
 
     const statusFilter = userRole === 'ADMIN'
       ? { not: 'INACTIVE' as LectureStatus }
-      : { in: ['ANYONE', 'STUDENTS_ONLY', 'PAID_ONLY'] as LectureStatus[] };
+      : { in: ['ANYONE', 'STUDENTS_ONLY', 'ENROLLED_ONLY', 'PAID_ONLY'] as LectureStatus[] };
 
     const rawLectures = await this.db.lecture.findMany({
       where: { monthId, status: statusFilter },
@@ -240,6 +240,29 @@ export class LecturesService {
     return safe;
   }
 
+  /** Authenticated: check if user can access an ENROLLED_ONLY lecture */
+  async checkLectureAccess(token: string, userId: string): Promise<{ enrolled: boolean }> {
+    const lecture = await this.db.lecture.findUnique({
+      where: { liveToken: token },
+      include: {
+        month: {
+          select: { class: { select: { id: true } } },
+        },
+      },
+    });
+    if (!lecture) throw new NotFoundException('Invalid or expired live link.');
+    if (lecture.status !== 'ENROLLED_ONLY') return { enrolled: true };
+
+    const classId = lecture.month?.class?.id;
+    if (!classId) return { enrolled: true };
+
+    const enrollment = await this.db.enrollment.findUnique({
+      where: { userId_classId: { userId, classId } },
+      select: { id: true },
+    });
+    return { enrolled: !!enrollment };
+  }
+
   /** Authenticated: mark attendance and return sessionLink */
   async joinByLiveToken(token: string, userId: string) {
     const lecture = await this.db.lecture.findUnique({
@@ -256,6 +279,18 @@ export class LecturesService {
     if (!lecture) throw new NotFoundException('Invalid or expired live link.');
 
     const classId = lecture.month?.class?.id;
+
+    // ENROLLED_ONLY: only students enrolled in this specific class may join
+    if (lecture.status === 'ENROLLED_ONLY' && classId) {
+      const enrollment = await this.db.enrollment.findUnique({
+        where: { userId_classId: { userId, classId } },
+        select: { id: true },
+      });
+      if (!enrollment) {
+        throw new ForbiddenException('You are not enrolled in this class. Please enroll to join this lecture.');
+      }
+    }
+
     if (classId) {
       // Upsert ClassAttendance for today (date-only, UTC midnight)
       const today = new Date();

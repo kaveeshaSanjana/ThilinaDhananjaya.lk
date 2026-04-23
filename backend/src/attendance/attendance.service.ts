@@ -908,7 +908,7 @@ export class AttendanceService {
     },
   ) {
     const dateObj = this.normalizeClassAttendanceDate(data.date);
-    const { sessionTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
+    const { sessionTime, sessionEndTime, sessionCode, sessionAt, checkInAt, checkOutAt } = this.normalizeSessionMeta(data);
     const normalizedStatus = this.normalizeClassAttendanceStatus(data.status);
 
     return this.prisma.classAttendance.upsert({
@@ -925,6 +925,7 @@ export class AttendanceService {
         method: data.method || undefined,
         note: data.note || undefined,
         markedBy: data.markedBy || undefined,
+        sessionEndTime: sessionEndTime || undefined,
         sessionCode: sessionCode || undefined,
         sessionAt: sessionAt || undefined,
         checkInAt: checkInAt || undefined,
@@ -935,6 +936,7 @@ export class AttendanceService {
         classId: data.classId,
         date: dateObj,
         sessionTime,
+        sessionEndTime,
         sessionCode,
         sessionAt,
         checkInAt,
@@ -1500,6 +1502,7 @@ export class AttendanceService {
             method: data.method || undefined,
             note: rec.note || undefined,
             markedBy: data.markedBy || undefined,
+            sessionEndTime: sessionEndTime || undefined,
             sessionCode: sessionCode || undefined,
             sessionAt: sessionAt || undefined,
             checkInAt: checkInAt || undefined,
@@ -1510,6 +1513,7 @@ export class AttendanceService {
             classId: data.classId,
             date: dateObj,
             sessionTime,
+            sessionEndTime,
             sessionCode,
             sessionAt,
             checkInAt,
@@ -2536,6 +2540,7 @@ export class AttendanceService {
         classId,
         date: dateObj,
         sessionTime,
+        sessionEndTime,
         sessionCode: sessionCode || 'AUTO_CLOSE',
         sessionAt: sessionAt || null,
         checkInAt: checkInAt || null,

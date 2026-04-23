@@ -166,6 +166,9 @@ export default function LectureLiveJoinPage() {
   const [stepError, setStepError] = useState('');
   const [useOtherAccount, setUseOtherAccount] = useState(false);
 
+  // Enrollment check for ENROLLED_ONLY lectures
+  const [isEnrolled, setIsEnrolled] = useState<boolean | null>(null);
+
   type Step = 'idle' | 'signing-in' | 'joining' | 'done';
   const [step, setStep] = useState<Step>('idle');
 
@@ -197,6 +200,21 @@ export default function LectureLiveJoinPage() {
     }
     setJoinMode('account');
   }, [lecture, user]);
+
+  // Check enrollment for ENROLLED_ONLY lectures once user + lecture are known
+  useEffect(() => {
+    if (!lecture || !token || lecture.status !== 'ENROLLED_ONLY') {
+      setIsEnrolled(null);
+      return;
+    }
+    if (!user) {
+      setIsEnrolled(null);
+      return;
+    }
+    api.get(`/lectures/live/${token}/check-access`)
+      .then(r => setIsEnrolled(r.data.enrolled))
+      .catch(() => setIsEnrolled(false));
+  }, [lecture, user, token]);
 
   // ── Core join call ────────────────────────────────────
   const doJoin = useCallback(async (skipWelcome = false) => {
@@ -542,32 +560,58 @@ export default function LectureLiveJoinPage() {
                     </div>
                   </div>
 
+                  {/* ENROLLED_ONLY: enrollment check loading */}
+                  {lecture.status === 'ENROLLED_ONLY' && isEnrolled === null && (
+                    <div className="flex items-center justify-center gap-2 py-2 text-slate-500 text-sm">
+                      <svg className="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Checking enrollment…
+                    </div>
+                  )}
+
+                  {/* ENROLLED_ONLY: not enrolled — block join */}
+                  {lecture.status === 'ENROLLED_ONLY' && isEnrolled === false && (
+                    <div className="px-4 py-4 rounded-2xl bg-amber-50 border-2 border-amber-200 text-center space-y-2">
+                      <svg className="w-8 h-8 text-amber-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      </svg>
+                      <p className="font-bold text-amber-800 text-sm">Not enrolled in this class</p>
+                      <p className="text-amber-700 text-xs leading-relaxed">This lecture is only available to students enrolled in the class. Please contact your instructor to get enrolled.</p>
+                    </div>
+                  )}
+
                   {stepError && (
                     <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600">{stepError}</div>
                   )}
 
-                  {/* Join with welcome message */}
-                  <button
-                    onClick={() => doJoin(false)}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-sm hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
-                  >
-                    <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Yes, that's me — Join Lecture
-                  </button>
+                  {/* Join buttons — only show if not ENROLLED_ONLY, or if enrolled */}
+                  {(lecture.status !== 'ENROLLED_ONLY' || isEnrolled === true) && (
+                    <>
+                      {/* Join with welcome message */}
+                      <button
+                        onClick={() => doJoin(false)}
+                        className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-sm hover:from-blue-700 hover:to-blue-800 transition shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2.5"
+                      >
+                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Yes, that's me — Join Lecture
+                      </button>
 
-                  {/* Direct join (skip welcome message) */}
-                  <button
-                    onClick={() => doJoin(true)}
-                    className="w-full py-3 rounded-2xl border-2 border-blue-200 text-blue-700 font-semibold text-sm hover:bg-blue-50 transition flex items-center justify-center gap-2"
-                  >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Join Directly (skip welcome message)
-                    </button>
-
+                      {/* Direct join (skip welcome message) */}
+                      <button
+                        onClick={() => doJoin(true)}
+                        className="w-full py-3 rounded-2xl border-2 border-blue-200 text-blue-700 font-semibold text-sm hover:bg-blue-50 transition flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Join Directly (skip welcome message)
+                      </button>
+                    </>
+                  )}
 
                   <button
                     onClick={() => { setUseOtherAccount(true); setStepError(''); }}

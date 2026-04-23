@@ -8,7 +8,7 @@ import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/guards/jwt-auth.guar
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
-type LectureStatus = 'ANYONE' | 'STUDENTS_ONLY' | 'PAID_ONLY' | 'PRIVATE' | 'INACTIVE';
+type LectureStatus = 'ANYONE' | 'STUDENTS_ONLY' | 'ENROLLED_ONLY' | 'PAID_ONLY' | 'PRIVATE' | 'INACTIVE';
 
 @Controller('lectures')
 export class LecturesController {
@@ -68,6 +68,13 @@ export class LecturesController {
   @Get('live/:token')
   findByLiveToken(@Param('token') token: string) {
     return this.lecturesService.findByLiveToken(token);
+  }
+
+  /** Authenticated: check enrollment access (ENROLLED_ONLY guard) */
+  @UseGuards(JwtAuthGuard)
+  @Get('live/:token/check-access')
+  checkLectureAccess(@Param('token') token: string, @Request() req: any) {
+    return this.lecturesService.checkLectureAccess(token, req.user.sub);
   }
 
   /** Authenticated: join via live token → mark attendance, return sessionLink */
