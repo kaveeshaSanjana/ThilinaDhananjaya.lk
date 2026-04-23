@@ -740,10 +740,18 @@ export class AttendanceService {
     throw new BadRequestException('status must be PRESENT, ABSENT, LATE, EXCUSED, or NOTMARKED');
   }
 
+  // Treat datetime strings without a timezone offset as Sri Lanka local time (UTC+5:30).
+  // Devices and manual inputs submit naive strings like "2026-04-23T02:00:00"; without this
+  // Node.js interprets them as UTC, causing a +5:30 shift on the frontend display.
+  private parseSriLankaDateTime(str: string): Date {
+    const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(str.trim());
+    return new Date(hasOffset ? str : `${str}+05:30`);
+  }
+
   private resolveSessionAt(date: string, sessionTime: string, sessionAt?: string): Date | null {
     const raw = (sessionAt || '').trim();
     if (raw) {
-      const parsed = new Date(raw);
+      const parsed = this.parseSriLankaDateTime(raw);
       if (Number.isNaN(parsed.getTime())) {
         throw new BadRequestException('Invalid sessionAt');
       }
@@ -751,7 +759,7 @@ export class AttendanceService {
     }
 
     if (sessionTime === '00:00') return null;
-    const parsed = new Date(`${date}T${sessionTime}:00`);
+    const parsed = new Date(`${date}T${sessionTime}:00+05:30`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
@@ -779,7 +787,7 @@ export class AttendanceService {
       }
       checkOutAt = parsed;
     } else if (sessionEndTime) {
-      const parsed = new Date(`${data.date}T${sessionEndTime}:00`);
+      const parsed = new Date(`${data.date}T${sessionEndTime}:00+05:30`);
       if (!Number.isNaN(parsed.getTime())) {
         checkOutAt = parsed;
       }
@@ -1247,8 +1255,7 @@ export class AttendanceService {
           if (rowCheckInTime === '00:00') {
             rowSessionAtIso = new Date().toISOString();
           } else {
-            // Store checkInTime as-is without timezone conversion
-            const parsed = new Date(`${rowDate}T${rowCheckInTime}:00`);
+            const parsed = new Date(`${rowDate}T${rowCheckInTime}:00+05:30`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkInTime');
             }
@@ -1270,8 +1277,7 @@ export class AttendanceService {
             : (session.sessionEndTime || null);
 
           if (normalizedRowCheckOutTime) {
-            // Store checkOutTime as-is without timezone conversion
-            const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00`);
+            const parsed = new Date(`${rowDate}T${normalizedRowCheckOutTime}:00+05:30`);
             if (Number.isNaN(parsed.getTime())) {
               throw new BadRequestException('Invalid checkOutTime');
             }
@@ -3069,15 +3075,15 @@ export class AttendanceService {
     // Verify student is enrolled
     await this.assertStudentEnrolledForSessionClass(profile.userId, session.classId);
 
-    // Parse check-in and check-out times
-    const checkInDate = new Date(data.checkInAt);
+    // Parse check-in and check-out times (treat naive strings as Sri Lanka local time)
+    const checkInDate = this.parseSriLankaDateTime(data.checkInAt);
     if (Number.isNaN(checkInDate.getTime())) {
       throw new BadRequestException('Invalid checkInAt datetime');
     }
 
     let checkOutDate: Date | null = null;
     if (data.checkOutAt) {
-      checkOutDate = new Date(data.checkOutAt);
+      checkOutDate = this.parseSriLankaDateTime(data.checkOutAt);
       if (Number.isNaN(checkOutDate.getTime())) {
         throw new BadRequestException('Invalid checkOutAt datetime');
       }
@@ -3089,9 +3095,9 @@ export class AttendanceService {
     }
 
     // Validate against session time window
-    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00`);
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00+05:30`);
     const sessionEndTime = session.sessionEndTime
-      ? new Date(`${session.date}T${session.sessionEndTime}:00`)
+      ? new Date(`${session.date}T${session.sessionEndTime}:00+05:30`)
       : null;
 
     const timeCheckResult = this.validateTimeAgainstSession({
@@ -3182,9 +3188,9 @@ export class AttendanceService {
       reason: string;
     }> = [];
 
-    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00`);
+    const sessionStartTime = new Date(`${session.date}T${session.sessionTime}:00+05:30`);
     const sessionEndTime = session.sessionEndTime
-      ? new Date(`${session.date}T${session.sessionEndTime}:00`)
+      ? new Date(`${session.date}T${session.sessionEndTime}:00+05:30`)
       : null;
 
     for (let i = 0; i < data.records.length; i += 1) {
@@ -3208,14 +3214,14 @@ export class AttendanceService {
           throw new BadRequestException('checkInAt is required');
         }
 
-        const checkInDate = new Date(checkInAtRaw);
+        const checkInDate = this.parseSriLankaDateTime(checkInAtRaw);
         if (Number.isNaN(checkInDate.getTime())) {
           throw new BadRequestException('Invalid checkInAt datetime');
         }
 
         let checkOutDate: Date | null = null;
         if (row.checkOutAt) {
-          checkOutDate = new Date(row.checkOutAt);
+          checkOutDate = this.parseSriLankaDateTime(row.checkOutAt);
           if (Number.isNaN(checkOutDate.getTime())) {
             throw new BadRequestException('Invalid checkOutAt datetime');
           }
