@@ -12,6 +12,7 @@ interface AttendanceRecord {
   status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED';
   method: string | null;
   note: string | null;
+  weekName?: string | null;
 }
 
 interface ClassAttendanceSummary {
@@ -202,12 +203,14 @@ function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
                     const hasSession = group.records.some(r => Boolean(r.sessionTime && r.sessionTime !== '00:00'));
                     const hasCheckIn = group.records.some(r => Boolean(r.checkInAt));
                     const hasCheckOut = group.records.some(r => Boolean(r.checkOutAt));
+                    const hasWeek = group.records.some(r => Boolean(r.weekName));
                     return (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="bg-[hsl(var(--muted)/0.25)]">
                               <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Date</th>
+                              {hasWeek && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Week</th>}
                               {hasSession && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Session</th>}
                               {hasCheckIn && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Check In</th>}
                               {hasCheckOut && <th className="px-5 py-2.5 text-left text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Check Out</th>}
@@ -222,6 +225,13 @@ function ClassCard({ entry }: { entry: ClassAttendanceEntry }) {
                               return (
                                 <tr key={rec.id} className="hover:bg-[hsl(var(--muted)/0.3)] transition">
                                   <td className="px-5 py-3 text-sm font-medium text-[hsl(var(--foreground))] whitespace-nowrap">{fmtDate(rec.date)}</td>
+                                  {hasWeek && (
+                                    <td className="px-5 py-3 whitespace-nowrap">
+                                      {rec.weekName
+                                        ? <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700">{rec.weekName}</span>
+                                        : <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>}
+                                    </td>
+                                  )}
                                   {hasSession && (
                                     <td className="px-5 py-3 text-sm font-semibold text-[hsl(var(--foreground))] whitespace-nowrap">
                                       {getSessionLabel(rec)}

@@ -3,6 +3,7 @@ import easyEnglishPdfHeader from '../assets/easy-english-pdf-header.png';
 import notoSansSinhalaUrl from '../assets/fonts/NotoSansSinhala.ttf?url';
 import attendanceBannerUrl from '../assets/banners/pycycleattendancebanner.png?url';
 import recordingBannerUrl from '../assets/banners/recordinghistorybanner.png?url';
+import liveClassBannerUrl from '../assets/banners/liveclassbanner.png?url';
 import footerBannerUrl from '../assets/banners/footer.png?url';
 
 export type RecordingReportMode = 'SUMMARY' | 'FULL';
@@ -25,6 +26,7 @@ export interface StudentClassReportPayload {
     includePayments: boolean;
     includePhysicalAttendance: boolean;
     includeRecordingAttendance: boolean;
+    includeLiveAttendance: boolean;
     recordingMode: RecordingReportMode;
   };
   payments?: {
@@ -39,8 +41,19 @@ export interface StudentClassReportPayload {
     weekGroupOrder?: string[];
   };
   recordingAttendance?: {
-    summaryRows: Array<{ title: string; month: string; sessions: number; watchedSec: number; lastWatchedAt?: string | null }>;
+    summaryRows: Array<{
+      title: string;
+      month: string;
+      sessions: number;
+      watchedSec: number;
+      sessionTimeSec: number;
+      videoDuration: number | null;
+      lastWatchedAt?: string | null;
+    }>;
     sessionRows: Array<{ title: string; startedAt?: string; endedAt?: string | null; watchedSec: number; status: string }>;
+  };
+  liveAttendance?: {
+    rows: Array<{ title: string; liveDate: string | null; status: string; joinedAt: string | null }>;
   };
 }
 
@@ -83,9 +96,10 @@ async function registerSinhalaFont(doc: any): Promise<boolean> {
 // ─── Table Column Labels ──────────────────────────────────────────────────────
 const TABLE_LABELS = {
   month: 'Month', status: 'Status', slips: 'Slips', latestSlip: 'Latest Slip',
-  date: 'Date', session: 'Session', time: 'Time',
-  recordingTitle: 'Recording', sessions: 'Sessions', watchedTime: 'Watched',
-  lastWatch: 'Last Watched', started: 'Started', ended: 'Ended', watched: 'Watched',
+  date: 'Date', session: 'Session', time: 'Time', week: 'Week',
+  recordingTitle: 'Video', videoDuration: 'Video Time', watchedTime: 'Watched', engagingTime: 'Engaging Time',
+  sessions: 'Sessions', lastWatch: 'Last Watched', started: 'Started', ended: 'Ended', watched: 'Watched',
+  liveClass: 'Live Class', liveDate: 'Date', liveStatus: 'Status', liveTime: 'Time',
 } as const;
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -205,7 +219,11 @@ async function loadImage(rawUrl?: string | null): Promise<{ dataUrl: string; for
     if (/^data:image\//i.test(resolved))
       return { dataUrl: resolved, format: resolved.toLowerCase().startsWith('data:image/png') ? 'PNG' : 'JPEG' };
     const targetUrl = new URL(resolved, window.location.origin);
-    if (targetUrl.origin !== window.location.origin) return null;
+    // Allow both the frontend origin and the API server origin (avatars are served from the API host)
+    const apiBase = typeof api.defaults.baseURL === 'string' ? api.defaults.baseURL : '';
+    let apiOrigin = window.location.origin;
+    if (/^https?:\/\//i.test(apiBase)) { try { apiOrigin = new URL(apiBase).origin; } catch { /**/ } }
+    if (targetUrl.origin !== window.location.origin && targetUrl.origin !== apiOrigin) return null;
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 8000);
     const response = await fetch(targetUrl.toString(), { credentials: 'include', signal: controller.signal, headers: { Accept: 'image/*' } });
@@ -293,6 +311,8 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     tblPhy:    [109, 40, 217] as RGB,
     tblRec:    [180, 95, 6]   as RGB,
     tblDet:    [109, 40, 217] as RGB,
+    tblLive:   [220, 38, 38]  as RGB,
+    secLive:   [185, 28, 28]  as RGB,
     textDark:  [12, 18, 50]   as RGB,
     textMuted: [90, 108, 138] as RGB,
     textLight: [148, 163, 192] as RGB,
@@ -313,16 +333,18 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     letterheadImage,
     attendanceBanner,
     recordingBanner,
+    liveClassBanner,
     footerBanner,
   ] = await Promise.all([
     loadImage(payload.student.avatarUrl),
     loadImage(preferredLetterheadUrl),
-    payload.options.includePhysicalAttendance  ? loadBannerAsset(attendanceBannerUrl, bannerW) : Promise.resolve(null as BannerAsset | null),
-    payload.options.includeRecordingAttendance ? loadBannerAsset(recordingBannerUrl, bannerW)  : Promise.resolve(null as BannerAsset | null),
+    payload.options.includePhysicalAttendance  ? loadBannerAsset(attendanceBannerUrl, bannerW)  : Promise.resolve(null as BannerAsset | null),
+    payload.options.includeRecordingAttendance ? loadBannerAsset(recordingBannerUrl, bannerW)   : Promise.resolve(null as BannerAsset | null),
+    payload.options.includeLiveAttendance      ? loadBannerAsset(liveClassBannerUrl, bannerW)   : Promise.resolve(null as BannerAsset | null),
     loadBannerAsset(footerBannerUrl, PW),
   ]);
 
-  const footerH = footerBanner ? Math.max(footerBanner.h, 12) : 14;
+  const footerH = 10;
 
   // Measure letterhead
   let letterheadH = 0;
@@ -353,10 +375,12 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     return `${cn}  ·  ${sj}`;
   };
 
-  // ── Page background + repeated header ─────────────────────────────────────
+  // ── Page background + first-page-only header ──────────────────────────────
   const paintPage = (pageNum: number) => {
     doc.setFillColor(...C.pageBg);
     doc.rect(0, 0, PW, PH, 'F');
+
+    if (pageNum !== 1) return; // Pages 2+ get only the background
 
     if (letterheadImage) {
       doc.addImage(letterheadImage.dataUrl, letterheadImage.format, 0, 0, PW, letterheadH);
@@ -381,15 +405,10 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(...C.textMuted);
-      if (pageNum === 1) {
-        doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 12, sTextY, { align: 'right' });
-      } else {
-        doc.text(`Page ${pageNum}`, PW - 12, sTextY, { align: 'right' });
-      }
+      doc.text(`Generated: ${fmtDateTime(new Date().toISOString())}`, PW - 12, sTextY, { align: 'right' });
       doc.setFillColor(...C.cardBdr);
       doc.rect(0, sY + sH, PW, 0.4, 'F');
-
-    } else if (pageNum === 1) {
+    } else {
       doc.setFillColor(...C.hdrBg);
       doc.rect(0, 0, PW, 58, 'F');
       doc.setFillColor(...C.hdrBlue);
@@ -427,21 +446,6 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
       doc.text(includedSections.length > 0 ? includedSections.join('  ·  ') : 'No sections selected', PW - 14, 42, { align: 'right' });
       doc.setFillColor(...C.hdrBlue);
       doc.rect(0, 54, PW, 4, 'F');
-
-    } else {
-      doc.setFillColor(...C.hdrBg);
-      doc.rect(0, 0, PW, 16, 'F');
-      doc.setFillColor(...C.hdrBlue);
-      doc.rect(0, 0, PW, 3, 'F');
-      doc.rect(0, 13, PW, 3, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text(studentName, 14, 10.5);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...C.hdrMuted);
-      doc.text(`Page ${pageNum}`, PW - 14, 10.5, { align: 'right' });
     }
   };
 
@@ -451,7 +455,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     doc.addPage();
     const pn = doc.getNumberOfPages();
     paintPage(pn);
-    y = letterheadImage ? letterheadH + 1.5 + 11 + 9 : 26;
+    y = 14; // No header on pages 2+, start from top margin
   };
 
   const ensureSpace = (n: number) => {
@@ -777,73 +781,33 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     ]);
 
     const rows = payload.physicalAttendance?.rows ?? [];
-    const weekGroupOrder = payload.physicalAttendance?.weekGroupOrder ?? [];
+    const hasWeekData = rows.some((r) => Boolean(r.weekName));
 
-    const attendanceTableConfig = (bodyRows: typeof rows) => ({
-      head: [[TABLE_LABELS.date, TABLE_LABELS.session, TABLE_LABELS.time, TABLE_LABELS.status]],
-      body: bodyRows.map((r) => [
-        fmtAttendanceDate(r.date),
-        cleanSessionLabel(r.session),
-        fmtSessionTime(r.sessionTime),
-        safeText(r.status),
-      ]),
-      columnStyles: {
+    const attendanceTableConfig = (bodyRows: typeof rows, includeWeek = false) => ({
+      head: [includeWeek
+        ? [TABLE_LABELS.week, TABLE_LABELS.date, TABLE_LABELS.session, TABLE_LABELS.time, TABLE_LABELS.status]
+        : [TABLE_LABELS.date, TABLE_LABELS.session, TABLE_LABELS.time, TABLE_LABELS.status]],
+      body: bodyRows.map((r) => includeWeek
+        ? [safeText(r.weekName), fmtAttendanceDate(r.date), cleanSessionLabel(r.session), fmtSessionTime(r.sessionTime), safeText(r.status)]
+        : [fmtAttendanceDate(r.date), cleanSessionLabel(r.session), fmtSessionTime(r.sessionTime), safeText(r.status)]),
+      columnStyles: includeWeek ? {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 32 },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 26, halign: 'center' as const },
+        4: { cellWidth: 26, halign: 'center' as const },
+      } : {
         0: { cellWidth: 40 },
         1: { cellWidth: 88 },
-        2: { cellWidth: 28, halign: 'center' },
-        3: { cellWidth: 26, halign: 'center' },
+        2: { cellWidth: 28, halign: 'center' as const },
+        3: { cellWidth: 26, halign: 'center' as const },
       },
     });
 
     if (rows.length > 0) {
-      renderBadgeTable(attendanceTableConfig(rows), C.tblPhy, 3, attendanceStatusColors, 11);
+      renderBadgeTable(attendanceTableConfig(rows, hasWeekData), C.tblPhy, hasWeekData ? 4 : 3, attendanceStatusColors, 11);
     } else {
       drawEmptyState('No physical attendance records found.');
-    }
-
-    // ── Week-by-week breakdown ─────────────────────────────────────────────
-    if (weekGroupOrder.length > 0) {
-      const weekSectionLabel = sinhalaLoaded
-        ? 'සතිය අනුව ඉදිරිපත් කිරීම  /  Week-by-Week Breakdown'
-        : 'Week-by-Week Breakdown';
-      drawSection(weekSectionLabel, `${weekGroupOrder.length} group(s)`, C.secPhy);
-
-      for (const weekName of weekGroupOrder) {
-        const weekRows = rows.filter((r) => r.weekName === weekName);
-        if (weekRows.length === 0) continue;
-
-        const present = weekRows.filter((r) => r.status?.toUpperCase() === 'PRESENT').length;
-        const late    = weekRows.filter((r) => r.status?.toUpperCase() === 'LATE').length;
-        const absent  = weekRows.filter((r) => r.status?.toUpperCase() === 'ABSENT').length;
-        const excused = weekRows.filter((r) => r.status?.toUpperCase() === 'EXCUSED').length;
-        const pctW = weekRows.length > 0 ? Math.round(((present + late) / weekRows.length) * 100) : 0;
-
-        ensureSpace(14);
-
-        doc.setFillColor(...C.secPhy);
-        doc.setGState(new (doc as any).GState({ opacity: 0.10 }));
-        doc.roundedRect(14, y, PW - 28, 10, 2, 2, 'F');
-        doc.setGState(new (doc as any).GState({ opacity: 1 }));
-        doc.setFillColor(...C.secPhy);
-        doc.roundedRect(14, y, 4, 10, 2, 0, 'F');
-        doc.rect(16.5, y, 1.5, 10, 'F');
-
-        doc.setFont(SF, 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(...C.secPhy);
-        doc.text(normalizeText(weekName), 22, y + 6.8);
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...C.textMuted);
-        doc.text(
-          `${pctW}% attended  ·  ${present} present  ·  ${late} late  ·  ${absent} absent${excused ? `  ·  ${excused} excused` : ''}`,
-          PW - 16, y + 6.8, { align: 'right' },
-        );
-
-        y += 13;
-        renderBadgeTable(attendanceTableConfig(weekRows), C.tblPhy, 3, attendanceStatusColors, 9);
-      }
     }
   }
 
@@ -859,15 +823,18 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     if (summaryRows.length > 0) {
       renderTable(
         {
-          head: [[TABLE_LABELS.recordingTitle, TABLE_LABELS.month, TABLE_LABELS.sessions, TABLE_LABELS.watchedTime, TABLE_LABELS.lastWatch]],
+          head: [[TABLE_LABELS.recordingTitle, TABLE_LABELS.videoDuration, TABLE_LABELS.watchedTime, TABLE_LABELS.engagingTime]],
           body: summaryRows.map((r) => [
-            safeText(r.title), safeText(r.month), String(r.sessions || 0),
-            fmtDuration(r.watchedSec || 0), fmtDateTime(r.lastWatchedAt),
+            safeText(r.title),
+            r.videoDuration != null && r.videoDuration > 0 ? fmtDuration(r.videoDuration) : '—',
+            fmtDuration(r.watchedSec || 0),
+            fmtDuration(r.sessionTimeSec || 0),
           ]),
           columnStyles: {
-            0: { cellWidth: 68 }, 1: { cellWidth: 28 },
-            2: { cellWidth: 22, halign: 'center' }, 3: { cellWidth: 26, halign: 'center' },
-            4: { cellWidth: 38 },
+            0: { cellWidth: 90 },
+            1: { cellWidth: 32, halign: 'center' as const },
+            2: { cellWidth: 32, halign: 'center' as const },
+            3: { cellWidth: 28, halign: 'center' as const },
           },
         },
         C.tblRec, 9,
@@ -890,7 +857,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
             ]),
             columnStyles: {
               0: { cellWidth: 52 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 },
-              3: { cellWidth: 22, halign: 'center' }, 4: { cellWidth: 28, halign: 'center' },
+              3: { cellWidth: 22, halign: 'center' as const }, 4: { cellWidth: 28, halign: 'center' as const },
             },
           },
           C.tblDet, 4, recordingStatusColors, 11,
@@ -901,7 +868,46 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     }
   }
 
-  if (!payload.options.includePayments && !payload.options.includePhysicalAttendance && !payload.options.includeRecordingAttendance) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // LIVE CLASS ATTENDANCE
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (payload.options.includeLiveAttendance) {
+    const liveRows = payload.liveAttendance?.rows ?? [];
+
+    drawBannerSection(liveClassBanner, `${liveRows.filter((r) => r.status === 'JOINED').length} class(es) joined`);
+
+    if (liveRows.length > 0) {
+      renderBadgeTable(
+        {
+          head: [[TABLE_LABELS.liveClass, TABLE_LABELS.liveDate, TABLE_LABELS.liveStatus, TABLE_LABELS.liveTime]],
+          body: liveRows.map((r) => [
+            safeText(r.title),
+            r.liveDate ? fmtAttendanceDate(r.liveDate) : '—',
+            r.status,
+            r.joinedAt ? fmtDateTime(r.joinedAt) : '—',
+          ]),
+          columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 36 },
+            2: { cellWidth: 30, halign: 'center' as const },
+            3: { cellWidth: 36 },
+          },
+        },
+        C.tblLive, 2,
+        (v) => {
+          const s = (v || '').toUpperCase();
+          if (s === 'JOINED') return { bg: [220, 252, 231] as RGB, text: [22, 101, 52] as RGB, label: 'Joined' };
+          return { bg: [254, 226, 226] as RGB, text: [153, 27, 27] as RGB, label: 'Not Joined' };
+        },
+        9,
+      );
+    } else {
+      drawEmptyState('No live class records found for this student.');
+    }
+  }
+
+  if (!payload.options.includePayments && !payload.options.includePhysicalAttendance && !payload.options.includeRecordingAttendance && !payload.options.includeLiveAttendance) {
     drawSection('No Sections Selected', undefined, C.slate);
     drawEmptyState('Select at least one section before exporting.');
   }
@@ -917,30 +923,27 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
     if (footerBanner) {
       doc.addImage(footerBanner.dataUrl, footerBanner.format, 0, PH - footerH, PW, footerH);
-
-      // Page N / Total — right side overlay in muted color
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(...C.textMuted);
       doc.text(`Page ${p} / ${pageCount}`, PW - 8, PH - footerH / 2 + 1.5, { align: 'right' });
     } else {
-      // Fallback plain footer
       doc.setFillColor(...C.hdrBlue);
-      doc.rect(0, PH - 12, PW, 1.5, 'F');
+      doc.rect(0, PH - footerH, PW, 0.8, 'F');
       doc.setFillColor(243, 246, 252);
-      doc.rect(0, PH - 10.5, PW, 10.5, 'F');
+      doc.rect(0, PH - footerH + 0.8, PW, footerH - 0.8, 'F');
       doc.setFillColor(...C.hdrBlue);
-      doc.rect(0, PH - 10.5, 3, 10.5, 'F');
+      doc.rect(0, PH - footerH + 0.8, 3, footerH - 0.8, 'F');
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(...C.textMuted);
       const fLeft = payload.footer?.left ?? `Class: ${safeText(payload.classInfo.name)}`;
-      doc.text(normalizeText(fLeft), 9, PH - 4);
-      doc.text(normalizeText(payload.footer?.center ?? studentName), PW / 2, PH - 4, { align: 'center' });
+      doc.text(normalizeText(fLeft), 9, PH - 3.5);
+      doc.text(normalizeText(payload.footer?.center ?? studentName), PW / 2, PH - 3.5, { align: 'center' });
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(...C.hdrBlue);
-      doc.text(`${p} / ${pageCount}`, PW - 9, PH - 4, { align: 'right' });
+      doc.text(`${p} / ${pageCount}`, PW - 9, PH - 3.5, { align: 'right' });
     }
   }
 

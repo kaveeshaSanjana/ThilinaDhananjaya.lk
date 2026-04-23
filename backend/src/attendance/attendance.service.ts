@@ -624,10 +624,25 @@ export class AttendanceService {
       where: { recording: { month: { classId } } },
       include: {
         user: { include: { profile: { select: { fullName: true, instituteId: true, avatarUrl: true } } } },
-        recording: { select: { title: true, month: { select: { name: true } } } },
+        recording: { select: { id: true, title: true, duration: true, isLive: true, month: { select: { name: true } } } },
       },
       orderBy: { startedAt: 'desc' },
       take: 500,
+    });
+  }
+
+  async getLiveSessionsByClass(classId: string) {
+    return this.prisma.attendance.findMany({
+      where: { recording: { month: { classId } }, eventName: 'LIVE_JOIN' },
+      select: {
+        userId: true,
+        liveJoinedAt: true,
+        createdAt: true,
+        recording: {
+          select: { id: true, title: true, duration: true, isLive: true, liveStartedAt: true, month: { select: { name: true } } },
+        },
+      },
+      orderBy: { liveJoinedAt: 'desc' },
     });
   }
 
@@ -2107,6 +2122,85 @@ export class AttendanceService {
   }
 
   /**
+   * Update session name (sessionCode), start time, and/or end time for a session.
+   * If sessionTime changes, all related ClassAttendance records are updated too.
+   */
+  async updateClassAttendanceSessionMeta(
+    classId: string,
+    sessionKey: string,
+    data: { sessionCode?: string; sessionTime?: string; sessionEndTime?: string },
+  ) {
+    const parsed = this.parseClassAttendanceSessionKey(sessionKey);
+
+    const existingSession = await this.prisma.classAttendanceSession.findUnique({
+      where: {
+        classId_date_sessionTime: {
+          classId,
+          date: parsed.dateObj,
+          sessionTime: parsed.sessionTime,
+        },
+      },
+      select: {
+        id: true, date: true, sessionTime: true, sessionEndTime: true,
+        sessionCode: true, sessionAt: true, weekId: true, week: { select: { name: true } },
+      },
+    });
+
+    if (!existingSession) {
+      throw new NotFoundException('Session not found');
+    }
+
+    const newSessionTime = data.sessionTime
+      ? this.normalizeSessionTime(data.sessionTime)
+      : existingSession.sessionTime;
+    const newSessionEndTime = data.sessionEndTime !== undefined
+      ? (this.normalizeSingleTime(data.sessionEndTime) || null)
+      : (this.normalizeSingleTime(existingSession.sessionEndTime || undefined) || null);
+    const newSessionCode = data.sessionCode !== undefined
+      ? (data.sessionCode.trim() || null)
+      : ((existingSession.sessionCode || '').trim() || null);
+
+    if (newSessionTime !== existingSession.sessionTime) {
+      // Cascade time change to all attendance records
+      await this.prisma.classAttendance.updateMany({
+        where: { classId, date: parsed.dateObj, sessionTime: existingSession.sessionTime },
+        data: { sessionTime: newSessionTime },
+      });
+    }
+
+    const updated = await this.prisma.classAttendanceSession.update({
+      where: { id: existingSession.id },
+      data: {
+        sessionTime: newSessionTime,
+        sessionEndTime: newSessionEndTime,
+        sessionCode: newSessionCode,
+      },
+      select: {
+        id: true, date: true, sessionTime: true, sessionEndTime: true,
+        sessionCode: true, sessionAt: true, weekId: true, week: { select: { name: true } },
+      },
+    });
+
+    const date = updated.date.toISOString().split('T')[0];
+    const recordsCount = await this.prisma.classAttendance.count({
+      where: { classId, date: updated.date, sessionTime: updated.sessionTime },
+    });
+
+    return this.buildClassAttendanceSessionRow({
+      sessionId: updated.id,
+      date,
+      sessionTime: updated.sessionTime,
+      sessionEndTime: this.normalizeSingleTime(updated.sessionEndTime || undefined) || null,
+      sessionCode: (updated.sessionCode || '').trim() || null,
+      sessionAt: updated.sessionAt ? updated.sessionAt.toISOString() : null,
+      recordsCount,
+      source: recordsCount > 0 ? 'BOTH' : 'CREATED',
+      weekId: updated.weekId || null,
+      weekName: updated.week?.name || null,
+    });
+  }
+
+  /**
    * Create a persisted attendance week and optionally link selected class sessions to it.
    */
   async createClassAttendanceWeek(
@@ -2647,6 +2741,36 @@ export class AttendanceService {
       orderBy: { date: 'desc' },
     });
 
+    // Batch-load week names from ClassAttendanceSession for all unique (classId,date,sessionTime) combos
+    const sessionKeys = new Map<string, { classId: string; date: Date; sessionTime: string }>();
+    for (const rec of records) {
+      const key = `${rec.classId}|${rec.date.toISOString().split('T')[0]}|${rec.sessionTime}`;
+      if (!sessionKeys.has(key)) {
+        sessionKeys.set(key, { classId: rec.classId, date: rec.date, sessionTime: rec.sessionTime });
+      }
+    }
+
+    const weekNameMap = new Map<string, string | null>();
+    if (sessionKeys.size > 0) {
+      const sessions = await this.prisma.classAttendanceSession.findMany({
+        where: {
+          OR: Array.from(sessionKeys.values()).map((s) => ({
+            classId: s.classId,
+            date: s.date,
+            sessionTime: s.sessionTime,
+          })),
+        },
+        select: {
+          classId: true, date: true, sessionTime: true,
+          week: { select: { name: true } },
+        },
+      });
+      for (const s of sessions) {
+        const key = `${s.classId}|${s.date.toISOString().split('T')[0]}|${s.sessionTime}`;
+        weekNameMap.set(key, s.week?.name || null);
+      }
+    }
+
     // Group records by class
     const classMap = new Map<string, { class: { id: string; name: string; subject: string | null }; records: any[]; summary: any }>();
 
@@ -2655,6 +2779,7 @@ export class AttendanceService {
       if (!classMap.has(cid)) {
         classMap.set(cid, { class: rec.class, records: [], summary: { total: 0, present: 0, late: 0, absent: 0, excused: 0 } });
       }
+      const weekKey = `${rec.classId}|${rec.date.toISOString().split('T')[0]}|${rec.sessionTime}`;
       const entry = classMap.get(cid)!;
       entry.records.push({
         id: rec.id,
@@ -2667,6 +2792,7 @@ export class AttendanceService {
         status: rec.status,
         method: rec.method,
         note: rec.note,
+        weekName: weekNameMap.get(weekKey) || null,
       });
       entry.summary.total++;
       if (rec.status === 'PRESENT') entry.summary.present++;

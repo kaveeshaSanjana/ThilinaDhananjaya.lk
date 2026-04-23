@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Delete, Param, Body, Query, UseGuards, Request, Patch } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto, CloseClassAttendanceSessionDto, CreateClassAttendanceSessionDto, CreateClassAttendanceWeekDto, UpdateClassAttendanceSessionWeekDto } from './dto/attendance.dto';
+import { MarkAttendanceDto, ManualAttendanceDto, StartSessionDto, HeartbeatDto, EndSessionDto, MarkClassAttendanceDto, BulkClassAttendanceDto, MarkByBarcodeDto, MarkByInstituteIdDto, MarkByPhoneDto, CloseClassAttendanceSessionDto, CreateClassAttendanceSessionDto, CreateClassAttendanceWeekDto, UpdateClassAttendanceSessionWeekDto, UpdateClassAttendanceSessionMetaDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -266,6 +266,14 @@ export class AttendanceController {
     return this.attendanceService.getWatchSessionsByClass(classId);
   }
 
+  /** Admin: live class join records for all recordings in a class */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('live-sessions/class/:classId')
+  getLiveSessionsByClass(@Param('classId') classId: string) {
+    return this.attendanceService.getLiveSessionsByClass(classId);
+  }
+
   // ─── Class Attendance (Physical / Date-based) Endpoints ───
 
   /** Admin: mark by barcode — 1 indexed lookup, fastest (used by QR / barcode scanner) */
@@ -437,6 +445,18 @@ export class AttendanceController {
       classId,
       Number.isFinite(parsedLimit) ? parsedLimit : 200,
     );
+  }
+
+  /** Admin: update session name, start time, and/or end time */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch('class-attendance/class/:classId/sessions/:sessionKey')
+  updateClassAttendanceSessionMeta(
+    @Param('classId') classId: string,
+    @Param('sessionKey') sessionKey: string,
+    @Body() body: UpdateClassAttendanceSessionMetaDto,
+  ) {
+    return this.attendanceService.updateClassAttendanceSessionMeta(classId, sessionKey, body);
   }
 
   /** Admin: assign or clear week on one class attendance session row */
