@@ -2536,7 +2536,6 @@ export class AttendanceService {
         classId,
         date: dateObj,
         sessionTime,
-        sessionEndTime,
         sessionCode: sessionCode || 'AUTO_CLOSE',
         sessionAt: sessionAt || null,
         checkInAt: checkInAt || null,

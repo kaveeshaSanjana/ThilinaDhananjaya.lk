@@ -48,10 +48,14 @@ function WelcomeOverlay({
   html,
   sessionLink,
   onSkip,
+  avatarUrl,
+  userName,
 }: {
   html: string;
   sessionLink?: string;
   onSkip: () => void;
+  avatarUrl?: string | null;
+  userName?: string | null;
 }) {
   const [countdown, setCountdown] = useState(5);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -76,10 +80,20 @@ function WelcomeOverlay({
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-center">
-          <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center">
-            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
+          <div className="w-14 h-14 mx-auto mb-3 rounded-full overflow-hidden ring-2 ring-white/40 shadow-lg">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-white/20 flex items-center justify-center">
+                {userName ? (
+                  <span className="text-white font-bold text-xl">{userName[0].toUpperCase()}</span>
+                ) : (
+                  <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                )}
+              </div>
+            )}
           </div>
           <h2 className="text-xl font-bold text-white">Welcome!</h2>
           <p className="text-blue-100 text-sm mt-0.5">Message from your instructor</p>
@@ -305,6 +319,8 @@ export default function LectureLiveJoinPage() {
           html={lecture.welcomeMessage}
           sessionLink={joinResult.sessionLink}
           onSkip={() => setShowWelcome(false)}
+          avatarUrl={(user as any)?.profile?.avatarUrl ?? null}
+          userName={(user as any)?.profile?.fullName || (user as any)?.email || null}
         />
       )}
 
@@ -511,9 +527,13 @@ export default function LectureLiveJoinPage() {
                   </div>
 
                   <div className="flex items-center gap-4 p-4 rounded-2xl bg-blue-50 border-2 border-blue-200">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg shadow-blue-500/30">
-                      {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
-                    </div>
+                    {(user as any).profile?.avatarUrl ? (
+                      <img src={(user as any).profile.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover flex-shrink-0 shadow-lg ring-2 ring-blue-200" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg shadow-blue-500/30">
+                        {(user as any).profile?.fullName?.[0]?.toUpperCase() || (user as any).email?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-800 truncate text-base">
                         {(user as any).profile?.fullName || (user as any).email}
