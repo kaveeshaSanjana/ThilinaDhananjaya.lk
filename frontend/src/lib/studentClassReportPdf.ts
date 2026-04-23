@@ -295,10 +295,10 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
 
   // ── Color Palette ───────────────────────────────────────────────────────────
   const C = {
-    pageBg:    [238, 242, 250] as RGB,
+    pageBg:    [255, 255, 255] as RGB,
     white:     [255, 255, 255] as RGB,
     cardBdr:   [208, 220, 238] as RGB,
-    rowAlt:    [246, 249, 253] as RGB,
+    rowAlt:    [248, 249, 250] as RGB,
     hdrBg:     [11, 15, 42]   as RGB,
     hdrBlue:   [79, 70, 229]  as RGB,
     hdrAccent: [165, 180, 252] as RGB,
