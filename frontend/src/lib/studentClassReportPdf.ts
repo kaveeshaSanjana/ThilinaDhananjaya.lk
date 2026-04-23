@@ -311,8 +311,8 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     tblPhy:    [109, 40, 217] as RGB,
     tblRec:    [180, 95, 6]   as RGB,
     tblDet:    [109, 40, 217] as RGB,
-    tblLive:   [220, 38, 38]  as RGB,
-    secLive:   [185, 28, 28]  as RGB,
+    tblLive:   [218, 115, 129] as RGB,
+    secLive:   [218, 115, 129] as RGB,
     textDark:  [12, 18, 50]   as RGB,
     textMuted: [90, 108, 138] as RGB,
     textLight: [148, 163, 192] as RGB,
@@ -344,7 +344,7 @@ export async function buildStudentClassReportPdf(payload: StudentClassReportPayl
     loadBannerAsset(footerBannerUrl, PW),
   ]);
 
-  const footerH = 10;
+  const footerH = 11;
 
   // Measure letterhead
   let letterheadH = 0;
