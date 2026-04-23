@@ -3472,7 +3472,7 @@ export default function AdminClassDetail() {
       const recId = ls.recording?.id || ls.recordingId;
       if (recId && !liveJoinedByRecordingId.has(recId)) liveJoinedByRecordingId.set(recId, ls);
     }
-    const liveRecordings = recordings.filter((r: any) => r.isLive || liveJoinedByRecordingId.has(r.id));
+    const liveRecordings = recordings.filter((r: any) => r.isLive || r.liveStartedAt || liveJoinedByRecordingId.has(r.id));
     const liveRows = liveRecordings.map((recording: any) => {
       const joined = liveJoinedByRecordingId.get(recording.id);
       return {
@@ -3505,7 +3505,7 @@ export default function AdminClassDetail() {
         includePayments: reportIncludePayments,
         includePhysicalAttendance: reportIncludePhysicalAttendance,
         includeRecordingAttendance: reportIncludeRecordingAttendance,
-        includeLiveAttendance: reportIncludeLiveAttendance && liveRows.length > 0,
+        includeLiveAttendance: reportIncludeLiveAttendance,
         recordingMode: reportRecordingMode,
       },
       payments: {
